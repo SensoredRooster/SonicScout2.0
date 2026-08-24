@@ -315,18 +315,6 @@ Setup installs both plugin sets in step 8. There is no separate menu item for th
 
 BO7 V3 needs the JSFX plugins. BO7 V4 and V5 need the VST.
 
-**SS Spatial Engine Bravo 2.0** (VST) -- every panel, the engine behind BO7 V5:
-
-<p align="center">
-  <img src="Assets/ss-spatial-engine-bravo-2.0-panels.png" alt="SS Spatial Engine Bravo 2.0 - all panels" width="100%" />
-</p>
-
-**SS Stereo Spatial Enhancer** (JSFX) -- the post-HeSuVi stereo stage used by BO7 V3:
-
-<p align="center">
-  <img src="Assets/ss-Stereo-Spatial-Enhancer.png" alt="SS Stereo Spatial Enhancer" width="560" />
-</p>
-
 ## Release naming
 
 Releases use CalVer with a label. They track library work, not game seasons.
