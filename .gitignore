@@ -1,0 +1,35 @@
+# Internal tooling
+dev-tools/
+.claude/
+
+# Build artifacts
+*.zip
+*.exe
+
+# .NET build outputs (tools/LEQControlPanel)
+bin/
+obj/
+publish/
+
+# library/version.txt is TRACKED. Build-SonicScout2.0.ps1 refreshes the stamp and
+# it ships in the release zip, so a clean clone can stage a release.
+
+# Temp directories
+temp/
+tmp/
+
+# Log files
+*.log
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Editor files
+*.suo
+*.user
+.vs/
+.vscode/
+*.swp
+*~
