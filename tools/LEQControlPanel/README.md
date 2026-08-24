@@ -86,7 +86,7 @@ The hotkey will work globally as long as the shortcut remains on the desktop or 
 **Prerequisites:** [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (Windows x64)
 
 ```bash
-git clone https://github.com/ArtIsWar/LEQControlPanel.git
+git clone https://github.com/sensoredrooster/LEQControlPanel.git
 cd LEQControlPanel
 dotnet build src/LEQControlPanel/LEQControlPanel.csproj -c Release
 ```

@@ -1,4 +1,4 @@
-// LEQ Control Panel — Copyright (c) 2025-2026 ArtIsWar LLC
+// LEQ Control Panel - Copyright (c) 2025-2026 SensoredRooster
 // Licensed under GPL-3.0. See LICENSE file for details.
 
 using System;
@@ -13,7 +13,7 @@ namespace LEQControlPanel.Services;
 
 internal class UpdateChecker
 {
-    private const string GitHubOwner = "ArtIsWar";
+    private const string GitHubOwner = "sensoredrooster";
     private const string GitHubRepo = "LEQControlPanel";
     private const string GitHubReleasesUrl = $"https://api.github.com/repos/{GitHubOwner}/{GitHubRepo}/releases/latest";
     private static readonly HttpClient _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };

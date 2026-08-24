@@ -1,4 +1,4 @@
-# LEQ Control Panel - Copyright (c) 2025-2026 ArtIsWar LLC
+# LEQ Control Panel - Copyright (c) 2025-2026 SensoredRooster
 # Licensed under GPL-3.0. See LICENSE file for details.
 
 Set-StrictMode -Version Latest

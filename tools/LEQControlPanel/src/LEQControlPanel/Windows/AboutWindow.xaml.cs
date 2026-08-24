@@ -1,4 +1,4 @@
-// LEQ Control Panel — Copyright (c) 2025-2026 ArtIsWar LLC
+// LEQ Control Panel - Copyright (c) 2025-2026 SensoredRooster
 // Licensed under GPL-3.0. See LICENSE file for details.
 
 using System;
@@ -61,7 +61,7 @@ public partial class AboutWindow : Window
     {
         try
         {
-            Process.Start(new ProcessStartInfo("https://artiswar.io/arttunekit") { UseShellExecute = true })?.Dispose();
+            Process.Start(new ProcessStartInfo("https://github.com/sensoredrooster/SonicScout2.0") { UseShellExecute = true })?.Dispose();
         }
         catch (Exception ex)
         {

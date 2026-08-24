@@ -14,12 +14,12 @@
     <DisableWinExeOutputInference>false</DisableWinExeOutputInference>
     <StartupObject>LEQControlPanel.Program</StartupObject>
     <Product>LEQ Control Panel</Product>
-    <Company>ArtIsWar LLC</Company>
+    <Company>SensoredRooster</Company>
     <Description>Standalone LEQ registry control tool for instant Loudness Equalization toggling without audio service restarts</Description>
     <Version>1.0.0</Version>
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <FileVersion>1.0.0.0</FileVersion>
-    <Copyright>Copyright © 2025-2026 ArtIsWar LLC</Copyright>
+    <Copyright>Copyright © 2025-2026 SensoredRooster</Copyright>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

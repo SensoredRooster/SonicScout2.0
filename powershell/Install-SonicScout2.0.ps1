@@ -21,7 +21,7 @@ $ProgressPreference = 'SilentlyContinue'
 
 # .NET Framework caps outbound connections at 2 per host and the limit is read when a
 # host's ServicePoint is first created, so this has to happen before any download.
-# cdn.artiswar.io is the FallbackUrl for three specs, which overruns 2 as soon as a
+# The GitHub release is the fallback for three specs, which overruns 2 as soon as a
 # mirror retry fires. BITS has its own transport and is unaffected either way.
 try { [System.Net.ServicePointManager]::DefaultConnectionLimit = 12 } catch { }
 
@@ -85,10 +85,10 @@ $script:PluginRemoval = [pscustomobject]@{
 $script:SonicScout20Root = Join-Path $env:ProgramFiles "EqualizerAPO\config\SonicScout2.0"
 
 # R2-hosted assets: endpoint icons, HRIR wavs, and the third-party installer mirror.
-$script:AssetBase = "https://cdn.artiswar.io"
+$script:AssetBase = "https://raw.githubusercontent.com/sensoredrooster/SonicScout2.0/main"
 
 # R2 mirror base for the library release zip (public SonicScout2.0/ subdir).
-$script:LibraryMirrorBase = "https://cdn.artiswar.io"
+$script:LibraryMirrorBase = "https://github.com/sensoredrooster/SonicScout2.0/releases/latest/download"
 
 # Library release (single zip asset). SonicScout2.0 manages its own release asset.
 $script:LibraryReleaseApi = "https://api.github.com/repos/sensoredrooster/SonicScout2.0/releases/latest"
@@ -105,7 +105,7 @@ $script:UseGitHubRelease = $true
 $script:LibraryReleaseAsset = 'SonicScout2.0-2026.07.1-Overhaul.zip'
 
 # Anonymous setup counter endpoint. Fire-and-forget; silent on failure.
-$script:SetupPingUrl = "https://artiswar.io/api/setup-ping"
+$script:SetupPingUrl = $null
 
 # ============================================================================
 # SECTION 1: Console UI Helpers
@@ -1055,7 +1055,7 @@ $script:LeqUrlResolver = {
     $ProgressPreference = 'SilentlyContinue'
     try {
         $headers = @{ 'Accept' = 'application/vnd.github+json' }
-        $release = Invoke-RestMethod 'https://api.github.com/repos/ArtIsWar/LEQControlPanel/releases/latest' -Headers $headers -ErrorAction Stop
+        $release = Invoke-RestMethod 'https://api.github.com/repos/sensoredrooster/LEQControlPanel/releases/latest' -Headers $headers -ErrorAction Stop
         $asset = $release.assets | Where-Object { $_.name -eq 'LEQControlPanel.exe' } | Select-Object -First 1
         if ($asset) { return $asset.browser_download_url }
     } catch { }
@@ -1070,7 +1070,7 @@ function Build-LocalLeqControlPanel {
         single-file exe path, or $null when the source or dotnet SDK is absent.
     .DESCRIPTION
         The vendored source is authoritative: it carries the SonicScout device-name
-        fixes that the old ArtIsWar/LEQControlPanel releases predate. Publish config
+        fixes that older LEQ Control Panel releases predate. Publish config
         comes from the csproj (PublishSingleFile + SelfContained win-x64).
     #>
     $repoRoot = $null
@@ -1949,7 +1949,7 @@ function Get-Downloads {
         DisplayName   = 'Equalizer APO'
         OutFile       = $files.EAPO
         Method        = 'IWR'
-        Url           = 'https://cdn.artiswar.io/other-installers/EqualizerAPO-x64-1.4.2.exe'
+            Url           = 'https://github.com/sensoredrooster/SonicScout2.0/releases/latest/download/EqualizerAPO-x64-1.4.2.exe'
         BaseUrl       = $null
         UrlResolver   = $null
         FallbackUrl   = 'https://sourceforge.net/projects/equalizerapo/files/1.4/EqualizerAPO64-1.4.exe/download'
@@ -1966,7 +1966,7 @@ function Get-Downloads {
             DisplayName   = 'HeSuVi'
             OutFile       = $files.HeSuVi
             Method        = 'IWR'
-            Url           = 'https://cdn.artiswar.io/other-installers/HeSuVi_2.0.0.1.exe'
+            Url           = 'https://github.com/sensoredrooster/SonicScout2.0/releases/latest/download/HeSuVi_2.0.0.1.exe'
             BaseUrl       = $null
             UrlResolver   = $null
             FallbackUrl   = 'https://sourceforge.net/projects/hesuvi/files/HeSuVi_2.0.0.1.exe/download'
@@ -1994,7 +1994,7 @@ function Get-Downloads {
                 Url           = $null
                 BaseUrl       = $null
                 UrlResolver   = $script:LeqUrlResolver
-                FallbackUrl   = 'https://cdn.artiswar.io/LEQControlPanel.exe'
+                FallbackUrl   = 'https://github.com/sensoredrooster/LEQControlPanel/releases/latest/download/LEQControlPanel.exe'
                 RequireBinary = $false   # GitHub asset then CDN; neither serves an interstitial
                 TimeoutSec    = 600
             }
@@ -2297,13 +2297,13 @@ function Test-SonicScout20Installed {
         [bool]
     #>
     # 1. Add/Remove Programs. Inno Setup AppId, suffixed _is1 by Inno.
-    $atkArpKey = '{2A2388E9-E5F3-46A3-AFB3-B26F33707564}_is1'
+    $sonicScoutArpKey = '{2A2388E9-E5F3-46A3-AFB3-B26F33707564}_is1'
     foreach ($hive in @(
         "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
         "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
         "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
     )) {
-        if (Test-Path -LiteralPath (Join-Path $hive $atkArpKey) -ErrorAction SilentlyContinue) {
+        if (Test-Path -LiteralPath (Join-Path $hive $sonicScoutArpKey) -ErrorAction SilentlyContinue) {
             return $true
         }
     }
@@ -3953,7 +3953,7 @@ public class WinHelper {
         # Download SonicScout2.0 icon
         $iconPath = Join-Path $sonicScout20Dir "SonicScout2.0.ico"
         try {
-            Invoke-WebRequest -Uri "https://cdn.artiswar.io/SonicScout2.0Logo.ico" -OutFile $iconPath -UseBasicParsing
+            Invoke-WebRequest -Uri "https://raw.githubusercontent.com/sensoredrooster/SonicScout2.0/main/Assets/SonicScout2.0Logo.ico" -OutFile $iconPath -UseBasicParsing
         } catch {
             $iconPath = $null
             Write-Host "$($script:BoxMargin)Warning: Could not download icon: $_" -ForegroundColor Yellow
@@ -4188,10 +4188,10 @@ function Install-SonicScout20HRIR {
     $hrir44Dir = Join-Path $hrirDir "44"
 
     $targets = @(
-        @{ Name = 'EAC_Default'; Rate = '48 kHz';   Url = 'https://cdn.artiswar.io/HeSuVi/hrir/EAC_Default.wav';    Dest = (Join-Path $hrirDir   'EAC_Default.wav') }
-        @{ Name = 'EAC_Default'; Rate = '44.1 kHz'; Url = 'https://cdn.artiswar.io/HeSuVi/hrir/44/EAC_Default.wav'; Dest = (Join-Path $hrir44Dir 'EAC_Default.wav') }
-        @{ Name = 'EAC_Refined'; Rate = '48 kHz';   Url = 'https://cdn.artiswar.io/HeSuVi/hrir/EAC_Refined.wav';    Dest = (Join-Path $hrirDir   'EAC_Refined.wav') }
-        @{ Name = 'EAC_Refined'; Rate = '44.1 kHz'; Url = 'https://cdn.artiswar.io/HeSuVi/hrir/44/EAC_Refined.wav'; Dest = (Join-Path $hrir44Dir 'EAC_Refined.wav') }
+        @{ Name = 'EAC_Default'; Rate = '48 kHz';   Url = 'https://raw.githubusercontent.com/sensoredrooster/SonicScout2.0/main/hrir/EAC_Default.wav';    Dest = (Join-Path $hrirDir   'EAC_Default.wav') }
+        @{ Name = 'EAC_Default'; Rate = '44.1 kHz'; Url = 'https://raw.githubusercontent.com/sensoredrooster/SonicScout2.0/main/hrir/44/EAC_Default.wav'; Dest = (Join-Path $hrir44Dir 'EAC_Default.wav') }
+        @{ Name = 'EAC_Refined'; Rate = '48 kHz';   Url = 'https://raw.githubusercontent.com/sensoredrooster/SonicScout2.0/main/hrir/EAC_Refined.wav';    Dest = (Join-Path $hrirDir   'EAC_Refined.wav') }
+        @{ Name = 'EAC_Refined'; Rate = '44.1 kHz'; Url = 'https://raw.githubusercontent.com/sensoredrooster/SonicScout2.0/main/hrir/44/EAC_Refined.wav'; Dest = (Join-Path $hrir44Dir 'EAC_Refined.wav') }
     )
 
     if (-not ($targets | Where-Object { -not (Test-Path $_.Dest) })) {
@@ -4624,7 +4624,7 @@ function Install-VstPlugins {
 function Ensure-ManagedActiveConfig {
     <#
     .SYNOPSIS
-        Creates the ATK-style active-config directory and placeholder files used by
+        Creates the SonicScout-managed active-config directory and placeholder files used by
         the managed E-APO config, while preserving the user-set output boost.
     #>
     param()
@@ -4683,7 +4683,7 @@ function Write-InitialConfig {
         Writes the starter config.txt to the E-APO config folder.
         Always overwrites to ensure correct line order.
 
-        The installer now writes the ATK-style managed active-config directory and a
+        The installer now writes the SonicScout-managed active-config directory and a
         dynamic config.txt that points at those files instead of the static library path.
     .PARAMETER RenderGuid8
         Resolved 8ch "SonicScout2.0" render endpoint GUID. When supplied, an active
@@ -5105,7 +5105,7 @@ $script:PKEY_CHANNELCFG2 = "{1da5d803-d492-4edd-8c23-e0c0ffee7f0e},6"
 function Clear-SonicScout20EndpointBranding {
     <#
     .SYNOPSIS
-        Restores stale SonicScout2.0/ArtTune endpoint names left behind by failed
+        Restores stale SonicScout2.0 endpoint names left behind by failed
         or pending driver removal.
     .OUTPUTS
         pscustomobject @{ Changed; Failed }
@@ -5127,7 +5127,7 @@ function Clear-SonicScout20EndpointBranding {
         'Normal Audio' = 'Voicemeeter Input'
         'Virtual Mix'  = 'Voicemeeter Out B1'
     }
-    $brandedNamePattern = '^(Art\s*Tune|ArtTune|Sonic\s*Scout|SonicScout|SonicScout2\.0)'
+    $brandedNamePattern = '^(Sonic\s*Scout|SonicScout|SonicScout2\.0)'
     $reg = "Windows Registry Editor Version 5.00`r`n"
 
     foreach ($target in $targets) {
@@ -5148,7 +5148,7 @@ function Clear-SonicScout20EndpointBranding {
                     $newName = $vmDefaults[$name]
                 }
 
-                $removeIcon = (Test-OrdinalContains $icon 'ArtTune') -or (Test-OrdinalContains $icon 'SonicScout')
+                $removeIcon = Test-OrdinalContains $icon 'SonicScout'
                 if (-not $newName -and -not $removeIcon) { continue }
 
                 $reg += "`r`n[$($target.RegRoot)\$($key.PSChildName)\Properties]`r`n"
@@ -5169,7 +5169,7 @@ function Clear-SonicScout20EndpointBranding {
             $proc = Start-Process -FilePath 'regedit.exe' -ArgumentList "/s `"$regFile`"" -Wait -PassThru -WindowStyle Hidden
             if ($proc.ExitCode -ne 0) { throw "regedit returned exit code $($proc.ExitCode)" }
             Remove-Item $regFile -Force -ErrorAction SilentlyContinue
-            Write-Host "$($script:BoxMargin)Cleared stale SonicScout2.0/ArtTune audio endpoint names." -ForegroundColor Green
+            Write-Host "$($script:BoxMargin)Cleared stale SonicScout2.0 audio endpoint names." -ForegroundColor Green
             Restart-AudioServices
         } catch {
             $failed += $changed
@@ -5403,9 +5403,9 @@ function Set-SonicScout20Endpoints {
         }
         return $null
     }
-    $r8Icon  = if ($r8)  { & $getIcon 'ArtTuneCable.ico' 'SonicScout2.0Cable.ico' }                 else { $null }
-    $r16Icon = if ($r16) { & $getIcon 'ArtTunePlusCable.ico' 'SonicScout2.0PlusCable.ico' }         else { $null }
-    $capIcon = if ($cap) { & $getIcon 'ArtTuneUnifiedOutput.ico' 'SonicScout2.0UnifiedOutput.ico' } else { $null }
+    $r8Icon  = if ($r8)  { & $getIcon 'SonicScout2.0Cable.ico' 'SonicScout2.0Cable.ico' }                 else { $null }
+    $r16Icon = if ($r16) { & $getIcon 'SonicScout2.0PlusCable.ico' 'SonicScout2.0PlusCable.ico' }         else { $null }
+    $capIcon = if ($cap) { & $getIcon 'SonicScout2.0UnifiedOutput.ico' 'SonicScout2.0UnifiedOutput.ico' } else { $null }
 
     # Icon PKEY value = "<abs path>,0" with backslashes doubled for REG_SZ.
     $r8IconReg  = if ($r8Icon)  { ($r8Icon  + ',0') -replace '\\', '\\' } else { $null }

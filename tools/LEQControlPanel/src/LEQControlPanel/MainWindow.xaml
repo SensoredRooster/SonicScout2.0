@@ -1,4 +1,4 @@
-<!-- LEQ Control Panel — Copyright (c) 2025-2026 ArtIsWar LLC -->
+<!-- LEQ Control Panel - Copyright (c) 2025-2026 SensoredRooster -->
 <!-- Licensed under GPL-3.0. See LICENSE file for details. -->
 <Window x:Class="LEQControlPanel.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -1328,8 +1328,8 @@
                             </Border>
                         </Border>
 
-                        <!-- ArtTuneKit Overlay - covers LEQ controls when device is managed by ATK -->
-                        <Border x:Name="AtkManagedOverlay"
+                        <!-- SonicScout2.0 overlay - covers LEQ controls for managed devices -->
+                        <Border x:Name="SonicScoutManagedOverlay"
                                 Background="#D0000000"
                                 CornerRadius="0,0,4,4"
                                 Opacity="0"
@@ -1337,12 +1337,12 @@
                                 IsHitTestVisible="False">
                             <Border Background="#C01A1A1A" CornerRadius="0,0,4,4">
                                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                    <TextBlock Text="This device is managed by ArtTuneKit"
+                                    <TextBlock Text="This device is managed by SonicScout2.0"
                                                Foreground="{StaticResource Brush_StatusRed}"
                                                FontSize="13"
                                                HorizontalAlignment="Center"
                                                Margin="0,0,0,8"/>
-                                    <Button x:Name="OpenArtTuneKitButton" Click="OpenArtTuneKit_Click" Height="26" Padding="12,0" Cursor="Hand" ToolTip="Close LEQ Control Panel and open ArtTuneKit">
+                                    <Button x:Name="OpenSonicScoutButton" Click="OpenSonicScout_Click" Height="26" Padding="12,0" Cursor="Hand" ToolTip="Close LEQ Control Panel and open SonicScout2.0">
                                         <Button.Style>
                                             <Style TargetType="Button">
                                                 <Setter Property="Background" Value="#FFD700"/>
@@ -1369,7 +1369,7 @@
                                                 </Setter>
                                             </Style>
                                         </Button.Style>
-                                        <TextBlock Text="Open ArtTuneKit" FontSize="12" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Open SonicScout2.0" FontSize="12" FontWeight="SemiBold"/>
                                     </Button>
                                 </StackPanel>
                             </Border>

@@ -1,4 +1,4 @@
-<!-- LEQ Control Panel — Copyright (c) 2025-2026 ArtIsWar LLC -->
+<!-- LEQ Control Panel - Copyright (c) 2025-2026 SensoredRooster -->
 <!-- Licensed under GPL-3.0. See LICENSE file for details. -->
 <Window x:Class="LEQControlPanel.Windows.AboutWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -113,7 +113,7 @@
                                Margin="0,0,0,4"/>
 
                     <!-- Copyright -->
-                    <TextBlock Text="&#169; 2025-2026 ArtIsWar LLC"
+                    <TextBlock Text="&#169; 2025-2026 SensoredRooster"
                                FontSize="11"
                                Foreground="#666666"
                                HorizontalAlignment="Center"
@@ -165,7 +165,7 @@
                         <Button Content="View License (GPL v3)"
                                 Click="ViewLicense_Click"
                                 Style="{StaticResource AboutButtonStyle}"/>
-                        <Button Content="ArtTuneKit"
+                        <Button Content="SonicScout2.0"
                                 Click="VisitWebsite_Click"
                                 Style="{StaticResource AboutButtonStyle}"
                                 Margin="10,0,0,0"/>

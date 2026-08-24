@@ -30,7 +30,7 @@ First public release. A standalone Windows tool for registry-level Loudness Equa
 - **Activity log** collapsible console panel logs all actions in real time with timestamps, color-coded warnings/errors
 - **System tray integration** with quick toggle, device info, and settings access
 - **Headless CLI mode** (`-silent` / `-toggle`) for global hotkey binding and scripting
-- **ArtTuneKit integration** detects ArtTuneKit and defers device management when installed; shows an overlay on Art Tune devices with a button to launch ArtTuneKit directly
+- **SonicScout2.0 integration** detects SonicScout2.0-managed devices and defers device management when required
 - **Built-in auto-update** checks GitHub releases on startup with manual check from Settings menu, SHA256 integrity verification for downloaded updates
 - **Settings:** run at startup, start minimized, always-on-top, desktop shortcut, configurable close behavior (minimize to tray / exit / ask)
 - **Utilities:** Open Windows Sound settings and restart Windows Audio service from within the app
@@ -64,7 +64,7 @@ dotnet publish src/LEQControlPanel/LEQControlPanel.csproj -c Release -r win-x64 
 ## Credits
 
 - Original concept: [Falcosc/enable-loudness-equalisation](https://github.com/Falcosc/enable-loudness-equalisation)
-- Extended implementation: [ArtIsWar](https://github.com/ArtIsWar)
+- Extended implementation: [SensoredRooster](https://github.com/sensoredrooster)
 
 ## License
 

@@ -1,4 +1,4 @@
-// LEQ Control Panel — Copyright (c) 2025-2026 ArtIsWar LLC
+// LEQ Control Panel - Copyright (c) 2025-2026 SensoredRooster
 // Licensed under GPL-3.0. See LICENSE file for details.
 
 using System;
@@ -75,8 +75,8 @@ namespace LEQControlPanel
         private bool _isEapoInstalled;
         private string _lastSelectedDeviceGuid = "";
 
-        private bool _atkInstalled;
-        private string? _atkExePath;
+        private bool _sonicScoutInstalled;
+        private string? _sonicScoutExePath;
         private bool _glowAnimationsSuppressed;
         internal SplashWindow? SplashScreen { get; set; }
 
@@ -129,7 +129,7 @@ namespace LEQControlPanel
                     Log($"Device change notifications unavailable: {ex.Message}");
                 }
 
-                RefreshArtTuneKitDetection();
+                RefreshSonicScoutDetection();
                 InitializeTrayIcon();
                 UpdateStalePathsOnStartup();
                 _isInitialized = true;
@@ -237,7 +237,7 @@ namespace LEQControlPanel
                 // Finish all UI state updates before revealing the window
                 UpdateResetDeviceButtonState();
                 UpdateEapoInstalledState();
-                UpdateArtTuneGating();
+                UpdateSonicScoutGating();
 
                 // Hide loading overlay
                 LoadingOverlay.IsHitTestVisible = false;
@@ -349,8 +349,8 @@ namespace LEQControlPanel
                 try
                 {
                     UpdateEapoInstalledState();
-                    RefreshArtTuneKitDetection();
-                    UpdateArtTuneGating();
+                    RefreshSonicScoutDetection();
+                    UpdateSonicScoutGating();
                 }
                 catch (Exception ex)
                 {
@@ -528,8 +528,8 @@ namespace LEQControlPanel
             // Update reset device button state based on selected device
             UpdateResetDeviceButtonState();
 
-            // Apply Art Tune device gating if ArtTuneKit is installed
-            UpdateArtTuneGating();
+            // Apply SonicScout device gating when SonicScout2.0 is installed
+            UpdateSonicScoutGating();
         }
 
         private async void RefreshButton_Click(object sender, RoutedEventArgs e)
@@ -879,7 +879,7 @@ namespace LEQControlPanel
             {
                 RestartAudioButton.IsEnabled = true;
                 UpdateEapoInstalledState();
-                UpdateArtTuneGating();
+                UpdateSonicScoutGating();
             }
         }
 
@@ -3426,23 +3426,23 @@ namespace LEQControlPanel
             };
         }
 
-        private static (bool Installed, string? ExePath) DetectArtTuneKit()
+        private static (bool Installed, string? ExePath) DetectSonicScout()
         {
             // 1. Bundled mode — same or parent directory
-            var localPath = Path.Combine(AppContext.BaseDirectory, "ArtTuneKit.exe");
+            var localPath = Path.Combine(AppContext.BaseDirectory, "SonicScout2.0.exe");
             if (File.Exists(localPath)) return (true, localPath);
 
             var parentDir = Directory.GetParent(AppContext.BaseDirectory)?.FullName;
             if (!string.IsNullOrEmpty(parentDir))
             {
-                var parentPath = Path.Combine(parentDir, "ArtTuneKit.exe");
+                var parentPath = Path.Combine(parentDir, "SonicScout2.0.exe");
                 if (File.Exists(parentPath)) return (true, parentPath);
             }
 
             // 2. Default install location
             var programFiles = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-                "ArtTuneKit", "ArtTuneKit.exe");
+                "SonicScout2.0", "SonicScout2.0.exe");
             if (File.Exists(programFiles)) return (true, programFiles);
 
             // 3. Registry uninstall key
@@ -3457,13 +3457,13 @@ namespace LEQControlPanel
                         using var subKey = uninstallKey.OpenSubKey(subKeyName);
                         var displayName = subKey?.GetValue("DisplayName")?.ToString();
                         if (displayName != null &&
-                            displayName.Contains("ArtTuneKit", StringComparison.OrdinalIgnoreCase))
+                            displayName.Contains("SonicScout2.0", StringComparison.OrdinalIgnoreCase))
                         {
                             var installLocation = subKey?.GetValue("InstallLocation")?.ToString();
                             if (!string.IsNullOrEmpty(installLocation))
                             {
-                                var atkPath = Path.Combine(installLocation, "ArtTuneKit.exe");
-                                if (File.Exists(atkPath)) return (true, atkPath);
+                                var sonicScoutPath = Path.Combine(installLocation, "SonicScout2.0.exe");
+                                if (File.Exists(sonicScoutPath)) return (true, sonicScoutPath);
                             }
                         }
                     }
@@ -3471,50 +3471,49 @@ namespace LEQControlPanel
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[MainWindow] DetectArtTuneKit registry check failed: {ex.Message}");
+                Debug.WriteLine($"[MainWindow] DetectSonicScout registry check failed: {ex.Message}");
             }
 
             return (false, null);
         }
 
-        private void RefreshArtTuneKitDetection()
+        private void RefreshSonicScoutDetection()
         {
-            var (installed, exePath) = DetectArtTuneKit();
-            _atkInstalled = installed;
-            _atkExePath = exePath;
+            var (installed, exePath) = DetectSonicScout();
+            _sonicScoutInstalled = installed;
+            _sonicScoutExePath = exePath;
         }
 
-        private static bool IsArtTuneDevice(AudioDevice? device)
+        private static bool IsSonicScoutDevice(AudioDevice? device)
         {
             if (device == null) return false;
             // Legacy "Art Tune" endpoints and current "SonicScout2.0" endpoints are
             // the same managed virtual cable; match both so gating works on
             // machines renamed by the SonicScout2.0 installer.
-            return device.Name.StartsWith("Art Tune", StringComparison.OrdinalIgnoreCase)
-                || device.Name.StartsWith("SonicScout2.0", StringComparison.OrdinalIgnoreCase);
+            return device.Name.StartsWith("SonicScout2.0", StringComparison.OrdinalIgnoreCase);
         }
 
-        private void UpdateArtTuneGating()
+        private void UpdateSonicScoutGating()
         {
             var device = GetSelectedDevice();
-            bool gated = IsArtTuneDevice(device) && _atkInstalled;
+            bool gated = IsSonicScoutDevice(device) && _sonicScoutInstalled;
 
-            // Show/hide ATK overlay on the LEQ control unit
-            FadeOverlay(AtkManagedOverlay, gated);
+            // Show/hide the SonicScout overlay on the LEQ control unit
+            FadeOverlay(SonicScoutManagedOverlay, gated);
 
             // Dim the selected device display in the ComboBox face when gated
             DeviceCombo.Opacity = gated ? 0.4 : 1.0;
 
-            // Grey out Art Tune devices in the ComboBox when ATK is installed
+            // Grey out SonicScout devices in the ComboBox when SonicScout2.0 is installed
             for (int i = 0; i < DeviceCombo.Items.Count; i++)
             {
                 var container = DeviceCombo.ItemContainerGenerator.ContainerFromIndex(i) as System.Windows.Controls.ComboBoxItem;
                 if (container == null) continue;
                 var dev = DeviceCombo.Items[i] as AudioDevice;
-                if (dev != null && IsArtTuneDevice(dev) && _atkInstalled)
+                if (dev != null && IsSonicScoutDevice(dev) && _sonicScoutInstalled)
                 {
                     container.Opacity = 0.4;
-                    container.ToolTip = "Managed by ArtTuneKit";
+                    container.ToolTip = "Managed by SonicScout2.0";
                 }
                 else
                 {
@@ -3530,34 +3529,34 @@ namespace LEQControlPanel
             {
                 InstallLeqButton.IsEnabled = false;
                 InstallLeqButton.Opacity = 0.5;
-                InstallLeqButton.ToolTip = "This device is managed by ArtTuneKit";
+                InstallLeqButton.ToolTip = "This device is managed by SonicScout2.0";
 
                 CleanInstallCheck.IsEnabled = false;
                 CleanInstallCheck.Opacity = 0.5;
 
                 ResetDeviceButton.IsEnabled = false;
                 ResetDeviceButton.Opacity = 0.5;
-                ResetDeviceButton.ToolTip = "This device is managed by ArtTuneKit";
+                ResetDeviceButton.ToolTip = "This device is managed by SonicScout2.0";
             }
 
-            // Hide the "LEQ Not Detected" overlay — the ATK overlay replaces it
+            // Hide the "LEQ Not Detected" overlay when SonicScout2.0 manages the device
             FadeOverlay(LeqNotDetectedOverlay, false);
         }
 
-        private void OpenArtTuneKit_Click(object sender, RoutedEventArgs e)
+        private void OpenSonicScout_Click(object sender, RoutedEventArgs e)
         {
-            var exePath = _atkExePath;
+            var exePath = _sonicScoutExePath;
             if (string.IsNullOrEmpty(exePath))
             {
                 // Re-detect in case path changed
-                RefreshArtTuneKitDetection();
-                exePath = _atkExePath;
+                RefreshSonicScoutDetection();
+                exePath = _sonicScoutExePath;
             }
 
             if (string.IsNullOrEmpty(exePath))
             {
                 StyledMessageBox.ShowError(
-                    "Couldn't find ArtTuneKit executable.",
+                    "Couldn't find SonicScout2.0 executable.",
                     "Launch Failed");
                 return;
             }
@@ -3566,13 +3565,13 @@ namespace LEQControlPanel
             {
                 Process.Start(new ProcessStartInfo(exePath) { UseShellExecute = true })?.Dispose();
 
-                // Shut down SCP cleanly after launching ATK
+                // Shut down the panel cleanly after launching SonicScout2.0
                 Application.Current.Shutdown();
             }
             catch (Exception ex)
             {
                 StyledMessageBox.SafeShowError(
-                    $"Couldn't launch ArtTuneKit: {ex.Message}",
+                    $"Couldn't launch SonicScout2.0: {ex.Message}",
                     "Launch Failed");
             }
         }
