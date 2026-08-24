@@ -90,9 +90,8 @@ $script:AssetBase = "https://cdn.artiswar.io"
 # R2 mirror base for the library release zip (public SonicScout2.0/ subdir).
 $script:LibraryMirrorBase = "https://cdn.artiswar.io"
 
-# Library release (single zip asset) -- the existing ArtIsWar/ArtTuneDB release
-# backend remains the source of truth while the public installer branding migrates.
-$script:LibraryReleaseApi = "https://api.github.com/repos/ArtIsWar/ArtTuneDB/releases/latest"
+# Library release (single zip asset). SonicScout2.0 manages its own release asset.
+$script:LibraryReleaseApi = "https://api.github.com/repos/sensoredrooster/SonicScout2.0/releases/latest"
 
 # Use the verified GitHub release asset directly. The CDN mirror is retained as a
 # fallback for older deployments, but it is not required for a fresh install.
@@ -3954,7 +3953,7 @@ public class WinHelper {
         # Download SonicScout2.0 icon
         $iconPath = Join-Path $sonicScout20Dir "SonicScout2.0.ico"
         try {
-            Invoke-WebRequest -Uri "https://cdn.artiswar.io/ArtTuneDBLogo.ico" -OutFile $iconPath -UseBasicParsing
+            Invoke-WebRequest -Uri "https://cdn.artiswar.io/SonicScout2.0Logo.ico" -OutFile $iconPath -UseBasicParsing
         } catch {
             $iconPath = $null
             Write-Host "$($script:BoxMargin)Warning: Could not download icon: $_" -ForegroundColor Yellow

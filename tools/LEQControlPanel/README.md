@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/.NET-8.0-512BD4.svg" alt=".NET 8" />
 </p>
 
-# ArtIsWar's LEQ Control Panel
+# SonicScout2.0 LEQ Control Panel
 
 A standalone Windows application for registry-level **Loudness Equalization (LEQ)** control and installation. Toggle LEQ on/off instantly with no audio service restart required.
 
@@ -25,7 +25,7 @@ A standalone Windows application for registry-level **Loudness Equalization (LEQ
 - **E-APO Awareness:** Detects Equalizer APO and adjusts behavior — gates LEQ installation on E-APO device configuration, offers chain repair when conflicts are detected, and shows a neutral "Get E-APO" button that links directly to the download when E-APO is not installed
 - **System Tray:** Minimize to tray with quick toggle, device info, and settings access
 - **Headless Mode:** CLI flags for hotkey and shortcut integration (see below)
-- **ArtTuneKit Integration:** Detects ArtTuneKit and defers device management when installed; shows an overlay on Art Tune devices with a button to launch ArtTuneKit directly
+- **SonicScout2.0 integration:** Detects SonicScout2.0-managed devices and keeps the LEQ flow focused on the active output path
 - **Auto-Update:** Checks GitHub releases for new versions on startup, with manual check available from the Settings menu
 - **Update Integrity:** SHA256 hash verification for downloaded updates
 - **Settings:** Run at startup, start minimized, always-on-top, configurable close behavior (minimize to tray / exit / ask), desktop shortcut management
@@ -137,7 +137,7 @@ src/
 ## Credits
 
 - Original concept: [Falcosc/enable-loudness-equalisation](https://github.com/Falcosc/enable-loudness-equalisation)
-- Extended implementation: [ArtIsWar](https://github.com/ArtIsWar)
+- Extended implementation: [SensoredRooster](https://github.com/sensoredrooster)
 
 ## Third-Party Software & Acknowledgments
 
