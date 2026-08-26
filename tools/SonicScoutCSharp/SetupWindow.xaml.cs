@@ -48,8 +48,8 @@ public partial class SetupWindow : Window
     {
         SetInstallerInputEnabled(false);
         ProgressBar.IsIndeterminate = true;
-        SummaryText.Text = "Discovering active input/output devices...";
-        ActionHintText.Text = "We'll detect your active output devices and prepare a recommended setup path.";
+        SummaryText.Text = "Looking for active playback devices...";
+        ActionHintText.Text = "We'll auto-detect your available outputs, then you choose where Sonic Scout should play audio.";
         CheckList.Items.Clear();
         rows.Clear();
 
@@ -81,9 +81,9 @@ public partial class SetupWindow : Window
             DependencyConsentCheckBox.IsChecked = false;
             UpdateSetupStyleHint();
             CheckList.Items.Add(CreateRow(new SetupCheckResult("Device discovery", "READY", $"Discovered {discoveredOutputs.Count} active output endpoint(s).")));
-            SummaryText.Text = "Select your default output and compatibility flags, then run setup.";
-            ActionHintText.Text = "Choose the device you actually hear sound from, then click RUN INSTALL SETUP.";
-            StepText.Text = "STEP 1 OF 4  |  CHOOSE YOUR OUTPUT, ROUTE STYLE, AND COMPATIBILITY";
+            SummaryText.Text = "Choose your listening device and setup options, then start setup.";
+            ActionHintText.Text = "Most users should keep Direct Route. Switch to Compatibility Route only if you use third-party mixers or have routing conflicts.";
+            StepText.Text = "STEP 1 OF 4  |  PICK OUTPUT, ROUTE STYLE, AND COMPATIBILITY";
             SetInstallerInputEnabled(true);
             DoneButton.IsEnabled = true;
             DoneButton.Content = "CLOSE";
@@ -157,8 +157,8 @@ public partial class SetupWindow : Window
         string setupStyle = GetSelectedSetupStyle();
         bool compatibilityRouteStyle = string.Equals(setupStyle, SonicScoutCompatibilityRouteStyle, StringComparison.OrdinalIgnoreCase);
         SetupStyleHintText.Text = compatibilityRouteStyle
-            ? "Sonic Scout compatibility route keeps mixer-safe routing active to avoid third-party chain conflicts."
-            : "Sonic Scout direct route prioritizes low-latency virtual routing.";
+            ? "Compatibility Route is safer with third-party mixers (Voicemeeter, Wave Link, custom chains)."
+            : "Direct Route (recommended) keeps routing simple and low-latency.";
     }
 
     private void SetInstallerInputEnabled(bool enabled)
@@ -187,7 +187,7 @@ public partial class SetupWindow : Window
         BeginSetupButton.IsEnabled = setupInputsEnabled && discoveredOutputs.Count > 0;
         BeginSetupButton.Content = HasRequiredConsents()
             ? "RUN INSTALL SETUP"
-            : "CONFIRM 3 CHECKBOXES ABOVE";
+            : "CHECK THE 3 CONSENT BOXES TO CONTINUE";
     }
 
     private void SetupStyleComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -210,11 +210,13 @@ public partial class SetupWindow : Window
         if (DefaultOutputComboBox.SelectedIndex < 0 || DefaultOutputComboBox.SelectedIndex >= discoveredOutputs.Count)
         {
             SummaryText.Text = "Select a default output endpoint before running setup.";
+            ActionHintText.Text = "Pick the device you actually hear sound from, then click RUN INSTALL SETUP.";
             return;
         }
         if (!HasRequiredConsents())
         {
             SummaryText.Text = "Confirm ownership, routing apply permission, and dependency acknowledgement before running setup.";
+            ActionHintText.Text = "Check all three consent boxes, then click RUN INSTALL SETUP.";
             return;
         }
 
@@ -351,7 +353,7 @@ public partial class SetupWindow : Window
         string key = result.Name.ToLowerInvariant();
         return key switch
         {
-            var name when name.Contains("ownership") => "Check all 3 consent boxes to allow routing/install actions from this wizard.",
+            var name when name.Contains("ownership") => "Check all 3 consent boxes so setup is allowed to apply routing/install changes.",
             var name when name.Contains("equalizer apo") => "Install Equalizer APO, then rerun setup. This is required for filter apply.",
             var name when name.Contains("voicemeeter") => "Enable Voicemeeter fallback (or install virtual cable route), then rerun setup.",
             var name when name.Contains("windows audio service") => "Restart Windows Audio service (Audiosrv) or reboot, then rerun setup.",
