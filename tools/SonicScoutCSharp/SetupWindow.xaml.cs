@@ -41,7 +41,25 @@ public partial class SetupWindow : Window
         this.discoverOutputs = discoverOutputs;
         this.runChecks = runChecks;
         this.openPostInstallVerification = openPostInstallVerification;
+        EnsureRequiredSetupResources();
         Loaded += async (_, _) => await LoadInstallOptionsAsync();
+    }
+
+    private void EnsureRequiredSetupResources()
+    {
+        SetBrushIfMissing("SetupReadyBrush", System.Windows.Media.Brushes.LimeGreen);
+        SetBrushIfMissing("SetupRunningBrush", System.Windows.Media.Brushes.DeepSkyBlue);
+        SetBrushIfMissing("SetupUpdateBrush", System.Windows.Media.Brushes.Gold);
+        SetBrushIfMissing("SetupErrorBrush", System.Windows.Media.Brushes.IndianRed);
+        SetBrushIfMissing("PopupTextBrush", System.Windows.Media.Brushes.Gainsboro);
+    }
+
+    private void SetBrushIfMissing(string key, System.Windows.Media.Brush brush)
+    {
+        if (TryFindResource(key) is not System.Windows.Media.Brush)
+        {
+            Resources[key] = brush;
+        }
     }
 
     private async Task LoadInstallOptionsAsync()
