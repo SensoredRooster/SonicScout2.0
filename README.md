@@ -33,6 +33,10 @@ Use the guided app flow first:
 
 The app is startup-gated: it runs setup checks first, and **main live controls do not appear until installation/setup passes**.
 
+<p align="center">
+  <img src="Assets/download.PNG" alt="SonicScout2.0 installer menu" width="900" />
+</p>
+
 ## Install (PowerShell script path)
 
 Open an **elevated** (Run as Administrator) **Windows PowerShell** window and run:
