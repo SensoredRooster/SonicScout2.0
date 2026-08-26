@@ -1,20 +1,8 @@
 @echo off
 setlocal
+cd /d "%~dp0\.."
 
-set "ROOT=%~dp0"
-if exist "%ROOT%SonicScout.CSharp.csproj" goto root_ready
-if exist "%ROOT%CSharp\SonicScout.CSharp.csproj" (
-  set "ROOT=%ROOT%CSharp\"
-  goto root_ready
-)
-echo SonicScout.CSharp.csproj was not found next to run_sonic_scout_csharp.bat.
-pause
-exit /b 1
-
-:root_ready
-cd /d "%ROOT%"
-
-set "SETUP_SCRIPT=setup_audio_stack.ps1"
+set "SETUP_SCRIPT=CSharp\setup_audio_stack.ps1"
 if exist "%SETUP_SCRIPT%" (
   powershell -NoProfile -ExecutionPolicy Bypass -File "%SETUP_SCRIPT%" -Mode Preflight -Quiet >nul 2>&1
   set "PRECHECK=%ERRORLEVEL%"
@@ -22,7 +10,7 @@ if exist "%SETUP_SCRIPT%" (
     echo Sonic Scout detected missing or incomplete audio dependencies.
     choice /C YN /N /M "Run guided audio stack setup now? [Y/N]: "
     if errorlevel 2 goto continue_launch
-    call "run_audio_stack_setup.bat"
+    call "CSharp\run_audio_stack_setup.bat"
     set "SETUP_RESULT=%ERRORLEVEL%"
     if not "%SETUP_RESULT%"=="0" (
       echo Guided setup reported pending issues.
@@ -33,10 +21,10 @@ if exist "%SETUP_SCRIPT%" (
 )
 
 :continue_launch
-set "PROJECT=SonicScout.CSharp.csproj"
-set "APP=bin\Release\net8.0-windows\SonicScout.exe"
+set "PROJECT=CSharp\SonicScout.CSharp.csproj"
+set "APP=CSharp\bin\Release\net8.0-windows\SonicScout.exe"
 if not exist "%APP%" goto build
-for %%F in ("*.xaml" "*.cs" "*.csproj") do if exist "%%~fF" if "%%~tF" GTR "%APP%" goto build
+for %%F in ("CSharp\*.xaml" "CSharp\*.cs" "CSharp\*.csproj") do if "%%~tF" GTR "%APP%" goto build
 goto sync
 :build
 dotnet restore "%PROJECT%" --verbosity quiet
@@ -44,10 +32,10 @@ if errorlevel 1 goto fail
 dotnet build "%PROJECT%" --configuration Release --no-restore --verbosity minimal
 if errorlevel 1 goto fail
 :sync
-set "SCOUTPASS_PROJECT=ScoutPass\SonicScout.ScoutPass.csproj"
-set "SCOUTPASS_APP=ScoutPass\bin\Release\net8.0-windows\SonicScout.SonicPass.exe"
+set "SCOUTPASS_PROJECT=CSharp\ScoutPass\SonicScout.ScoutPass.csproj"
+set "SCOUTPASS_APP=CSharp\ScoutPass\bin\Release\net8.0-windows\SonicScout.SonicPass.exe"
 if not exist "%SCOUTPASS_APP%" goto build_scoutpass
-for %%F in ("ScoutPass\*.cs" "ScoutPass\*.csproj") do if exist "%%~fF" if "%%~tF" GTR "%SCOUTPASS_APP%" goto build_scoutpass
+for %%F in ("CSharp\ScoutPass\*.cs" "CSharp\ScoutPass\*.csproj") do if "%%~tF" GTR "%SCOUTPASS_APP%" goto build_scoutpass
 goto finish_sync
 :build_scoutpass
 dotnet restore "%SCOUTPASS_PROJECT%" --verbosity quiet
@@ -55,10 +43,8 @@ if errorlevel 1 goto fail
 dotnet build "%SCOUTPASS_PROJECT%" --configuration Release --no-restore --verbosity minimal
 if errorlevel 1 goto fail
 :finish_sync
-if exist "profiles\*.txt" (
-  if not exist "bin\Release\net8.0-windows\profiles" mkdir "bin\Release\net8.0-windows\profiles"
-  copy /Y "profiles\*.txt" "bin\Release\net8.0-windows\profiles\" >nul
-)
+if not exist "CSharp\bin\Release\net8.0-windows\profiles" mkdir "CSharp\bin\Release\net8.0-windows\profiles"
+copy /Y "profiles\*.txt" "CSharp\bin\Release\net8.0-windows\profiles\" >nul
 start "" "%APP%"
 endlocal
 exit /b 0

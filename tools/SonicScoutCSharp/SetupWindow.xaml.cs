@@ -31,7 +31,6 @@ public partial class SetupWindow : Window
     private readonly Func<Window, Task> openPostInstallVerification;
     private readonly Dictionary<string, (Ellipse Indicator, TextBlock Heading, TextBlock Detail)> rows = new();
     private readonly List<AudioEndpointOption> discoveredOutputs = new();
-    public bool SetupChecksRan { get; private set; }
 
     public SetupWindow(
         Func<Task<IReadOnlyList<AudioEndpointOption>>> discoverOutputs,
@@ -42,33 +41,15 @@ public partial class SetupWindow : Window
         this.discoverOutputs = discoverOutputs;
         this.runChecks = runChecks;
         this.openPostInstallVerification = openPostInstallVerification;
-        EnsureRequiredSetupResources();
         Loaded += async (_, _) => await LoadInstallOptionsAsync();
-    }
-
-    private void EnsureRequiredSetupResources()
-    {
-        SetBrushIfMissing("SetupReadyBrush", System.Windows.Media.Brushes.LimeGreen);
-        SetBrushIfMissing("SetupRunningBrush", System.Windows.Media.Brushes.DeepSkyBlue);
-        SetBrushIfMissing("SetupUpdateBrush", System.Windows.Media.Brushes.Gold);
-        SetBrushIfMissing("SetupErrorBrush", System.Windows.Media.Brushes.IndianRed);
-        SetBrushIfMissing("PopupTextBrush", System.Windows.Media.Brushes.Gainsboro);
-    }
-
-    private void SetBrushIfMissing(string key, System.Windows.Media.Brush brush)
-    {
-        if (TryFindResource(key) is not System.Windows.Media.Brush)
-        {
-            Resources[key] = brush;
-        }
     }
 
     private async Task LoadInstallOptionsAsync()
     {
         SetInstallerInputEnabled(false);
         ProgressBar.IsIndeterminate = true;
-        SummaryText.Text = "Looking for active playback devices...";
-        ActionHintText.Text = "We'll auto-detect your available outputs, then you choose where Sonic Scout should play audio.";
+        SummaryText.Text = "Discovering active input/output devices...";
+        ActionHintText.Text = "We'll detect your active output devices and prepare a recommended setup path.";
         CheckList.Items.Clear();
         rows.Clear();
 
@@ -89,7 +70,7 @@ public partial class SetupWindow : Window
                 SummaryText.Text = "No active output devices found.";
                 ActionHintText.Text = "Connect your headset/speakers, make sure Windows sees them, then reopen setup.";
                 DoneButton.IsEnabled = true;
-                DoneButton.Content = "BACK TO APP";
+                DoneButton.Content = "CLOSE";
                 return;
             }
 
@@ -100,12 +81,12 @@ public partial class SetupWindow : Window
             DependencyConsentCheckBox.IsChecked = false;
             UpdateSetupStyleHint();
             CheckList.Items.Add(CreateRow(new SetupCheckResult("Device discovery", "READY", $"Discovered {discoveredOutputs.Count} active output endpoint(s).")));
-            SummaryText.Text = "Choose your listening device and setup options, then start setup.";
-            ActionHintText.Text = "Most users should keep Direct Route. Switch to Compatibility Route only if you use third-party mixers or have routing conflicts.";
-            StepText.Text = "STEP 1 OF 4  |  PICK OUTPUT, ROUTE STYLE, AND COMPATIBILITY";
+            SummaryText.Text = "Select your default output and compatibility flags, then run setup.";
+            ActionHintText.Text = "Choose the device you actually hear sound from, then click RUN INSTALL SETUP.";
+            StepText.Text = "STEP 1 OF 4  |  CHOOSE YOUR OUTPUT, ROUTE STYLE, AND COMPATIBILITY";
             SetInstallerInputEnabled(true);
             DoneButton.IsEnabled = true;
-            DoneButton.Content = "BACK TO APP";
+            DoneButton.Content = "CLOSE";
         }
         catch (COMException exception)
         {
@@ -113,7 +94,7 @@ public partial class SetupWindow : Window
             SummaryText.Text = "Device discovery failed.";
             ActionHintText.Text = "Restart Windows Audio service or reboot, then rerun setup.";
             DoneButton.IsEnabled = true;
-            DoneButton.Content = "BACK TO APP";
+            DoneButton.Content = "CLOSE";
         }
         catch (UnauthorizedAccessException exception)
         {
@@ -121,7 +102,7 @@ public partial class SetupWindow : Window
             SummaryText.Text = "Device discovery failed.";
             ActionHintText.Text = "Run Sonic Scout as Administrator and try setup again.";
             DoneButton.IsEnabled = true;
-            DoneButton.Content = "BACK TO APP";
+            DoneButton.Content = "CLOSE";
         }
         catch (IOException exception)
         {
@@ -129,15 +110,7 @@ public partial class SetupWindow : Window
             SummaryText.Text = "Device discovery failed.";
             ActionHintText.Text = "Close audio tools using these devices and retry setup.";
             DoneButton.IsEnabled = true;
-            DoneButton.Content = "BACK TO APP";
-        }
-        catch (Exception exception)
-        {
-            CheckList.Items.Add(CreateRow(new SetupCheckResult("Device discovery", "ERROR", $"Unexpected setup error: {exception.Message}")));
-            SummaryText.Text = "Device discovery failed unexpectedly.";
-            ActionHintText.Text = "Close and reopen setup. If it repeats, run Sonic Scout as Administrator.";
-            DoneButton.IsEnabled = true;
-            DoneButton.Content = "BACK TO APP";
+            DoneButton.Content = "CLOSE";
         }
         finally
         {
@@ -184,8 +157,8 @@ public partial class SetupWindow : Window
         string setupStyle = GetSelectedSetupStyle();
         bool compatibilityRouteStyle = string.Equals(setupStyle, SonicScoutCompatibilityRouteStyle, StringComparison.OrdinalIgnoreCase);
         SetupStyleHintText.Text = compatibilityRouteStyle
-            ? "Compatibility Route is safer with third-party mixers (Voicemeeter, Wave Link, custom chains)."
-            : "Direct Route (recommended) keeps routing simple and low-latency.";
+            ? "Sonic Scout compatibility route keeps mixer-safe routing active to avoid third-party chain conflicts."
+            : "Sonic Scout direct route prioritizes low-latency virtual routing.";
     }
 
     private void SetInstallerInputEnabled(bool enabled)
@@ -213,8 +186,8 @@ public partial class SetupWindow : Window
     {
         BeginSetupButton.IsEnabled = setupInputsEnabled && discoveredOutputs.Count > 0;
         BeginSetupButton.Content = HasRequiredConsents()
-            ? "STEP 2: RUN INSTALL SETUP"
-            : "STEP 2 LOCKED: CHECK ALL 3 CONSENT BOXES";
+            ? "RUN INSTALL SETUP"
+            : "CONFIRM 3 CHECKBOXES ABOVE";
     }
 
     private void SetupStyleComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -234,27 +207,14 @@ public partial class SetupWindow : Window
 
     private async Task RunChecksAsync()
     {
-        SetupChecksRan = true;
         if (DefaultOutputComboBox.SelectedIndex < 0 || DefaultOutputComboBox.SelectedIndex >= discoveredOutputs.Count)
         {
             SummaryText.Text = "Select a default output endpoint before running setup.";
-            ActionHintText.Text = "Pick the device you actually hear sound from, then click RUN INSTALL SETUP.";
-            System.Windows.MessageBox.Show(
-                "Pick your main listening device first, then click 'STEP 2: RUN INSTALL SETUP'.",
-                "Sonic Scout setup",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
             return;
         }
         if (!HasRequiredConsents())
         {
             SummaryText.Text = "Confirm ownership, routing apply permission, and dependency acknowledgement before running setup.";
-            ActionHintText.Text = "Check all three consent boxes, then click RUN INSTALL SETUP.";
-            System.Windows.MessageBox.Show(
-                "Step 2 is locked until all 3 consent boxes are checked.",
-                "Sonic Scout setup",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
             return;
         }
 
@@ -263,12 +223,9 @@ public partial class SetupWindow : Window
         {
             if (rows.TryGetValue(result.Name, out var row))
             {
-                System.Windows.Media.Brush stateBrush = ResolveStateBrush(result.State);
-                row.Indicator.Fill = stateBrush;
+                row.Indicator.Fill = (System.Windows.Media.Brush)FindResource(GetStateBrush(result.State));
                 row.Heading.Text = $"{result.State}  {result.Name}";
-                row.Heading.Foreground = stateBrush;
                 row.Detail.Text = result.Detail;
-                row.Detail.Foreground = ResolveBrushResource("PopupTextBrush", System.Windows.Media.Brushes.Gainsboro);
             }
             else
             {
@@ -331,13 +288,6 @@ public partial class SetupWindow : Window
             ActionHintText.Text = "Reconnect the output device or reboot, then rerun setup.";
             DoneButton.Content = "CLOSE";
         }
-        catch (Exception exception)
-        {
-            CheckList.Items.Add(CreateRow(new SetupCheckResult("Setup", "ERROR", $"Unexpected setup error: {exception.Message}")));
-            SummaryText.Text = "Setup stopped due to an unexpected error.";
-            ActionHintText.Text = "Rerun setup. If this repeats, run Sonic Scout as Administrator and report this message.";
-            DoneButton.Content = "CLOSE";
-        }
         finally
         {
             ProgressBar.IsIndeterminate = false;
@@ -354,10 +304,9 @@ public partial class SetupWindow : Window
         Grid rowGrid = new();
         rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
         rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        System.Windows.Media.Brush stateBrush = ResolveStateBrush(result.State);
-        Ellipse indicator = new() { Width = 9, Height = 9, Fill = stateBrush, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 5, 0, 0) };
-        TextBlock heading = new() { Text = $"{result.State}  {result.Name}", Foreground = stateBrush, FontSize = 12, FontWeight = FontWeights.Bold };
-        TextBlock detail = new() { Text = result.Detail, Foreground = ResolveBrushResource("PopupTextBrush", System.Windows.Media.Brushes.Gainsboro), Opacity = 0.82, FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 0) };
+        Ellipse indicator = new() { Width = 9, Height = 9, Fill = (System.Windows.Media.Brush)FindResource(GetStateBrush(result.State)), VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 5, 0, 0) };
+        TextBlock heading = new() { Text = $"{result.State}  {result.Name}", Foreground = (System.Windows.Media.Brush)FindResource(GetStateBrush(result.State)), FontSize = 12, FontWeight = FontWeights.Bold };
+        TextBlock detail = new() { Text = result.Detail, Foreground = (System.Windows.Media.Brush)FindResource("PopupTextBrush"), Opacity = 0.82, FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 0) };
         StackPanel text = new();
         text.Children.Add(heading);
         text.Children.Add(detail);
@@ -369,7 +318,7 @@ public partial class SetupWindow : Window
         return new Border { Padding = new Thickness(10, 7, 10, 7), Margin = new Thickness(0, 0, 0, 5), Background = System.Windows.Media.Brushes.Transparent, Child = content };
     }
 
-    private static string GetStateBrushKey(string state) => state switch
+    private static string GetStateBrush(string state) => state switch
     {
         "READY" or "FIXED" => "SetupReadyBrush",
         "RUNNING" => "SetupRunningBrush",
@@ -377,25 +326,6 @@ public partial class SetupWindow : Window
         "ERROR" => "SetupErrorBrush",
         _ => "PopupTextBrush"
     };
-
-    private System.Windows.Media.Brush ResolveStateBrush(string state)
-    {
-        System.Windows.Media.Brush fallback = state switch
-        {
-            "READY" or "FIXED" => System.Windows.Media.Brushes.LimeGreen,
-            "RUNNING" => System.Windows.Media.Brushes.DeepSkyBlue,
-            "UPDATE" => System.Windows.Media.Brushes.Gold,
-            "ERROR" => System.Windows.Media.Brushes.IndianRed,
-            _ => System.Windows.Media.Brushes.Gainsboro
-        };
-
-        return ResolveBrushResource(GetStateBrushKey(state), fallback);
-    }
-
-    private System.Windows.Media.Brush ResolveBrushResource(string key, System.Windows.Media.Brush fallback)
-    {
-        return TryFindResource(key) as System.Windows.Media.Brush ?? fallback;
-    }
 
     private static string BuildCompletionSummary(IReadOnlyList<SetupCheckResult> results)
     {
@@ -421,7 +351,7 @@ public partial class SetupWindow : Window
         string key = result.Name.ToLowerInvariant();
         return key switch
         {
-            var name when name.Contains("ownership") => "Check all 3 consent boxes so setup is allowed to apply routing/install changes.",
+            var name when name.Contains("ownership") => "Check all 3 consent boxes to allow routing/install actions from this wizard.",
             var name when name.Contains("equalizer apo") => "Install Equalizer APO, then rerun setup. This is required for filter apply.",
             var name when name.Contains("voicemeeter") => "Enable Voicemeeter fallback (or install virtual cable route), then rerun setup.",
             var name when name.Contains("windows audio service") => "Restart Windows Audio service (Audiosrv) or reboot, then rerun setup.",
@@ -433,7 +363,6 @@ public partial class SetupWindow : Window
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)
     {
-        DialogResult = false;
         Close();
     }
 

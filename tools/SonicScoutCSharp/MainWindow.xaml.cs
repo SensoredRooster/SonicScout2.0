@@ -169,16 +169,15 @@ public partial class MainWindow : Window
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
+        Hide();
         bool startupSetupReady = await EnsureTurnkeyStartupSetupAsync();
         if (!startupSetupReady)
         {
-            LoadLogo();
-            ApplyTheme(ThemeComboBox.SelectedItem is ComboBoxItem setupSelected ? setupSelected.Content?.ToString() : "Copper Signal");
-            MessageText.Text = "Setup is not complete yet. Click Setup to continue the wizard.";
-            SonicPassStatusText.Text = "SETUP REQUIRED - complete setup before live routing";
+            Close();
             return;
         }
 
+        Show();
         LoadLogo();
         ApplyTheme(ThemeComboBox.SelectedItem is ComboBoxItem selected ? selected.Content?.ToString() : "Copper Signal");
         LoadAudioDevices();
@@ -258,11 +257,6 @@ public partial class MainWindow : Window
         CopyThemeResourcesTo(dialog);
         dialog.ShowDialog();
 
-        if (!dialog.SetupChecksRan)
-        {
-            return false;
-        }
-
         preflightExitCode = await RunSetupPreflightExitCodeAsync(setupScriptPath, CancellationToken.None);
         bool readyAfterWizard = routingConfiguration.PostInstallVerified &&
             preflightExitCode.HasValue &&
@@ -272,6 +266,11 @@ public partial class MainWindow : Window
             return true;
         }
 
+        System.Windows.MessageBox.Show(
+            "Setup is not fully complete yet. Run Sonic Scout as Administrator and finish the setup wizard to continue.",
+            "Sonic Scout setup required",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
         return false;
     }
 
@@ -2105,10 +2104,6 @@ public partial class MainWindow : Window
         catch (InvalidOperationException exception)
         {
             Report("Routing", "ERROR", exception.Message);
-        }
-        catch (Exception exception)
-        {
-            Report("Setup", "ERROR", $"Unexpected setup error: {exception.Message}");
         }
         return results;
     }

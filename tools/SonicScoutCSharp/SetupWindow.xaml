@@ -34,12 +34,12 @@
                     CornerRadius="10"
                     Padding="12">
                 <StackPanel>
-                    <TextBlock x:Name="StepText" Text="STEP 1 OF 4  |  PICK OUTPUT AND SETUP OPTIONS" Foreground="{DynamicResource CyanBrush}" FontSize="11" FontWeight="Bold" Margin="0,0,0,8" />
+                    <TextBlock x:Name="StepText" Text="STEP 1 OF 4  |  CHOOSE YOUR OUTPUT" Foreground="{DynamicResource CyanBrush}" FontSize="11" FontWeight="Bold" Margin="0,0,0,8" />
                     <TextBlock Text="INSTALLATION ROUTING"
                                Foreground="{DynamicResource PopupTextBrush}"
                                FontSize="12"
                                FontWeight="Bold" />
-                    <TextBlock Text="Choose where you normally hear audio, then pick the route style Sonic Scout should apply."
+                    <TextBlock Text="Choose your default physical output and compatibility profile before provisioning Sonic Scout."
                                Foreground="{DynamicResource PopupTextBrush}"
                                Opacity="0.9"
                                FontSize="11"
@@ -50,7 +50,7 @@
                             <ColumnDefinition Width="180" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Main listening device"
+                        <TextBlock Text="Default Audio Output"
                                    Grid.Column="0"
                                    VerticalAlignment="Center"
                                    FontSize="11"
@@ -59,7 +59,7 @@
                                   Grid.Column="1"
                                   Height="30" />
                     </Grid>
-                    <TextBlock Text="Pick the headphones/speakers you actually listen on. Sonic Scout will route tuned audio to this output."
+                    <TextBlock Text="Pick your real headphones or speakers here - the device you actually hear sound from. Sonic Scout routes tuned audio to this automatically."
                                Foreground="{DynamicResource PopupTextBrush}"
                                Opacity="0.85"
                                FontSize="10"
@@ -70,7 +70,7 @@
                             <ColumnDefinition Width="180" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Route style"
+                        <TextBlock Text="Setup Style"
                                    Grid.Column="0"
                                    VerticalAlignment="Center"
                                    FontSize="11"
@@ -99,7 +99,7 @@
                         <CheckBox x:Name="VoicemeeterCheckBox" Content="Voicemeeter" Margin="0,0,14,6" Foreground="{DynamicResource PopupTextBrush}" />
                         <CheckBox x:Name="WaveLinkCheckBox" Content="Elgato Wave Link" Margin="0,0,14,6" Foreground="{DynamicResource PopupTextBrush}" />
                         <CheckBox x:Name="SoundBlasterCheckBox" Content="Creative Sound Blaster" Margin="0,0,14,6" Foreground="{DynamicResource PopupTextBrush}" />
-                        <CheckBox x:Name="OtherMixerCheckBox" Content="Other/custom mixer (SonicPass compatibility)" Margin="0,0,14,6" Foreground="{DynamicResource PopupTextBrush}" />
+                        <CheckBox x:Name="OtherMixerCheckBox" Content="SonicPass compatibility" Margin="0,0,14,6" Foreground="{DynamicResource PopupTextBrush}" />
                     </WrapPanel>
                     <Border Background="{DynamicResource CardBrush}"
                             BorderBrush="{DynamicResource PopupBorderBrush}"
@@ -118,7 +118,7 @@
                                       Margin="0,0,0,5"
                                       Checked="ConsentCheckBox_Changed"
                                       Unchecked="ConsentCheckBox_Changed">
-                                <TextBlock Text="I own/admin this PC and allow Sonic Scout to apply required routing ownership changes."
+                                <TextBlock Text="I confirm this is my system and I authorize Sonic Scout to apply routing ownership changes."
                                            TextWrapping="Wrap" />
                             </CheckBox>
                             <CheckBox x:Name="RoutingConsentCheckBox"
@@ -126,21 +126,21 @@
                                       Margin="0,0,0,5"
                                       Checked="ConsentCheckBox_Changed"
                                       Unchecked="ConsentCheckBox_Changed">
-                                <TextBlock Text="I allow Sonic Scout to apply tuned-channel routing and fallback to my selected listening device."
+                                <TextBlock Text="I approve Sonic Scout to activate tuned-channel routing and safe fallback to my physical output."
                                            TextWrapping="Wrap" />
                             </CheckBox>
                             <CheckBox x:Name="DependencyConsentCheckBox"
                                       Foreground="{DynamicResource PopupTextBrush}"
                                       Checked="ConsentCheckBox_Changed"
                                       Unchecked="ConsentCheckBox_Changed">
-                                <TextBlock Text="I understand setup may install/use VB-Cable or Voicemeeter when Windows has no compatible direct route."
+                                <TextBlock Text="I understand creating a tuned channel may require Voicemeeter or VB-Cable when no compatible DAC/route is available."
                                            TextWrapping="Wrap" />
                             </CheckBox>
                         </StackPanel>
                     </Border>
                     <Button x:Name="BeginSetupButton"
-                            Content="STEP 2: START INSTALL SETUP"
-                            Width="300"
+                            Content="STEP 2: RUN INSTALL SETUP"
+                            Width="190"
                             Height="34"
                             Margin="0,10,0,0"
                             HorizontalAlignment="Right"
@@ -148,12 +148,6 @@
                             Foreground="{DynamicResource OnPrimaryBrush}"
                             FontWeight="Bold"
                             Click="BeginSetupButton_Click" />
-                    <TextBlock Text="After Step 1 choices, click this Step 2 button to continue."
-                               Foreground="{DynamicResource PopupTextBrush}"
-                               Opacity="0.8"
-                               FontSize="10"
-                               HorizontalAlignment="Right"
-                               Margin="0,6,0,0" />
                 </StackPanel>
             </Border>
 
