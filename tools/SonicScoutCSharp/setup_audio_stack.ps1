@@ -457,8 +457,7 @@ if ($readyForTesting) {
     # Locate the main Install-SonicScout2.0.ps1 installer
     $mainInstallerPaths = @(
         (Join-Path $script:ScriptRootPath 'Install-SonicScout2.0.ps1'),
-        (Join-Path $script:ScriptRootPath '..\..' 'powershell' 'Install-SonicScout2.0.ps1'),
-        (Join-Path $script:ScriptRootPath '..' '..' 'powershell' 'Install-SonicScout2.0.ps1')
+        (Join-Path (Join-Path (Join-Path $script:ScriptRootPath '..') '..') 'powershell\Install-SonicScout2.0.ps1')
     )
     
     $mainInstallerPath = $null
