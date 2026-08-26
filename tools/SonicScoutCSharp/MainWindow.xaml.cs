@@ -864,9 +864,16 @@ public partial class MainWindow : Window
 
     private static bool IsHiFiCableOutput(string outputName)
     {
+        if (string.IsNullOrWhiteSpace(outputName))
+        {
+            return false;
+        }
+
         return outputName.Contains("hi-fi cable", StringComparison.OrdinalIgnoreCase) ||
                outputName.Contains("hifi cable", StringComparison.OrdinalIgnoreCase) ||
                outputName.Contains("vb-audio hi-fi", StringComparison.OrdinalIgnoreCase) ||
+               outputName.Contains("vb-audio hifi", StringComparison.OrdinalIgnoreCase) ||
+               outputName.Contains("sonic scout 2.0", StringComparison.OrdinalIgnoreCase) ||
                outputName.Contains("sonic scout", StringComparison.OrdinalIgnoreCase);
     }
 

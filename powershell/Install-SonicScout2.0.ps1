@@ -5215,14 +5215,40 @@ function Get-SonicScout20Endpoints {
     .SYNOPSIS
         Detects the VB-CABLE render/capture endpoints among ACTIVE devices.
     .DESCRIPTION
-        Family-matches the DeviceInterface desc == 'VB-Audio Virtual Cable' (so a
-        user's own Hi-Fi Cable stays invisible), then uses the EndpointFormFactor
-        property as the 8ch (1) vs 16ch (2) discriminator. Never bare-Contains
-        "SonicScout2.0". A clean VB-CABLE v45 install ships all three endpoints Active.
+        Family-matches the device description rather than only a single literal so the
+        Hi-Fi / Virtual Cable variants are both recognized. We still guard against
+        unrelated local output aliases by checking the device description and the
+        friendly name; this keeps a user's own Hi-Fi Cable or other Virtual Cable
+        output from being mistaken for SonicScout2.0. Then use EndpointFormFactor to
+        split 8ch vs 16ch render endpoints. A clean VB-CABLE v45 install ships all
+        three endpoints Active.
     .OUTPUTS
         pscustomobject @{ Render8; Render16; Capture } of GUIDs (any may be $null).
     #>
     $render8 = $null; $render16 = $null; $capture = $null
+
+    $matchesVbCable = {
+        param($desc, $friendly)
+        if ([string]::IsNullOrWhiteSpace($desc) -and [string]::IsNullOrWhiteSpace($friendly)) { return $false }
+        $candidate = (@($desc, $friendly) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 1)
+        if ([string]::IsNullOrWhiteSpace($candidate)) { return $false }
+        $normalized = $candidate.Trim()
+        $matches = @(
+            'VB-Audio Virtual Cable',
+            'VB-Audio Hi-Fi Cable',
+            'VB-Audio HiFi Cable',
+            'VB-Audio Hi-Fi',
+            'VB-Audio HiFi',
+            'SonicScout2.0',
+            'SonicScout2.0 +',
+            'SonicScout2.0 Unified Output'
+        )
+        foreach ($name in $matches) {
+            if ($normalized -ieq $name) { return $true }
+        }
+        return $normalized -match '(?i)^VB-Audio\s+(Virtual\s+Cable|Hi[- ]?Fi\s+Cable|Hi[- ]?Fi)$' -or
+               $normalized -match '(?i)^SonicScout2\.0(?:\s+\+|\s+Unified\s+Output)?$'
+    }
 
     if (Test-Path $script:MMDEVICES_RENDER) {
         foreach ($key in Get-ChildItem -Path $script:MMDEVICES_RENDER -ErrorAction SilentlyContinue) {
@@ -5232,7 +5258,9 @@ function Get-SonicScout20Endpoints {
                 $propsPath = Join-Path $key.PSPath 'Properties'
                 if (-not (Test-Path $propsPath)) { continue }
                 $props = Get-ItemProperty -Path $propsPath -ErrorAction SilentlyContinue
-                if ($props.$script:PKEY_DESC -ne 'VB-Audio Virtual Cable') { continue }
+                $desc = "$($props.$script:PKEY_DESC)"
+                $friendly = "$($props.$script:PKEY_FRIENDLY)"
+                if (-not (& $matchesVbCable $desc $friendly)) { continue }
                 $ff = [int]($props.$script:PKEY_FORMFACTOR)
                 if ($ff -eq 2) {
                     if (-not $render16) { $render16 = $key.PSChildName }
@@ -5251,7 +5279,9 @@ function Get-SonicScout20Endpoints {
                 $propsPath = Join-Path $key.PSPath 'Properties'
                 if (-not (Test-Path $propsPath)) { continue }
                 $props = Get-ItemProperty -Path $propsPath -ErrorAction SilentlyContinue
-                if ($props.$script:PKEY_DESC -ne 'VB-Audio Virtual Cable') { continue }
+                $desc = "$($props.$script:PKEY_DESC)"
+                $friendly = "$($props.$script:PKEY_FRIENDLY)"
+                if (-not (& $matchesVbCable $desc $friendly)) { continue }
                 if (-not $capture) { $capture = $key.PSChildName }
             } catch { continue }
         }
