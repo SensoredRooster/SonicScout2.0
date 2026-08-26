@@ -233,9 +233,12 @@ public partial class SetupWindow : Window
         {
             if (rows.TryGetValue(result.Name, out var row))
             {
-                row.Indicator.Fill = (System.Windows.Media.Brush)FindResource(GetStateBrush(result.State));
+                System.Windows.Media.Brush stateBrush = ResolveStateBrush(result.State);
+                row.Indicator.Fill = stateBrush;
                 row.Heading.Text = $"{result.State}  {result.Name}";
+                row.Heading.Foreground = stateBrush;
                 row.Detail.Text = result.Detail;
+                row.Detail.Foreground = ResolveBrushResource("PopupTextBrush", System.Windows.Media.Brushes.Gainsboro);
             }
             else
             {
@@ -321,9 +324,10 @@ public partial class SetupWindow : Window
         Grid rowGrid = new();
         rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
         rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        Ellipse indicator = new() { Width = 9, Height = 9, Fill = (System.Windows.Media.Brush)FindResource(GetStateBrush(result.State)), VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 5, 0, 0) };
-        TextBlock heading = new() { Text = $"{result.State}  {result.Name}", Foreground = (System.Windows.Media.Brush)FindResource(GetStateBrush(result.State)), FontSize = 12, FontWeight = FontWeights.Bold };
-        TextBlock detail = new() { Text = result.Detail, Foreground = (System.Windows.Media.Brush)FindResource("PopupTextBrush"), Opacity = 0.82, FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 0) };
+        System.Windows.Media.Brush stateBrush = ResolveStateBrush(result.State);
+        Ellipse indicator = new() { Width = 9, Height = 9, Fill = stateBrush, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 5, 0, 0) };
+        TextBlock heading = new() { Text = $"{result.State}  {result.Name}", Foreground = stateBrush, FontSize = 12, FontWeight = FontWeights.Bold };
+        TextBlock detail = new() { Text = result.Detail, Foreground = ResolveBrushResource("PopupTextBrush", System.Windows.Media.Brushes.Gainsboro), Opacity = 0.82, FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 0) };
         StackPanel text = new();
         text.Children.Add(heading);
         text.Children.Add(detail);
@@ -335,7 +339,7 @@ public partial class SetupWindow : Window
         return new Border { Padding = new Thickness(10, 7, 10, 7), Margin = new Thickness(0, 0, 0, 5), Background = System.Windows.Media.Brushes.Transparent, Child = content };
     }
 
-    private static string GetStateBrush(string state) => state switch
+    private static string GetStateBrushKey(string state) => state switch
     {
         "READY" or "FIXED" => "SetupReadyBrush",
         "RUNNING" => "SetupRunningBrush",
@@ -343,6 +347,25 @@ public partial class SetupWindow : Window
         "ERROR" => "SetupErrorBrush",
         _ => "PopupTextBrush"
     };
+
+    private System.Windows.Media.Brush ResolveStateBrush(string state)
+    {
+        System.Windows.Media.Brush fallback = state switch
+        {
+            "READY" or "FIXED" => System.Windows.Media.Brushes.LimeGreen,
+            "RUNNING" => System.Windows.Media.Brushes.DeepSkyBlue,
+            "UPDATE" => System.Windows.Media.Brushes.Gold,
+            "ERROR" => System.Windows.Media.Brushes.IndianRed,
+            _ => System.Windows.Media.Brushes.Gainsboro
+        };
+
+        return ResolveBrushResource(GetStateBrushKey(state), fallback);
+    }
+
+    private System.Windows.Media.Brush ResolveBrushResource(string key, System.Windows.Media.Brush fallback)
+    {
+        return TryFindResource(key) as System.Windows.Media.Brush ?? fallback;
+    }
 
     private static string BuildCompletionSummary(IReadOnlyList<SetupCheckResult> results)
     {
