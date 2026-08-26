@@ -31,6 +31,7 @@ public partial class SetupWindow : Window
     private readonly Func<Window, Task> openPostInstallVerification;
     private readonly Dictionary<string, (Ellipse Indicator, TextBlock Heading, TextBlock Detail)> rows = new();
     private readonly List<AudioEndpointOption> discoveredOutputs = new();
+    public bool SetupChecksRan { get; private set; }
 
     public SetupWindow(
         Func<Task<IReadOnlyList<AudioEndpointOption>>> discoverOutputs,
@@ -88,7 +89,7 @@ public partial class SetupWindow : Window
                 SummaryText.Text = "No active output devices found.";
                 ActionHintText.Text = "Connect your headset/speakers, make sure Windows sees them, then reopen setup.";
                 DoneButton.IsEnabled = true;
-                DoneButton.Content = "CLOSE";
+                DoneButton.Content = "BACK TO APP";
                 return;
             }
 
@@ -104,7 +105,7 @@ public partial class SetupWindow : Window
             StepText.Text = "STEP 1 OF 4  |  PICK OUTPUT, ROUTE STYLE, AND COMPATIBILITY";
             SetInstallerInputEnabled(true);
             DoneButton.IsEnabled = true;
-            DoneButton.Content = "CLOSE";
+            DoneButton.Content = "BACK TO APP";
         }
         catch (COMException exception)
         {
@@ -112,7 +113,7 @@ public partial class SetupWindow : Window
             SummaryText.Text = "Device discovery failed.";
             ActionHintText.Text = "Restart Windows Audio service or reboot, then rerun setup.";
             DoneButton.IsEnabled = true;
-            DoneButton.Content = "CLOSE";
+            DoneButton.Content = "BACK TO APP";
         }
         catch (UnauthorizedAccessException exception)
         {
@@ -120,7 +121,7 @@ public partial class SetupWindow : Window
             SummaryText.Text = "Device discovery failed.";
             ActionHintText.Text = "Run Sonic Scout as Administrator and try setup again.";
             DoneButton.IsEnabled = true;
-            DoneButton.Content = "CLOSE";
+            DoneButton.Content = "BACK TO APP";
         }
         catch (IOException exception)
         {
@@ -128,7 +129,7 @@ public partial class SetupWindow : Window
             SummaryText.Text = "Device discovery failed.";
             ActionHintText.Text = "Close audio tools using these devices and retry setup.";
             DoneButton.IsEnabled = true;
-            DoneButton.Content = "CLOSE";
+            DoneButton.Content = "BACK TO APP";
         }
         catch (Exception exception)
         {
@@ -136,7 +137,7 @@ public partial class SetupWindow : Window
             SummaryText.Text = "Device discovery failed unexpectedly.";
             ActionHintText.Text = "Close and reopen setup. If it repeats, run Sonic Scout as Administrator.";
             DoneButton.IsEnabled = true;
-            DoneButton.Content = "CLOSE";
+            DoneButton.Content = "BACK TO APP";
         }
         finally
         {
@@ -212,8 +213,8 @@ public partial class SetupWindow : Window
     {
         BeginSetupButton.IsEnabled = setupInputsEnabled && discoveredOutputs.Count > 0;
         BeginSetupButton.Content = HasRequiredConsents()
-            ? "RUN INSTALL SETUP"
-            : "CHECK THE 3 CONSENT BOXES TO CONTINUE";
+            ? "STEP 2: RUN INSTALL SETUP"
+            : "STEP 2 LOCKED: CHECK ALL 3 CONSENT BOXES";
     }
 
     private void SetupStyleComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -233,16 +234,27 @@ public partial class SetupWindow : Window
 
     private async Task RunChecksAsync()
     {
+        SetupChecksRan = true;
         if (DefaultOutputComboBox.SelectedIndex < 0 || DefaultOutputComboBox.SelectedIndex >= discoveredOutputs.Count)
         {
             SummaryText.Text = "Select a default output endpoint before running setup.";
             ActionHintText.Text = "Pick the device you actually hear sound from, then click RUN INSTALL SETUP.";
+            System.Windows.MessageBox.Show(
+                "Pick your main listening device first, then click 'STEP 2: RUN INSTALL SETUP'.",
+                "Sonic Scout setup",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
             return;
         }
         if (!HasRequiredConsents())
         {
             SummaryText.Text = "Confirm ownership, routing apply permission, and dependency acknowledgement before running setup.";
             ActionHintText.Text = "Check all three consent boxes, then click RUN INSTALL SETUP.";
+            System.Windows.MessageBox.Show(
+                "Step 2 is locked until all 3 consent boxes are checked.",
+                "Sonic Scout setup",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
             return;
         }
 
@@ -421,6 +433,7 @@ public partial class SetupWindow : Window
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)
     {
+        DialogResult = false;
         Close();
     }
 

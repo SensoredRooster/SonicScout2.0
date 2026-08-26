@@ -261,6 +261,11 @@ public partial class MainWindow : Window
         CopyThemeResourcesTo(dialog);
         dialog.ShowDialog();
 
+        if (!dialog.SetupChecksRan)
+        {
+            return false;
+        }
+
         preflightExitCode = await RunSetupPreflightExitCodeAsync(setupScriptPath, CancellationToken.None);
         bool readyAfterWizard = routingConfiguration.PostInstallVerified &&
             preflightExitCode.HasValue &&
