@@ -1,7 +1,8 @@
 <Application x:Class="SonicScout.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             StartupUri="MainWindow.xaml">
+             StartupUri="MainWindow.xaml"
+             ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
         <SolidColorBrush x:Key="BackgroundBrush" Color="#10151A" />
         <SolidColorBrush x:Key="PanelBrush" Color="#172128" />

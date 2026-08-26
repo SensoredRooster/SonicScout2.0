@@ -48,15 +48,24 @@ public partial class SetupWindow : Window
     // Seeds brush keys that theme resources may not have copied yet — prevents FindResource crashes
     private void EnsureRequiredSetupResources()
     {
+        SetBrushIfMissing("BackgroundBrush", System.Windows.Media.Color.FromRgb(0x10, 0x15, 0x1A));
+        SetBrushIfMissing("PanelBrush", System.Windows.Media.Color.FromRgb(0x22, 0x22, 0x38));
+        SetBrushIfMissing("CardBrush", System.Windows.Media.Color.FromRgb(0x20, 0x2C, 0x34));
+        SetBrushIfMissing("AccentBrush", System.Windows.Media.Color.FromRgb(0xD9, 0x8E, 0x04));
+        SetBrushIfMissing("CyanBrush", System.Windows.Media.Color.FromRgb(0x00, 0xBC, 0xD4));
+        SetBrushIfMissing("SecondaryBrush", System.Windows.Media.Color.FromRgb(0x54, 0xD1, 0x8A));
+        SetBrushIfMissing("MutedBrush", System.Windows.Media.Color.FromRgb(0xAA, 0xB4, 0xBD));
+        SetBrushIfMissing("TextBrush", System.Windows.Media.Color.FromRgb(0xF4, 0xF1, 0xE8));
+        SetBrushIfMissing("OnPrimaryBrush", System.Windows.Media.Color.FromRgb(0xFF, 0xFF, 0xFF));
+        SetBrushIfMissing("PopupBrush", System.Windows.Media.Color.FromRgb(0x1A, 0x1A, 0x2E));
+        SetBrushIfMissing("PopupBorderBrush", System.Windows.Media.Color.FromRgb(0x40, 0x40, 0x60));
+        SetBrushIfMissing("PopupTextBrush", System.Windows.Media.Color.FromRgb(0xE0, 0xE0, 0xE0));
+        SetBrushIfMissing("PopupHoverBrush", System.Windows.Media.Color.FromRgb(0x00, 0xF0, 0xFF));
+        SetBrushIfMissing("PopupHoverTextBrush", System.Windows.Media.Color.FromRgb(0x03, 0x01, 0x0A));
         SetBrushIfMissing("SetupReadyBrush", System.Windows.Media.Color.FromRgb(0x4C, 0xAF, 0x50));
         SetBrushIfMissing("SetupRunningBrush", System.Windows.Media.Color.FromRgb(0x21, 0x96, 0xF3));
         SetBrushIfMissing("SetupUpdateBrush", System.Windows.Media.Color.FromRgb(0xFF, 0xC1, 0x07));
         SetBrushIfMissing("SetupErrorBrush", System.Windows.Media.Color.FromRgb(0xF4, 0x43, 0x36));
-        SetBrushIfMissing("PopupTextBrush", System.Windows.Media.Color.FromRgb(0xE0, 0xE0, 0xE0));
-        SetBrushIfMissing("PopupBrush", System.Windows.Media.Color.FromRgb(0x1A, 0x1A, 0x2E));
-        SetBrushIfMissing("PopupBorderBrush", System.Windows.Media.Color.FromRgb(0x40, 0x40, 0x60));
-        SetBrushIfMissing("PanelBrush", System.Windows.Media.Color.FromRgb(0x22, 0x22, 0x38));
-        SetBrushIfMissing("CyanBrush", System.Windows.Media.Color.FromRgb(0x00, 0xBC, 0xD4));
     }
 
     private void SetBrushIfMissing(string key, System.Windows.Media.Color fallbackColor)
@@ -211,12 +220,33 @@ public partial class SetupWindow : Window
                DependencyConsentCheckBox.IsChecked == true;
     }
 
+    private static void SetWrappedButtonText(System.Windows.Controls.Button button, string text)
+    {
+        button.Content = new TextBlock
+        {
+            Text = text,
+            TextWrapping = TextWrapping.Wrap,
+            TextAlignment = TextAlignment.Center,
+            FontSize = 10.5,
+            FontWeight = FontWeights.Bold,
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+            VerticalAlignment = System.Windows.VerticalAlignment.Center,
+            TextTrimming = TextTrimming.None,
+            LineHeight = 16,
+            MaxWidth = 200,
+            Padding = new Thickness(0)
+        };
+        button.Padding = new Thickness(10, 8, 10, 8);
+        button.MinHeight = 52;
+        button.MinWidth = 220;
+    }
+
     private void UpdateRunButtonState(bool setupInputsEnabled)
     {
         BeginSetupButton.IsEnabled = setupInputsEnabled && discoveredOutputs.Count > 0;
-        BeginSetupButton.Content = HasRequiredConsents()
+        SetWrappedButtonText(BeginSetupButton, HasRequiredConsents()
             ? "RUN INSTALL SETUP"
-            : "CONFIRM 3 CHECKBOXES ABOVE";
+            : "CONFIRM 3 CHECKBOXES ABOVE");
     }
 
     private void SetupStyleComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -269,7 +299,7 @@ public partial class SetupWindow : Window
         StepText.Text = "STEP 2 OF 4  |  CHECKING AND INSTALLING AUDIO COMPONENTS";
         DoneButton.IsEnabled = false;
         BeginSetupButton.IsEnabled = false;
-        BeginSetupButton.Content = "RUNNING INSTALL SETUP...";
+        SetWrappedButtonText(BeginSetupButton, "RUNNING INSTALL SETUP...");
         ProgressBar.IsIndeterminate = true;
         ProgressBar.Value = 0;
         CheckList.Items.Clear();
@@ -322,7 +352,7 @@ public partial class SetupWindow : Window
             ProgressBar.IsIndeterminate = false;
             ProgressBar.Value = 1;
             DoneButton.IsEnabled = true;
-            BeginSetupButton.Content = "RUN INSTALL SETUP";
+            SetWrappedButtonText(BeginSetupButton, "RUN INSTALL SETUP");
             SetInstallerInputEnabled(discoveredOutputs.Count > 0);
         }
     }

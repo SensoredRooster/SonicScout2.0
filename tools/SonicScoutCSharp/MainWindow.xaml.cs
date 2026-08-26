@@ -248,6 +248,12 @@ public partial class MainWindow : Window
         SetupWindow dialog = new(DiscoverOutputEndpointsAsync, RunSetupChecks, OpenPostInstallVerificationAsync) { Owner = this };
         CopyThemeResourcesTo(dialog);
         dialog.ShowDialog();
+
+        if (string.IsNullOrWhiteSpace(routingConfiguration.SonicScoutEndpointId) || string.IsNullOrWhiteSpace(routingConfiguration.SelectedPhysicalOutputId))
+        {
+            MessageText.Text = BuildSonicPassSetupGuidance();
+            SonicPassStatusText.Text = "SETUP REQUIRED - finish the wizard to activate SonicPass";
+        }
         // App stays open regardless — user can finish setup later from the main window
     }
 
@@ -631,18 +637,14 @@ public partial class MainWindow : Window
     private void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         exitRequested = true;
-        _ = Task.Run(() =>
-        {
-            Thread.Sleep(2000);
-            Environment.Exit(0);
-        });
-
         clipGuardTimer.Stop();
         eqWriteTimer.Stop();
         breathingTimer.Stop();
+
         WasapiLoopbackCapture? captureToDispose = loopbackCapture;
         loopbackCapture = null;
         audioMonitorReady = false;
+
         try
         {
             StopSonicPass();
@@ -650,10 +652,20 @@ public partial class MainWindow : Window
             scriptBridge.StateChanged -= ScriptBridge_StateChanged;
             scriptBridge.LogReceived -= ScriptBridge_LogReceived;
             scriptAudioController.DisposeAsync().AsTask().GetAwaiter().GetResult();
-            trayIcon.Visible = false;
-            trayIcon.Dispose();
         }
         catch (InvalidOperationException)
+        {
+        }
+
+        try
+        {
+            if (trayIcon is not null)
+            {
+                trayIcon.Visible = false;
+                trayIcon.Dispose();
+            }
+        }
+        catch (Exception)
         {
         }
 
@@ -672,7 +684,10 @@ public partial class MainWindow : Window
             });
         }
 
-        Dispatcher.BeginInvoke(new Action(() => Environment.Exit(0)), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        if (System.Windows.Application.Current is not null)
+        {
+            System.Windows.Application.Current.Shutdown();
+        }
     }
 
     private void LoadAudioDevices()
@@ -944,7 +959,7 @@ public partial class MainWindow : Window
             WindowsLeqToggle.IsChecked = false;
             if (!sonicScoutProvisioned)
             {
-                WindowsLeqStatusText.Text = "Sonic Scout not provisioned. Run SETUP.";
+                WindowsLeqStatusText.Text = "SETUP REQUIRED - no virtual audio route detected. Install VB-Cable / Hi-Fi Cable or Voicemeeter, then reopen SETUP.";
             }
             else if (tunedOutputSelected)
             {
@@ -973,7 +988,7 @@ public partial class MainWindow : Window
             WindowsLeqToggle.IsChecked = false;
             routingConfiguration.SonicScoutEngaged = false;
             RefreshWindowsLeqState();
-            MessageText.Text = "Sonic Scout is not provisioned. Run SETUP to configure your virtual cable routing first.";
+            MessageText.Text = BuildSonicPassSetupGuidance();
             return;
         }
 
@@ -1360,6 +1375,24 @@ public partial class MainWindow : Window
         return await scriptBridge.WaitForCompletionAsync(executionId, cancellationToken);
     }
 
+    private string BuildSonicPassSetupGuidance()
+    {
+        if (string.IsNullOrWhiteSpace(routingConfiguration.SonicScoutEndpointId))
+        {
+            string physicalOutput = string.IsNullOrWhiteSpace(routingConfiguration.SelectedPhysicalOutputName)
+                ? "your selected physical output"
+                : routingConfiguration.SelectedPhysicalOutputName;
+            return $"Setup is incomplete: no Sonic Scout virtual output was detected. Install or enable VB-Cable / Hi-Fi Cable or Voicemeeter, then reopen SETUP and finish the wizard. Audio is still safe on {physicalOutput}.";
+        }
+
+        if (string.IsNullOrWhiteSpace(routingConfiguration.SelectedPhysicalOutputId))
+        {
+            return "Setup is incomplete: the physical output is missing. Reopen SETUP and choose the device you actually hear sound from.";
+        }
+
+        return "Setup is incomplete. Reopen SETUP to finish the virtual route configuration.";
+    }
+
     private void SonicPassButton_Click(object sender, RoutedEventArgs e)
     {
         if (sonicPassProcess is not null && !sonicPassProcess.HasExited)
@@ -1372,16 +1405,16 @@ public partial class MainWindow : Window
 
         if (string.IsNullOrWhiteSpace(routingConfiguration.SonicScoutEndpointId))
         {
-            MessageText.Text = "Run SETUP first so Sonic Scout can identify the virtual render endpoint.";
-            SonicPassStatusText.Text = "WAITING - choose a virtual input or run SETUP";
+            MessageText.Text = BuildSonicPassSetupGuidance();
+            SonicPassStatusText.Text = "SETUP REQUIRED - virtual route not detected";
             return;
         }
 
         string? physicalOutputId = routingConfiguration.SelectedPhysicalOutputId;
         if (string.IsNullOrWhiteSpace(physicalOutputId))
         {
-            MessageText.Text = "Run SETUP first and select a physical output for SonicPass.";
-            SonicPassStatusText.Text = "WAITING - choose a physical output or run SETUP";
+            MessageText.Text = BuildSonicPassSetupGuidance();
+            SonicPassStatusText.Text = "SETUP REQUIRED - physical output missing";
             return;
         }
 
