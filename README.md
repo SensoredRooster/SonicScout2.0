@@ -56,6 +56,22 @@ The main menu offers:
 
 The script writes the Equalizer APO starter chain and `[5] Setup Profile` activates real library files. Routing, channel format, mixer routing, and LEQ setup remain guided Windows steps covered by the [video guide](https://www.github.com/sensoredrooster).
 
+## Turnkey Setup Wizard (C# app)
+
+This repo also includes a Windows WPF setup app at `tools/SonicScoutCSharp/` that can run dependency installation and setup checks through a guided wizard.
+
+Primary entry points:
+
+- `tools/SonicScoutCSharp/Install-SonicScout.bat`
+- `tools/SonicScoutCSharp/run_sonic_scout_csharp.bat`
+
+Behavior:
+
+- Startup is gated: first-run checks execute before normal app controls are shown.
+- If setup is incomplete, the setup wizard opens first and guides install/routing.
+- Setup actions run non-interactively in the backend script bridge using the user's wizard choices.
+- When setup passes, the main app UI opens for profile/live use.
+
 ## What the installer does
 
 `[1] Install` runs nine steps:
@@ -344,7 +360,8 @@ The stamp for the shipped library is in `library/version.txt`, and `library/chan
 | SS Spatial Engine Bravo (VST) | Native spatial audio processing engine (8ch / 16ch) | Proprietary (binary-only) | [LICENSE](library/vst/LICENSE) |
 
 These tools are downloaded during installation and are subject to their own license terms.
-SonicScout2.0 does not bundle or redistribute the third-party tools -- they are fetched from their official sources at install time.
+The PowerShell installer path fetches third-party tools from official sources at install time.  
+The `tools/SonicScoutCSharp/installers/` workflow can also use local installer payloads for guided/offline-friendly setup.
 
 Earlier versions of the stack used VB-Audio Hi-Fi Cable. It has been retired: setup now removes it and installs VB-CABLE instead.
 
