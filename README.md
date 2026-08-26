@@ -8,6 +8,10 @@
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6.svg" alt="Platform: Windows 10/11" />
 </p>
 
+<p align="center">
+  <img src="Assets/download.PNG" alt="SonicScout2.0 installer menu" width="900" />
+</p>
+
 # SonicScout2.0
 
 Free, open-access database of game audio EQ profiles, HeSuVi configurations, and HRIR files.
@@ -32,10 +36,6 @@ Use the guided app flow first:
 3. Follow the setup wizard.
 
 The app is startup-gated: it runs setup checks first, and **main live controls do not appear until installation/setup passes**.
-
-<p align="center">
-  <img src="Assets/download.PNG" alt="SonicScout2.0 installer menu" width="900" />
-</p>
 
 ## Install (PowerShell script path)
 
