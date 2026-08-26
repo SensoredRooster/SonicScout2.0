@@ -27,12 +27,21 @@
 
             <Button x:Name="OpenSoundSettingsButton"
                     Grid.Row="1"
-                    Content="OPEN WINDOWS SOUND SETTINGS"
                     Width="260"
-                    Height="34"
+                    MinHeight="52"
+                    Height="Auto"
                     HorizontalAlignment="Left"
                     Margin="0,14,0,10"
-                    Click="OpenSoundSettingsButton_Click" />
+                    Padding="10,8"
+                    HorizontalContentAlignment="Center"
+                    VerticalContentAlignment="Center"
+                    Click="OpenSoundSettingsButton_Click">
+                <TextBlock Text="OPEN WINDOWS SOUND SETTINGS"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center"
+                           FontWeight="Bold"
+                           FontSize="11" />
+            </Button>
 
             <Border Grid.Row="2" Background="{DynamicResource PopupBrush}" BorderBrush="{DynamicResource PopupBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="6">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">

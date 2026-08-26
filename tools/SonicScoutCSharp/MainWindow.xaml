@@ -295,7 +295,9 @@
                         <StackPanel Margin="6,0,6,0">
                             <TextBlock Text="WINDOWS AUDIO" Foreground="{DynamicResource CyanBrush}" FontSize="10" FontWeight="Bold" TextAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,1" />
                             <Border Background="{DynamicResource PanelBrush}" BorderThickness="0" Padding="10,6" CornerRadius="6">
-                                <Button Content="SOUND SETTINGS" Height="28" Padding="5,2" FontSize="9" Click="SoundSettingsButton_Click" />
+                                <Button Height="40" MinHeight="40" Padding="6,4" FontSize="9" Click="SoundSettingsButton_Click" HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                                    <TextBlock Text="SOUND SETTINGS" TextWrapping="Wrap" TextAlignment="Center" FontWeight="SemiBold" />
+                                </Button>
                             </Border>
                         </StackPanel>
                     </UniformGrid>
