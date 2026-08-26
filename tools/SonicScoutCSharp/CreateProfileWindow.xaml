@@ -1,0 +1,54 @@
+<Window x:Class="SonicScout.CreateProfileWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Create Profile" Width="500" Height="520"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        ResizeMode="CanResize"
+        AllowsTransparency="True"
+        Background="Transparent">
+    <Border Margin="2" Background="{DynamicResource PopupBrush}" BorderBrush="{DynamicResource PopupBorderBrush}" BorderThickness="1" CornerRadius="16" Padding="16">
+    <Grid Margin="0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid MouseLeftButtonDown="DialogHeader_MouseLeftButtonDown">
+            <TextBlock x:Name="DialogTitleText" Text="NEW AUDIO PROFILE" Foreground="{DynamicResource PopupTextBrush}" FontSize="17" FontWeight="Bold" Margin="0,0,0,16" />
+            <Button Content="×" Width="28" Height="26" Padding="0" HorizontalAlignment="Right" ToolTip="Close" Click="CloseButton_Click" />
+        </Grid>
+        <Grid Grid.Row="1" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="90" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+            <TextBlock Text="NAME" Foreground="{DynamicResource PopupTextBrush}" FontSize="10" VerticalAlignment="Center" />
+            <TextBox x:Name="NameBox" Grid.Column="1" Height="28" MaxLength="40" Foreground="{DynamicResource PopupTextBrush}" Background="{DynamicResource BackgroundBrush}" />
+        </Grid>
+        <Grid Grid.Row="2" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="90" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+            <TextBlock Text="GAME / TAG" Foreground="{DynamicResource PopupTextBrush}" FontSize="10" VerticalAlignment="Center" />
+            <TextBox x:Name="GameBox" Grid.Column="1" Height="28" MaxLength="24" Foreground="{DynamicResource PopupTextBrush}" Background="{DynamicResource BackgroundBrush}" />
+        </Grid>
+        <StackPanel Grid.Row="3">
+            <TextBlock Text="FILTERS (EQUALIZER APO)" Foreground="{DynamicResource PopupTextBrush}" FontSize="10" Margin="0,0,0,6" />
+            <Border Background="{DynamicResource BackgroundBrush}" BorderBrush="{DynamicResource PopupBorderBrush}" BorderThickness="1" CornerRadius="8" Padding="8">
+                <TextBox x:Name="FiltersBox"
+                         AcceptsReturn="True"
+                         TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"
+                         HorizontalScrollBarVisibility="Auto"
+                         FontFamily="Consolas"
+                         FontSize="12"
+                         MinHeight="170"
+                         Foreground="{DynamicResource PopupTextBrush}"
+                         Background="{DynamicResource BackgroundBrush}" />
+            </Border>
+        </StackPanel>
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="CANCEL" Width="80" Margin="0,0,8,0" Click="Cancel_Click" />
+            <Button Content="CREATE" Width="80" Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnPrimaryBrush}" Click="Create_Click" />
+        </StackPanel>
+    </Grid>
+    </Border>
+</Window>

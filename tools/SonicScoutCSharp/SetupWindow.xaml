@@ -1,0 +1,202 @@
+<Window x:Class="SonicScout.SetupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="720" Height="700"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        AllowsTransparency="True"
+        Background="Transparent">
+    <Border Margin="2" Background="{DynamicResource PopupBrush}" BorderBrush="{DynamicResource PopupBorderBrush}" BorderThickness="1" CornerRadius="16" Padding="20">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Grid MouseLeftButtonDown="Header_MouseLeftButtonDown">
+                <StackPanel>
+                    <TextBlock Text="SONIC SCOUT SETUP" Foreground="{DynamicResource PopupTextBrush}" FontSize="18" FontWeight="Bold" />
+                    <TextBlock x:Name="SummaryText" Text="Preparing installation checks..." Foreground="{DynamicResource PopupTextBrush}" Opacity="0.9" FontSize="12" Margin="0,5,0,0" />
+                    <TextBlock x:Name="ActionHintText" Text="Tip: leave this window open and follow the guidance below." Foreground="{DynamicResource CyanBrush}" Opacity="0.95" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap" />
+                </StackPanel>
+                <Button Content="×" Width="30" Height="28" Padding="0" FontSize="16" HorizontalAlignment="Right" Click="CloseButton_Click" ToolTip="Close" />
+            </Grid>
+
+            <Border Grid.Row="1"
+                    Margin="0,16,0,12"
+                    Background="{DynamicResource PanelBrush}"
+                    BorderBrush="{DynamicResource PopupBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="12">
+                <StackPanel>
+                    <TextBlock x:Name="StepText" Text="STEP 1 OF 4  |  CHOOSE YOUR OUTPUT" Foreground="{DynamicResource CyanBrush}" FontSize="11" FontWeight="Bold" Margin="0,0,0,8" />
+                    <TextBlock Text="INSTALLATION ROUTING"
+                               Foreground="{DynamicResource PopupTextBrush}"
+                               FontSize="12"
+                               FontWeight="Bold" />
+                    <TextBlock Text="Choose your default physical output and compatibility profile before provisioning Sonic Scout."
+                               Foreground="{DynamicResource PopupTextBrush}"
+                               Opacity="0.9"
+                               FontSize="11"
+                               Margin="0,4,0,10"
+                               TextWrapping="Wrap" />
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="180" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Default Audio Output"
+                                   Grid.Column="0"
+                                   VerticalAlignment="Center"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource PopupTextBrush}" />
+                        <ComboBox x:Name="DefaultOutputComboBox"
+                                  Grid.Column="1"
+                                  Height="30" />
+                    </Grid>
+                    <TextBlock Text="Pick your real headphones or speakers here - the device you actually hear sound from. Sonic Scout routes tuned audio to this automatically."
+                               Foreground="{DynamicResource PopupTextBrush}"
+                               Opacity="0.85"
+                               FontSize="10"
+                               Margin="0,-6,0,10"
+                               TextWrapping="Wrap" />
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="180" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Setup Style"
+                                   Grid.Column="0"
+                                   VerticalAlignment="Center"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource PopupTextBrush}" />
+                        <ComboBox x:Name="SetupStyleComboBox"
+                                  Grid.Column="1"
+                                  Height="30"
+                                  SelectionChanged="SetupStyleComboBox_SelectionChanged">
+                            <ComboBoxItem Content="Sonic Scout Direct Route" />
+                            <ComboBoxItem Content="Sonic Scout Compatibility Route" />
+                        </ComboBox>
+                    </Grid>
+                    <TextBlock x:Name="SetupStyleHintText"
+                               Text="Sonic Scout direct route prioritizes low-latency virtual routing."
+                               Foreground="{DynamicResource PopupTextBrush}"
+                               Opacity="0.9"
+                               FontSize="10"
+                               Margin="0,0,0,8"
+                               TextWrapping="Wrap" />
+                    <TextBlock Text="Third-Party Mixer Compatibility"
+                               Foreground="{DynamicResource PopupTextBrush}"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               Margin="0,0,0,6" />
+                    <WrapPanel>
+                        <CheckBox x:Name="VoicemeeterCheckBox" Content="Voicemeeter" Margin="0,0,14,6" Foreground="{DynamicResource PopupTextBrush}" />
+                        <CheckBox x:Name="WaveLinkCheckBox" Content="Elgato Wave Link" Margin="0,0,14,6" Foreground="{DynamicResource PopupTextBrush}" />
+                        <CheckBox x:Name="SoundBlasterCheckBox" Content="Creative Sound Blaster" Margin="0,0,14,6" Foreground="{DynamicResource PopupTextBrush}" />
+                        <CheckBox x:Name="OtherMixerCheckBox" Content="SonicPass compatibility" Margin="0,0,14,6" Foreground="{DynamicResource PopupTextBrush}" />
+                    </WrapPanel>
+                    <Border Background="{DynamicResource CardBrush}"
+                            BorderBrush="{DynamicResource PopupBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Padding="10"
+                            Margin="0,8,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Ownership and Apply Confirmation"
+                                       Foreground="{DynamicResource PopupTextBrush}"
+                                       FontSize="10.5"
+                                       FontWeight="SemiBold"
+                                       Margin="0,0,0,6" />
+                            <CheckBox x:Name="OwnershipConsentCheckBox"
+                                      Foreground="{DynamicResource PopupTextBrush}"
+                                      Margin="0,0,0,5"
+                                      Checked="ConsentCheckBox_Changed"
+                                      Unchecked="ConsentCheckBox_Changed">
+                                <TextBlock Text="I confirm this is my system and I authorize Sonic Scout to apply routing ownership changes."
+                                           TextWrapping="Wrap" />
+                            </CheckBox>
+                            <CheckBox x:Name="RoutingConsentCheckBox"
+                                      Foreground="{DynamicResource PopupTextBrush}"
+                                      Margin="0,0,0,5"
+                                      Checked="ConsentCheckBox_Changed"
+                                      Unchecked="ConsentCheckBox_Changed">
+                                <TextBlock Text="I approve Sonic Scout to activate tuned-channel routing and safe fallback to my physical output."
+                                           TextWrapping="Wrap" />
+                            </CheckBox>
+                            <CheckBox x:Name="DependencyConsentCheckBox"
+                                      Foreground="{DynamicResource PopupTextBrush}"
+                                      Checked="ConsentCheckBox_Changed"
+                                      Unchecked="ConsentCheckBox_Changed">
+                                <TextBlock Text="I understand creating a tuned channel may require Voicemeeter or VB-Cable when no compatible DAC/route is available."
+                                           TextWrapping="Wrap" />
+                            </CheckBox>
+                        </StackPanel>
+                    </Border>
+                    <Button x:Name="BeginSetupButton"
+                            Content="STEP 2: RUN INSTALL SETUP"
+                            Width="190"
+                            Height="34"
+                            Margin="0,10,0,0"
+                            HorizontalAlignment="Right"
+                            Background="{DynamicResource AccentBrush}"
+                            Foreground="{DynamicResource OnPrimaryBrush}"
+                            FontWeight="Bold"
+                            Click="BeginSetupButton_Click" />
+                </StackPanel>
+            </Border>
+
+            <ProgressBar x:Name="ProgressBar"
+                         Grid.Row="2"
+                         Height="6"
+                         Margin="0,0,0,12"
+                         Minimum="0"
+                         Maximum="1"
+                         Value="0"
+                         Foreground="{DynamicResource AccentBrush}"
+                         Background="{DynamicResource PanelBrush}" />
+
+            <Border Grid.Row="3" Background="{DynamicResource PopupBrush}" BorderBrush="{DynamicResource PopupBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="6">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ListBox x:Name="CheckList" Background="{DynamicResource PopupBrush}" BorderThickness="0" Foreground="{DynamicResource PopupTextBrush}" />
+                </ScrollViewer>
+            </Border>
+
+            <Grid Grid.Row="4" Margin="0,12,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Button x:Name="VerifySettingsButton"
+                        Grid.Column="1"
+                        Content="VERIFY SETTINGS"
+                        Width="160"
+                        Height="38"
+                        FontSize="12"
+                        Margin="0,0,10,0"
+                        Background="{DynamicResource AccentBrush}"
+                        Foreground="{DynamicResource OnPrimaryBrush}"
+                        FontWeight="Bold"
+                        IsEnabled="False"
+                        Click="VerifySettingsButton_Click" />
+                <Button x:Name="DoneButton"
+                        Grid.Column="2"
+                        Content="CLOSE"
+                        Width="150"
+                        Height="38"
+                        FontSize="12"
+                        Background="{DynamicResource AccentBrush}"
+                        Foreground="{DynamicResource OnPrimaryBrush}"
+                        FontWeight="Bold"
+                        IsEnabled="False"
+                        Click="CloseButton_Click" />
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

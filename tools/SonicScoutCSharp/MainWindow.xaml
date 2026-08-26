@@ -1,0 +1,431 @@
+<Window x:Class="SonicScout.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="Sonic Scout - Profile Manager"
+        Width="1380" Height="820" MinWidth="1180" MinHeight="680"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        ResizeMode="CanResize"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Loaded="Window_Loaded"
+        PreviewKeyDown="Window_PreviewKeyDown"
+        Closing="Window_Closing"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="Grayscale">
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="42"
+                            ResizeBorderThickness="8"
+                            GlassFrameThickness="0"
+                            CornerRadius="0"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+    <Window.Resources>
+        <Style x:Key="ProfileButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Height" Value="84" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+            <Setter Property="Padding" Value="10" />
+            <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource SurfaceTextBrush}" />
+        </Style>
+        <Style x:Key="PlainActionButtonStyle" TargetType="Button">
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="Foreground" Value="{DynamicResource CyanBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          TextElement.Foreground="{TemplateBinding Foreground}"
+                                          TextElement.FontFamily="{TemplateBinding FontFamily}"
+                                          TextElement.FontSize="{TemplateBinding FontSize}"
+                                          TextElement.FontWeight="{TemplateBinding FontWeight}" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="WindowControlButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="FontFamily" Value="Segoe UI Symbol" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+    </Window.Resources>
+    <Border x:Name="AppShell" Margin="2" Background="{DynamicResource BackgroundBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" CornerRadius="16" Padding="12">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="42" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="0" />
+            <ColumnDefinition Width="320" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <Grid x:Name="TitleBar" Grid.Row="0" Grid.ColumnSpan="3" Margin="0,0,0,10" Background="Transparent" PreviewMouseLeftButtonDown="WindowChrome_MouseLeftButtonDown">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Image x:Name="LogoImage" Width="30" Height="30" Margin="0,0,8,0" Visibility="Collapsed" />
+                <TextBlock Text="SONIC" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource CyanBrush}" />
+                <TextBlock Text=" SCOUT" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource BackgroundTextBrush}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                <Button x:Name="SetupButton" shell:WindowChrome.IsHitTestVisibleInChrome="True" Content="SETUP" Width="72" Height="28" Padding="5,2" FontSize="10" Margin="0,0,6,0" Click="SetupButton_Click" ToolTip="Check and configure Sonic Scout" />
+                <Button x:Name="SonicPassButton" shell:WindowChrome.IsHitTestVisibleInChrome="True" Content="SONICPASS" Width="88" Height="28" Padding="5,2" FontSize="10" Margin="0,0,10,0" Click="SonicPassButton_Click" ToolTip="Start or stop SonicPass" />
+                <ComboBox x:Name="ThemeComboBox" shell:WindowChrome.IsHitTestVisibleInChrome="True" Width="170" Height="28" SelectedIndex="0" SelectionChanged="ThemeComboBox_SelectionChanged" Margin="0,0,10,0">
+                    <ComboBoxItem Content="Copper Signal" />
+                    <ComboBoxItem Content="Singularity Camo" />
+                    <ComboBoxItem Content="Dark Matter" />
+                    <ComboBoxItem Content="Borealis" />
+                    <ComboBoxItem Content="Abyss" />
+                    <ComboBoxItem Content="Apocalypse" />
+                    <ComboBoxItem Content="Brutalist" />
+                    <ComboBoxItem Content="Psychotic" />
+                </ComboBox>
+                <Button x:Name="MinimizeButton" shell:WindowChrome.IsHitTestVisibleInChrome="True" Content="−" Style="{StaticResource WindowControlButtonStyle}" ToolTip="Minimize" Click="MinimizeButton_Click" />
+                <Button x:Name="MaximizeButton" shell:WindowChrome.IsHitTestVisibleInChrome="True" Content="□" Style="{StaticResource WindowControlButtonStyle}" ToolTip="Maximize or restore" Click="MaximizeButton_Click" />
+                <Button x:Name="CloseButton" shell:WindowChrome.IsHitTestVisibleInChrome="True" Content="×" Style="{StaticResource WindowControlButtonStyle}" FontSize="13" ToolTip="Close" Click="CloseButton_Click" />
+            </StackPanel>
+        </Grid>
+
+                <Border x:Name="ChainPanel" Grid.Row="1" Grid.RowSpan="2" Grid.Column="0" Visibility="Collapsed" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" Padding="10">
+            <StackPanel>
+                <TextBlock Text="CHAIN / STATUS" Foreground="{DynamicResource SurfaceTextBrush}" FontSize="12" FontWeight="Bold" Margin="0,0,0,12" />
+                <Border Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource SuccessBrush}" BorderThickness="1" Padding="7,6" Margin="0,0,0,5"><DockPanel><TextBlock Text="ONLINE" Foreground="{DynamicResource SuccessBrush}" FontSize="9" FontWeight="Bold" DockPanel.Dock="Right" /><TextBlock Text="VB-Cable" Foreground="{DynamicResource SurfaceTextBrush}" FontSize="11" /></DockPanel></Border>
+                <Border Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource SuccessBrush}" BorderThickness="1" Padding="7,6" Margin="0,0,0,5"><DockPanel><TextBlock Text="ONLINE" Foreground="{DynamicResource SuccessBrush}" FontSize="9" FontWeight="Bold" DockPanel.Dock="Right" /><TextBlock Text="Equalizer APO" Foreground="{DynamicResource SurfaceTextBrush}" FontSize="11" /></DockPanel></Border>
+                <Border Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource SuccessBrush}" BorderThickness="1" Padding="7,6" Margin="0,0,0,5"><DockPanel><TextBlock Text="ONLINE" Foreground="{DynamicResource SuccessBrush}" FontSize="9" FontWeight="Bold" DockPanel.Dock="Right" /><TextBlock Text="HeSuVi" Foreground="{DynamicResource SurfaceTextBrush}" FontSize="11" /></DockPanel></Border>
+                <Border Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource SurfaceMutedBrush}" BorderThickness="1" Padding="7,6"><DockPanel><TextBlock Text="IDLE" Foreground="{DynamicResource SurfaceMutedBrush}" FontSize="9" FontWeight="Bold" DockPanel.Dock="Right" /><TextBlock Text="ReaPlugs" Foreground="{DynamicResource SurfaceMutedBrush}" FontSize="11" /></DockPanel></Border>
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="1" Grid.Column="1" Margin="0,0,12,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" MinHeight="260" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Border x:Name="ProfilesPanel" Grid.Row="0" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" Padding="12">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="40" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <Grid>
+                        <Button x:Name="NewProfileButton"
+                                Content="PROFILES +"
+                                Style="{StaticResource PlainActionButtonStyle}"
+                                FontSize="18"
+                                FontWeight="Bold"
+                                Padding="0"
+                                HorizontalAlignment="Left"
+                                Visibility="Visible"
+                                Click="SelectHeadphoneProfile_Click" />
+                    </Grid>
+                    <TextBlock Grid.Row="1"
+                               Text="STEP 1: Pick your tune below. Click a profile to make it the active EQ. This is what shapes how everything sounds."
+                               Foreground="{DynamicResource SurfaceMutedBrush}"
+                               FontSize="10"
+                               TextWrapping="Wrap"
+                               Margin="0,4,0,8" />
+                    <Grid x:Name="ProfileContent" Grid.Row="2">
+                        <StackPanel x:Name="ProfileStackPanel" VerticalAlignment="Top" />
+                        <StackPanel x:Name="ProfileEmptyState" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="No profiles yet" Foreground="{DynamicResource SurfaceTextBrush}" FontSize="13" FontWeight="Bold" HorizontalAlignment="Center" />
+                            <TextBlock Text="Select a headphone / IEM profile to begin tuning." Foreground="{DynamicResource SurfaceMutedBrush}" FontSize="10" TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" Margin="0,6,0,12" />
+                            <Button Content="SELECT HEADPHONE / IEM PROFILE" Height="32" Padding="8,4" FontSize="9" Click="SelectHeadphoneProfile_Click" />
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </Border>
+            <Border x:Name="WindowsLeqPanel"
+                    Grid.Row="1"
+                    MinHeight="214"
+                    Margin="0,10,0,0"
+                    Background="{DynamicResource PanelBrush}"
+                    BorderBrush="{DynamicResource AccentBrush}"
+                    BorderThickness="1"
+                    Padding="10">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="WINDOWS LEQ"
+                               Grid.Row="0"
+                               Foreground="{DynamicResource CyanBrush}"
+                               FontSize="12"
+                               FontWeight="Bold"
+                               TextAlignment="Center"
+                               HorizontalAlignment="Center" />
+                    <TextBlock Text="Boosts quiet sounds (footsteps) without making loud sounds (explosions) blast your ears. Requires selecting a Hi-Fi Cable device in the OUTPUT dropdown above first."
+                               Grid.Row="1"
+                               Foreground="{DynamicResource SurfaceMutedBrush}"
+                               FontSize="10"
+                               Margin="0,3,0,6"
+                               TextWrapping="Wrap"
+                               TextAlignment="Center"
+                               HorizontalAlignment="Center" />
+                    <ToggleButton x:Name="WindowsLeqToggle"
+                                  Grid.Row="2"
+                                  Content="Select Hi-Fi Cable output to enable"
+                                  Height="30"
+                                  FontSize="9"
+                                  FontWeight="SemiBold"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Center"
+                                  VerticalContentAlignment="Center"
+                                  Background="{DynamicResource AccentBrush}"
+                                  Foreground="{DynamicResource OnPrimaryBrush}"
+                                  BorderBrush="{DynamicResource AccentBrush}"
+                                  BorderThickness="1"
+                                  Padding="5,2"
+                                  Click="WindowsLeqToggle_Click" />
+                    <Border x:Name="TunedVirtualCableStatusBox"
+                            Grid.Row="3"
+                            Margin="0,7,0,0"
+                            MinHeight="94"
+                            Padding="8,6"
+                            BorderThickness="1"
+                            Background="{DynamicResource CardBrush}"
+                            BorderBrush="{DynamicResource AccentBrush}"
+                            CornerRadius="10">
+                        <Grid VerticalAlignment="Center">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Text="Tuned Virtual Cable Status"
+                                       Grid.Row="0"
+                                       Foreground="{DynamicResource ReadableBrush}"
+                                       Opacity="0.9"
+                                       FontSize="9"
+                                       FontWeight="Bold"
+                                       TextAlignment="Center"
+                                       HorizontalAlignment="Center" />
+                            <TextBlock x:Name="WindowsLeqStatusText"
+                                      Grid.Row="1"
+                                      Margin="0,4,0,0"
+                                      Foreground="{DynamicResource ReadableBrush}"
+                                      FontSize="10"
+                                      FontWeight="SemiBold"
+                                      Opacity="1"
+                                      LineHeight="14"
+                                      TextAlignment="Center"
+                                      TextWrapping="Wrap"
+                                      HorizontalAlignment="Center" />
+                            <Grid Grid.Row="2"
+                                  Width="170"
+                                  HorizontalAlignment="Center"
+                                  Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Ellipse x:Name="TunedVirtualCableStatusLed"
+                                         Grid.Column="1"
+                                         Width="10"
+                                         Height="10"
+                                         VerticalAlignment="Center"
+                                         Margin="0,0,6,0"
+                                         Fill="{DynamicResource ErrorBrush}" />
+                                <TextBlock x:Name="TunedVirtualCableStatusText"
+                                           Grid.Column="2"
+                                           Text="NOT CONNECTED"
+                                           Foreground="{DynamicResource ErrorBrush}"
+                                           FontSize="10"
+                                           FontWeight="Bold"
+                                           VerticalAlignment="Center"
+                                           TextAlignment="Center" />
+                            </Grid>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Border x:Name="SpectrumPanel" Grid.Row="1" Grid.Column="2" Margin="0" Background="{DynamicResource TransparentBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" Padding="18">
+            <StackPanel>
+                <TextBlock Text="LIVE SPECTRUM" Foreground="{DynamicResource CyanBrush}" FontSize="13" FontWeight="Bold" TextAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,8" />
+                <TextBlock Text="MONITOR ONLY: these controls choose what the meter watches. They do not route game audio. Use SONICPASS AUDIO ROUTE below for routing."
+                           Foreground="{DynamicResource SurfaceTextBrush}"
+                           FontSize="10"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center"
+                           Margin="24,0,24,10" />
+                <StackPanel Margin="0,0,0,0" HorizontalAlignment="Center">
+                    <UniformGrid Columns="4" Rows="1" HorizontalAlignment="Stretch">
+                        <StackPanel Margin="6,0,6,0">
+                            <TextBlock Text="METER INPUT" Foreground="{DynamicResource CyanBrush}" FontSize="10" FontWeight="Bold" TextAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,1" />
+                            <Border Background="{DynamicResource PanelBrush}" BorderThickness="0" Padding="10,6" CornerRadius="6">
+                                <ComboBox x:Name="InputDeviceComboBox" Height="28" SelectionChanged="InputDeviceComboBox_SelectionChanged" />
+                            </Border>
+                        </StackPanel>
+                        <StackPanel Margin="6,0,6,0">
+                            <TextBlock Text="METER OUTPUT" Foreground="{DynamicResource CyanBrush}" FontSize="10" FontWeight="Bold" TextAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,1" />
+                            <Border Background="{DynamicResource PanelBrush}" BorderThickness="0" Padding="10,6" CornerRadius="6">
+                                <ComboBox x:Name="OutputDeviceComboBox" Height="28" SelectionChanged="OutputDeviceComboBox_SelectionChanged" />
+                            </Border>
+                        </StackPanel>
+                        <StackPanel Margin="6,0,6,0">
+                            <TextBlock Text="CLIP GUARD" Foreground="{DynamicResource CyanBrush}" FontSize="10" FontWeight="Bold" TextAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,1" />
+                            <Border Background="{DynamicResource PanelBrush}" BorderThickness="0" Padding="10,6" CornerRadius="6">
+                                <Button x:Name="ClipGuardToggle" Content="OFF / CAP" Height="28" Padding="5,2" Click="ClipGuardToggle_Click" ToolTip="Cycle Clip Guard: 20%, 40%, 60%, 80%, or off" />
+                            </Border>
+                        </StackPanel>
+                        <StackPanel Margin="6,0,6,0">
+                            <TextBlock Text="WINDOWS AUDIO" Foreground="{DynamicResource CyanBrush}" FontSize="10" FontWeight="Bold" TextAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,1" />
+                            <Border Background="{DynamicResource PanelBrush}" BorderThickness="0" Padding="10,6" CornerRadius="6">
+                                <Button Content="SOUND SETTINGS" Height="28" Padding="5,2" FontSize="9" Click="SoundSettingsButton_Click" />
+                            </Border>
+                        </StackPanel>
+                    </UniformGrid>
+                </StackPanel>
+                <Border x:Name="SonicPassPanel" Margin="0,12,0,0" Padding="12" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="1*" />
+                            <ColumnDefinition Width="1*" />
+                            <ColumnDefinition Width="1*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="5" Text="SONICPASS AUDIO ROUTE - ACTUAL GAME AUDIO PATH" Foreground="{DynamicResource CyanBrush}" FontSize="12" FontWeight="Bold" TextAlignment="Center" HorizontalAlignment="Center" />
+                        <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="5" Text="STEP 2: In every game or app, choose the VIRTUAL INPUT below as its audio output. SonicPass receives that audio, applies your tune, and sends it to the PHYSICAL OUTPUT you hear." Foreground="{DynamicResource SurfaceTextBrush}" FontSize="10" TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" Margin="0,4,0,10" />
+                        <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,8,0" HorizontalAlignment="Stretch">
+                            <TextBlock Text="VIRTUAL INPUT" Foreground="{DynamicResource CyanBrush}" FontSize="10" FontWeight="Bold" TextAlignment="Center" HorizontalAlignment="Center" />
+                            <TextBlock Text="Select in every game/app" Foreground="{DynamicResource SurfaceTextBrush}" FontSize="10" TextAlignment="Center" HorizontalAlignment="Center" Margin="0,1,0,3" />
+                            <ComboBox x:Name="SonicPassInputComboBox" Height="28" SelectionChanged="SonicPassDevice_SelectionChanged" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,8,0" HorizontalAlignment="Stretch">
+                            <TextBlock Text="PHYSICAL OUTPUT" Foreground="{DynamicResource CyanBrush}" FontSize="10" FontWeight="Bold" TextAlignment="Center" HorizontalAlignment="Center" />
+                            <TextBlock Text="Your headphones/speakers" Foreground="{DynamicResource SurfaceTextBrush}" FontSize="10" TextAlignment="Center" HorizontalAlignment="Center" Margin="0,1,0,3" />
+                            <ComboBox x:Name="SonicPassOutputComboBox" Height="28" SelectionChanged="SonicPassDevice_SelectionChanged" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="2" Margin="0,0,8,0" HorizontalAlignment="Stretch">
+                            <TextBlock Text="INPUT BOOST" Foreground="{DynamicResource CyanBrush}" FontSize="10" FontWeight="Bold" TextAlignment="Center" HorizontalAlignment="Center" />
+                            <TextBlock Text="Change input level" Foreground="{DynamicResource SurfaceTextBrush}" FontSize="10" TextAlignment="Center" HorizontalAlignment="Center" Margin="0,1,0,3" />
+                            <ComboBox x:Name="SonicPassInputGainComboBox" Height="28" SelectedIndex="3" SelectionChanged="SonicPassGain_SelectionChanged">
+                                <ComboBoxItem Content="-12 dB" Tag="-12" />
+                                <ComboBoxItem Content="-6 dB" Tag="-6" />
+                                <ComboBoxItem Content="-3 dB" Tag="-3" />
+                                <ComboBoxItem Content="0 dB" Tag="0" />
+                                <ComboBoxItem Content="+3 dB" Tag="3" />
+                                <ComboBoxItem Content="+6 dB" Tag="6" />
+                                <ComboBoxItem Content="+12 dB" Tag="12" />
+                            </ComboBox>
+                        </StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="3" Margin="0,0,8,0" HorizontalAlignment="Stretch">
+                            <TextBlock Text="OUTPUT BOOST" Foreground="{DynamicResource CyanBrush}" FontSize="10" FontWeight="Bold" TextAlignment="Center" HorizontalAlignment="Center" />
+                            <TextBlock Text="Change output level" Foreground="{DynamicResource SurfaceTextBrush}" FontSize="10" TextAlignment="Center" HorizontalAlignment="Center" Margin="0,1,0,3" />
+                            <ComboBox x:Name="SonicPassOutputGainComboBox" Height="28" SelectedIndex="3" SelectionChanged="SonicPassGain_SelectionChanged">
+                                <ComboBoxItem Content="-12 dB" Tag="-12" />
+                                <ComboBoxItem Content="-6 dB" Tag="-6" />
+                                <ComboBoxItem Content="-3 dB" Tag="-3" />
+                                <ComboBoxItem Content="0 dB" Tag="0" />
+                                <ComboBoxItem Content="+3 dB" Tag="3" />
+                                <ComboBoxItem Content="+6 dB" Tag="6" />
+                                <ComboBoxItem Content="+12 dB" Tag="12" />
+                            </ComboBox>
+                        </StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="4" HorizontalAlignment="Stretch">
+                            <TextBlock Text="BUFFER" Foreground="{DynamicResource CyanBrush}" FontSize="10" FontWeight="Bold" TextAlignment="Center" HorizontalAlignment="Center" />
+                            <TextBlock Text="Stability vs latency" Foreground="{DynamicResource SurfaceTextBrush}" FontSize="10" TextAlignment="Center" HorizontalAlignment="Center" Margin="0,1,0,3" />
+                            <ComboBox x:Name="SonicPassBufferComboBox" Height="28" SelectedIndex="2" SelectionChanged="SonicPassBuffer_SelectionChanged">
+                                <ComboBoxItem Content="50 ms" Tag="50" />
+                                <ComboBoxItem Content="75 ms" Tag="75" />
+                                <ComboBoxItem Content="100 ms" Tag="100" />
+                                <ComboBoxItem Content="150 ms" Tag="150" />
+                                <ComboBoxItem Content="200 ms" Tag="200" />
+                            </ComboBox>
+                        </StackPanel>
+                        <TextBlock x:Name="SonicPassStatusText" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="4" Text="STOPPED - select endpoints, then start SonicPass" Foreground="{DynamicResource SurfaceMutedBrush}" FontSize="10" Margin="0,10,0,0" VerticalAlignment="Center" />
+                        <Button x:Name="SonicPassStartButton" Grid.Row="3" Grid.Column="4" Content="START SONICPASS" Height="28" Padding="8,2" Margin="0,8,0,0" Click="SonicPassStartButton_Click" />
+                    </Grid>
+                </Border>
+                <Border x:Name="SpectrumFrame" Height="250" Margin="0,12,0,0" BorderThickness="2" Background="{DynamicResource TransparentBrush}">
+                    <Border.BorderBrush>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#00F0FF" Offset="0" />
+                            <GradientStop Color="#5E17EB" Offset="0.5" />
+                            <GradientStop Color="#9D4EDD" Offset="1" />
+                        </LinearGradientBrush>
+                    </Border.BorderBrush>
+                    <Border.Triggers>
+                        <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                            <BeginStoryboard>
+                                <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                    <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0.78" To="1" Duration="0:0:2.8" />
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                    </Border.Triggers>
+                    <Grid>
+                        <Canvas x:Name="SpectrumCanvas" Margin="20,20,20,40" MinHeight="160" ClipToBounds="True" />
+                        <TextBlock x:Name="SpectrumStatusText" Text="LISTENING FOR SYSTEM AUDIO" Foreground="{DynamicResource BackgroundTextBrush}" Opacity="0.9" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border x:Name="EqPanel" Visibility="Collapsed" Background="{DynamicResource TransparentBrush}" BorderBrush="{DynamicResource MutedBrush}" BorderThickness="1" Padding="10" Margin="0,10,0,0" MinHeight="176">
+                    <StackPanel>
+                        <TextBlock Text="EQ / LIVE APO CONTROL" Foreground="{DynamicResource CyanBrush}" FontSize="12" FontWeight="Bold" Margin="0,0,0,8" TextAlignment="Center" HorizontalAlignment="Center" />
+                        <UniformGrid x:Name="EqSliderGrid" Columns="7" Rows="1" />
+                    </StackPanel>
+                </Border>
+                <Border x:Name="FilterPanel" Visibility="Collapsed" Background="{DynamicResource PopupBrush}" BorderBrush="{DynamicResource PopupBorderBrush}" BorderThickness="1" Padding="12" MinHeight="180" MaxHeight="300">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                        <TextBlock x:Name="FilterText" Text="Select a profile to inspect its Equalizer APO filters." Foreground="{DynamicResource PopupTextBrush}" FontFamily="Consolas" FontSize="12" FontWeight="SemiBold" TextAlignment="Center" VerticalAlignment="Center" HorizontalAlignment="Center" TextWrapping="Wrap" />
+                    </ScrollViewer>
+                </Border>
+            </StackPanel>
+        </Border>
+
+        <TextBlock x:Name="MessageText"
+                   Grid.Row="2"
+                   Grid.Column="2"
+                   Text="Select a profile to activate it."
+                   Foreground="{DynamicResource MutedBrush}"
+                   FontSize="10"
+                   TextWrapping="Wrap"
+                   TextAlignment="Right"
+                   HorizontalAlignment="Right"
+                   VerticalAlignment="Bottom"
+                   Margin="0,8,4,2"
+                   MaxWidth="540" />
+
+        <Border x:Name="StatusPanel" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" Padding="16,10" Visibility="Collapsed">
+            <UniformGrid Columns="4">
+                <StackPanel HorizontalAlignment="Center"><TextBlock Text="DEVICE" Foreground="{DynamicResource SurfaceMutedBrush}" FontSize="10" TextAlignment="Center" HorizontalAlignment="Center" /><TextBlock x:Name="SelectedDeviceText" Text="No output selected" Foreground="{DynamicResource SurfaceTextBrush}" FontWeight="Bold" Margin="0,4,0,0" TextTrimming="CharacterEllipsis" TextAlignment="Center" HorizontalAlignment="Center" /></StackPanel>
+                <StackPanel HorizontalAlignment="Center"><TextBlock Text="FORMAT" Foreground="{DynamicResource SurfaceMutedBrush}" FontSize="10" TextAlignment="Center" HorizontalAlignment="Center" /><TextBlock Text="7.1 / 48kHz" Foreground="{DynamicResource SurfaceTextBrush}" FontWeight="Bold" Margin="0,4,0,0" TextAlignment="Center" HorizontalAlignment="Center" /></StackPanel>
+                <StackPanel HorizontalAlignment="Center"><TextBlock Text="E-APO" Foreground="{DynamicResource SurfaceMutedBrush}" FontSize="10" TextAlignment="Center" HorizontalAlignment="Center" /><TextBlock x:Name="EapoStatus" Text="OK" Foreground="{DynamicResource SuccessBrush}" FontWeight="Bold" Margin="0,4,0,0" TextAlignment="Center" HorizontalAlignment="Center" /></StackPanel>
+                <StackPanel HorizontalAlignment="Center"><TextBlock Text="ACTIVE PROFILE" Foreground="{DynamicResource SurfaceMutedBrush}" FontSize="10" TextAlignment="Center" HorizontalAlignment="Center" /><TextBlock x:Name="ActiveProfileText" Text="None" Foreground="{DynamicResource SurfaceTextBrush}" FontWeight="Bold" Margin="0,4,0,0" TextTrimming="CharacterEllipsis" TextAlignment="Center" HorizontalAlignment="Center" /></StackPanel>
+            </UniformGrid>
+        </Border>
+    </Grid>
+    </Border>
+</Window>
