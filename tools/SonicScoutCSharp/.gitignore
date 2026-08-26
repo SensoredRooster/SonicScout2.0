@@ -2,9 +2,6 @@
 bin/
 obj/
 
-# Local installer payloads
-installers/
-
 # User profile outputs
 profiles/
 
