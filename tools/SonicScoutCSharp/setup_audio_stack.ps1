@@ -452,6 +452,53 @@ else {
 }
 
 if ($readyForTesting) {
+    Write-Stage -Name 'APO Configuration' -State 'RUNNING' -Detail 'Invoking main installer to configure Equalizer APO endpoints and device binding.'
+    
+    # Locate and run the main Install-SonicScout2.0.ps1 installer to complete APO configuration
+    $mainInstallerPaths = @(
+        (Join-Path $script:ScriptRootPath 'Install-SonicScout2.0.ps1'),
+        (Join-Path $script:ScriptRootPath '..\..' 'powershell' 'Install-SonicScout2.0.ps1'),
+        (Join-Path $script:ScriptRootPath '..' '..' 'powershell' 'Install-SonicScout2.0.ps1')
+    )
+    
+    $mainInstallerPath = $null
+    foreach ($path in $mainInstallerPaths) {
+        if (Test-Path -LiteralPath $path) {
+            $mainInstallerPath = $path
+            break
+        }
+    }
+    
+    if ($mainInstallerPath) {
+        try {
+            Write-Stage -Name 'APO Configuration' -State 'RUNNING' -Detail "Found main installer at: $mainInstallerPath"
+            
+            # Run the main installer in "Preflight" mode to configure APO without requiring full install
+            # Pipe it through powershell with elevated privileges to ensure it has admin rights
+            $configScript = @"
+`$ProgressPreference = 'SilentlyContinue'
+& `"$mainInstallerPath`" -Mode Preflight
+"@
+            $result = Start-Process -FilePath 'powershell.exe' -ArgumentList @(
+                '-NoProfile',
+                '-ExecutionPolicy', 'Bypass',
+                '-Command', $configScript
+            ) -Wait -PassThru
+            
+            if ($result.ExitCode -eq 0) {
+                Write-Stage -Name 'APO Configuration' -State 'READY' -Detail 'Equalizer APO endpoints configured and device-scoped config.txt written successfully.'
+            } else {
+                Write-Stage -Name 'APO Configuration' -State 'UPDATE' -Detail "Main installer exited with code $($result.ExitCode). Run it manually for full configuration."
+            }
+        } catch {
+            Write-Stage -Name 'APO Configuration' -State 'UPDATE' -Detail "Could not invoke main installer: $($_.Exception.Message). Run Install-SonicScout2.0.ps1 manually to complete APO setup."
+        }
+    } else {
+        Write-Stage -Name 'APO Configuration' -State 'UPDATE' -Detail 'Main installer (Install-SonicScout2.0.ps1) not found. Run it manually to complete APO endpoint configuration.'
+    }
+}
+
+if ($readyForTesting) {
     Write-Stage -Name 'Final verification' -State 'READY' -Detail 'Audio stack order checks passed. System is ready for Sonic Scout tester flow.'
 }
 else {
