@@ -272,11 +272,6 @@ public partial class MainWindow : Window
             return true;
         }
 
-        System.Windows.MessageBox.Show(
-            "Setup is not fully complete yet. Run Sonic Scout as Administrator and finish the setup wizard to continue.",
-            "Sonic Scout setup required",
-            MessageBoxButton.OK,
-            MessageBoxImage.Warning);
         return false;
     }
 
