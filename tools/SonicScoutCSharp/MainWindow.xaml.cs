@@ -169,11 +169,9 @@ public partial class MainWindow : Window
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
-        Hide();
         bool startupSetupReady = await EnsureTurnkeyStartupSetupAsync();
         if (!startupSetupReady)
         {
-            Show();
             LoadLogo();
             ApplyTheme(ThemeComboBox.SelectedItem is ComboBoxItem setupSelected ? setupSelected.Content?.ToString() : "Copper Signal");
             MessageText.Text = "Setup is not complete yet. Click Setup to continue the wizard.";
@@ -181,7 +179,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        Show();
         LoadLogo();
         ApplyTheme(ThemeComboBox.SelectedItem is ComboBoxItem selected ? selected.Content?.ToString() : "Copper Signal");
         LoadAudioDevices();
