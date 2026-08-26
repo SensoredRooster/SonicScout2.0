@@ -16,10 +16,6 @@ See also: [LEQ Control Panel](https://github.com/sensoredrooster/LEQControlPanel
 
 Check out [www.github.com/sensoredrooster](https://www.github.com/sensoredrooster) for the latest audio guides.
 
-<p align="center">
-  <img src="Assets/installer-main-menu.png" alt="SonicScout2.0 Installer" width="560" />
-</p>
-
 ## Requirements
 
 - Windows 10 or 11 (x64 only -- ARM64 not supported)
@@ -27,7 +23,17 @@ Check out [www.github.com/sensoredrooster](https://www.github.com/sensoredrooste
 - Administrator privileges (required for audio driver and registry operations)
 - Internet connection (the installer downloads the audio tools and the tune library)
 
-## Install
+## Install (recommended: turnkey app wizard)
+
+Use the guided app flow first:
+
+1. Run `tools/SonicScoutCSharp/Install-SonicScout.bat` as Administrator (bootstrap/dependencies).
+2. Launch `tools/SonicScoutCSharp/run_sonic_scout_csharp.bat`.
+3. Follow the setup wizard.
+
+The app is startup-gated: it runs setup checks first, and **main live controls do not appear until installation/setup passes**.
+
+## Install (PowerShell script path)
 
 Open an **elevated** (Run as Administrator) **Windows PowerShell** window and run:
 
