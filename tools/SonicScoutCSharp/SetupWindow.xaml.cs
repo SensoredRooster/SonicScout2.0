@@ -112,6 +112,14 @@ public partial class SetupWindow : Window
             DoneButton.IsEnabled = true;
             DoneButton.Content = "CLOSE";
         }
+        catch (Exception exception)
+        {
+            CheckList.Items.Add(CreateRow(new SetupCheckResult("Device discovery", "ERROR", $"Unexpected setup error: {exception.Message}")));
+            SummaryText.Text = "Device discovery failed unexpectedly.";
+            ActionHintText.Text = "Close and reopen setup. If it repeats, run Sonic Scout as Administrator.";
+            DoneButton.IsEnabled = true;
+            DoneButton.Content = "CLOSE";
+        }
         finally
         {
             ProgressBar.IsIndeterminate = false;
@@ -288,6 +296,13 @@ public partial class SetupWindow : Window
             CheckList.Items.Add(CreateRow(new SetupCheckResult("Core Audio", "ERROR", exception.Message)));
             SummaryText.Text = "Setup stopped due to a Windows audio error.";
             ActionHintText.Text = "Reconnect the output device or reboot, then rerun setup.";
+            DoneButton.Content = "CLOSE";
+        }
+        catch (Exception exception)
+        {
+            CheckList.Items.Add(CreateRow(new SetupCheckResult("Setup", "ERROR", $"Unexpected setup error: {exception.Message}")));
+            SummaryText.Text = "Setup stopped due to an unexpected error.";
+            ActionHintText.Text = "Rerun setup. If this repeats, run Sonic Scout as Administrator and report this message.";
             DoneButton.Content = "CLOSE";
         }
         finally

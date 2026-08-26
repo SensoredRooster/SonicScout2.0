@@ -2109,6 +2109,10 @@ public partial class MainWindow : Window
         {
             Report("Routing", "ERROR", exception.Message);
         }
+        catch (Exception exception)
+        {
+            Report("Setup", "ERROR", $"Unexpected setup error: {exception.Message}");
+        }
         return results;
     }
 
