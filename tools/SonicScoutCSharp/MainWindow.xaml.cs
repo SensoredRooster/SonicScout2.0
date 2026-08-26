@@ -169,15 +169,7 @@ public partial class MainWindow : Window
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
-        Hide();
-        bool startupSetupReady = await EnsureTurnkeyStartupSetupAsync();
-        if (!startupSetupReady)
-        {
-            Close();
-            return;
-        }
-
-        Show();
+        await EnsureTurnkeyStartupSetupAsync();
         LoadLogo();
         ApplyTheme(ThemeComboBox.SelectedItem is ComboBoxItem selected ? selected.Content?.ToString() : "Copper Signal");
         LoadAudioDevices();
@@ -236,12 +228,12 @@ public partial class MainWindow : Window
         breathingTimer.Start();
     }
 
-    private async Task<bool> EnsureTurnkeyStartupSetupAsync()
+    private async Task EnsureTurnkeyStartupSetupAsync()
     {
         string? setupScriptPath = ResolveSetupAutomationScriptPath();
         if (setupScriptPath is null)
         {
-            return true;
+            return;
         }
 
         int? preflightExitCode = await RunSetupPreflightExitCodeAsync(setupScriptPath, CancellationToken.None);
@@ -250,28 +242,13 @@ public partial class MainWindow : Window
             preflightExitCode.Value == 0;
         if (setupVerified)
         {
-            return true;
+            return;
         }
 
         SetupWindow dialog = new(DiscoverOutputEndpointsAsync, RunSetupChecks, OpenPostInstallVerificationAsync) { Owner = this };
         CopyThemeResourcesTo(dialog);
         dialog.ShowDialog();
-
-        preflightExitCode = await RunSetupPreflightExitCodeAsync(setupScriptPath, CancellationToken.None);
-        bool readyAfterWizard = routingConfiguration.PostInstallVerified &&
-            preflightExitCode.HasValue &&
-            preflightExitCode.Value == 0;
-        if (readyAfterWizard)
-        {
-            return true;
-        }
-
-        System.Windows.MessageBox.Show(
-            "Setup is not fully complete yet. Run Sonic Scout as Administrator and finish the setup wizard to continue.",
-            "Sonic Scout setup required",
-            MessageBoxButton.OK,
-            MessageBoxImage.Warning);
-        return false;
+        // App stays open regardless — user can finish setup later from the main window
     }
 
     private static async Task<int?> RunSetupPreflightExitCodeAsync(string setupScriptPath, CancellationToken cancellationToken)

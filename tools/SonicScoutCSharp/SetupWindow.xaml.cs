@@ -41,7 +41,36 @@ public partial class SetupWindow : Window
         this.discoverOutputs = discoverOutputs;
         this.runChecks = runChecks;
         this.openPostInstallVerification = openPostInstallVerification;
+        EnsureRequiredSetupResources();
         Loaded += async (_, _) => await LoadInstallOptionsAsync();
+    }
+
+    // Seeds brush keys that theme resources may not have copied yet — prevents FindResource crashes
+    private void EnsureRequiredSetupResources()
+    {
+        SetBrushIfMissing("SetupReadyBrush", System.Windows.Media.Color.FromRgb(0x4C, 0xAF, 0x50));
+        SetBrushIfMissing("SetupRunningBrush", System.Windows.Media.Color.FromRgb(0x21, 0x96, 0xF3));
+        SetBrushIfMissing("SetupUpdateBrush", System.Windows.Media.Color.FromRgb(0xFF, 0xC1, 0x07));
+        SetBrushIfMissing("SetupErrorBrush", System.Windows.Media.Color.FromRgb(0xF4, 0x43, 0x36));
+        SetBrushIfMissing("PopupTextBrush", System.Windows.Media.Color.FromRgb(0xE0, 0xE0, 0xE0));
+        SetBrushIfMissing("PopupBrush", System.Windows.Media.Color.FromRgb(0x1A, 0x1A, 0x2E));
+        SetBrushIfMissing("PopupBorderBrush", System.Windows.Media.Color.FromRgb(0x40, 0x40, 0x60));
+        SetBrushIfMissing("PanelBrush", System.Windows.Media.Color.FromRgb(0x22, 0x22, 0x38));
+        SetBrushIfMissing("CyanBrush", System.Windows.Media.Color.FromRgb(0x00, 0xBC, 0xD4));
+    }
+
+    private void SetBrushIfMissing(string key, System.Windows.Media.Color fallbackColor)
+    {
+        if (TryFindResource(key) is null)
+        {
+            Resources[key] = new System.Windows.Media.SolidColorBrush(fallbackColor);
+        }
+    }
+
+    private System.Windows.Media.Brush ResolveBrush(string key, System.Windows.Media.Color fallbackColor)
+    {
+        return TryFindResource(key) as System.Windows.Media.Brush
+            ?? new System.Windows.Media.SolidColorBrush(fallbackColor);
     }
 
     private async Task LoadInstallOptionsAsync()
@@ -223,7 +252,7 @@ public partial class SetupWindow : Window
         {
             if (rows.TryGetValue(result.Name, out var row))
             {
-                row.Indicator.Fill = (System.Windows.Media.Brush)FindResource(GetStateBrush(result.State));
+                row.Indicator.Fill = ResolveBrush(GetStateBrush(result.State), System.Windows.Media.Colors.Gray);
                 row.Heading.Text = $"{result.State}  {result.Name}";
                 row.Detail.Text = result.Detail;
             }
@@ -304,9 +333,9 @@ public partial class SetupWindow : Window
         Grid rowGrid = new();
         rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
         rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        Ellipse indicator = new() { Width = 9, Height = 9, Fill = (System.Windows.Media.Brush)FindResource(GetStateBrush(result.State)), VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 5, 0, 0) };
-        TextBlock heading = new() { Text = $"{result.State}  {result.Name}", Foreground = (System.Windows.Media.Brush)FindResource(GetStateBrush(result.State)), FontSize = 12, FontWeight = FontWeights.Bold };
-        TextBlock detail = new() { Text = result.Detail, Foreground = (System.Windows.Media.Brush)FindResource("PopupTextBrush"), Opacity = 0.82, FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 0) };
+        Ellipse indicator = new() { Width = 9, Height = 9, Fill = ResolveBrush(GetStateBrush(result.State), System.Windows.Media.Colors.Gray), VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 5, 0, 0) };
+        TextBlock heading = new() { Text = $"{result.State}  {result.Name}", Foreground = ResolveBrush(GetStateBrush(result.State), System.Windows.Media.Colors.LightGray), FontSize = 12, FontWeight = FontWeights.Bold };
+        TextBlock detail = new() { Text = result.Detail, Foreground = ResolveBrush("PopupTextBrush", System.Windows.Media.Color.FromRgb(0xE0, 0xE0, 0xE0)), Opacity = 0.82, FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 0) };
         StackPanel text = new();
         text.Children.Add(heading);
         text.Children.Add(detail);
@@ -363,6 +392,7 @@ public partial class SetupWindow : Window
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)
     {
+        try { DialogResult = false; } catch { /* not shown as dialog */ }
         Close();
     }
 
