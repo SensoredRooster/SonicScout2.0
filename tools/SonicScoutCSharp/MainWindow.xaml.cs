@@ -275,9 +275,10 @@ public partial class MainWindow : Window
             startInfo.ArgumentList.Add("-File");
             startInfo.ArgumentList.Add(setupScriptPath);
             startInfo.ArgumentList.Add("-Mode");
-            startInfo.ArgumentList.Add("Preflight");
+            startInfo.ArgumentList.Add("Install");
             startInfo.ArgumentList.Add("-Quiet");
             startInfo.ArgumentList.Add("-NonInteractive");
+            startInfo.ArgumentList.Add("-OwnershipAccepted");
 
             using Process process = new() { StartInfo = startInfo };
             if (!process.Start())
