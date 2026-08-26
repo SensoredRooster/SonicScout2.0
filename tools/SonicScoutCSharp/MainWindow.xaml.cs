@@ -173,7 +173,11 @@ public partial class MainWindow : Window
         bool startupSetupReady = await EnsureTurnkeyStartupSetupAsync();
         if (!startupSetupReady)
         {
-            Close();
+            Show();
+            LoadLogo();
+            ApplyTheme(ThemeComboBox.SelectedItem is ComboBoxItem setupSelected ? setupSelected.Content?.ToString() : "Copper Signal");
+            MessageText.Text = "Setup is not complete yet. Click Setup to continue the wizard.";
+            SonicPassStatusText.Text = "SETUP REQUIRED - complete setup before live routing";
             return;
         }
 
