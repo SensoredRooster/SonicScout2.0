@@ -385,11 +385,12 @@ if ($state.SoundBlasterAvailable) {
 }
 
 $compatibleNativeRouteAvailable = $waveLinkRouteAccepted -or $state.SoundBlasterAvailable
-if (-not $state.VirtualRouteAvailable -and -not $compatibleNativeRouteAvailable) {
+
+if (-not $state.VirtualRouteAvailable) {
     [void](Invoke-InstallerStage -StageName 'VB-Cable Base' `
         -IsInstalled { (Get-SystemState).VirtualRouteAvailable } `
-    -InstallerPatterns @('*VBCABLE*Setup*.exe', '*VB-CABLE*Setup*.exe', '*Virtual*Cable*Setup*.exe') `
-        -MissingDetail 'No compatible native or virtual audio route was detected. VB-Cable is recommended.' `
+        -InstallerPatterns @('*VBCABLE*Setup*.exe', '*VB-CABLE*Setup*.exe', '*Virtual*Cable*Setup*.exe') `
+        -MissingDetail 'VB-Cable is required for Sonic Scout routing.' `
         -DownloadComponent '/vb-cable')
 }
 
@@ -433,6 +434,17 @@ elseif ($state.VoicemeeterInstalled -or $state.VoicemeeterEndpointDetected) {
     Write-Stage -Name 'Voicemeeter Fallback' -State 'READY' -Detail 'Voicemeeter fallback support already detected.'
 }
 
+if (-not $((Get-ChildItem "${env:ProgramFiles}\VSTPlugins\ReaPlugs\*.dll" -ErrorAction SilentlyContinue).Count -ge 5)) {
+    [void](Invoke-InstallerStage -StageName 'ReaPlugs' `
+        -IsInstalled {
+            $reaplugsDlls = @(Get-ChildItem "${env:ProgramFiles}\VSTPlugins\ReaPlugs\*.dll" -ErrorAction SilentlyContinue)
+            $reaplugsDlls.Count -ge 5
+        } `
+        -InstallerPatterns @('reaplugs*.exe', '*reaplugs*install*.exe') `
+        -MissingDetail 'ReaPlugs VST effects are required for Sonic Scout.' `
+        -DownloadComponent '/reaplugs')
+}
+
 $finalState = Get-SystemState
 $readyForTesting = $finalState.EqualizerApoInstalled -and ($finalState.VirtualRouteAvailable -or $waveLinkRouteAccepted -or $finalState.SoundBlasterAvailable -or $finalState.VoicemeeterInstalled -or $finalState.VoicemeeterEndpointDetected)
 
@@ -455,10 +467,10 @@ if ($readyForTesting) {
     Write-Stage -Name 'APO Configuration' -State 'RUNNING' -Detail 'Invoking main installer endpoint configuration to bind APO to correct Hi-Fi tunnel device.'
     
     # Locate the main Install-SonicScout2.0.ps1 installer
+    $repoRootPath = Split-Path -Parent (Split-Path -Parent $script:ScriptRootPath)
     $mainInstallerPaths = @(
         (Join-Path $script:ScriptRootPath 'Install-SonicScout2.0.ps1'),
-        (Join-Path $script:ScriptRootPath '..\..' 'powershell' 'Install-SonicScout2.0.ps1'),
-        (Join-Path $script:ScriptRootPath '..' '..' 'powershell' 'Install-SonicScout2.0.ps1')
+        (Join-Path (Join-Path $repoRootPath 'powershell') 'Install-SonicScout2.0.ps1')
     )
     
     $mainInstallerPath = $null

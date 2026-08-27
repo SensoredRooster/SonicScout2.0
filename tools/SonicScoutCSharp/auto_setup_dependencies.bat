@@ -6,6 +6,7 @@ set "DOWNLOAD_ONLY=0"
 set "DOWNLOAD_EQUALIZER=1"
 set "DOWNLOAD_VBCABLE=1"
 set "DOWNLOAD_HIFI=1"
+set "DOWNLOAD_REAPLUGS=0"
 
 :parse_arguments
 if "%~1"=="" goto arguments_parsed
@@ -19,6 +20,12 @@ if /I "%~1"=="/vb-cable" (
   set "DOWNLOAD_EQUALIZER=0"
   set "DOWNLOAD_VBCABLE=1"
   set "DOWNLOAD_HIFI=0"
+)
+if /I "%~1"=="/reaplugs" (
+  set "DOWNLOAD_EQUALIZER=0"
+  set "DOWNLOAD_VBCABLE=0"
+  set "DOWNLOAD_HIFI=0"
+  set "DOWNLOAD_REAPLUGS=1"
 )
 if /I "%~1"=="/hi-fi-cable" (
   set "DOWNLOAD_EQUALIZER=0"
@@ -89,6 +96,17 @@ if exist "%INSTALLERS%\VBCABLE_Driver.zip" (
 )
 echo.
 
+if "%DOWNLOAD_REAPLUGS%"=="1" (
+echo [3/3] Downloading ReaPlugs...
+powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('https://www.reaper.fm/reaplugs/reaplugs236_x64-install.exe', (Join-Path $env:SS_INSTALLERS 'reaplugs_x64.exe'))"
+if exist "%INSTALLERS%\reaplugs_x64.exe" (
+  echo [OK] ReaPlugs downloaded
+) else (
+  echo [FAIL] ReaPlugs download failed
+)
+)
+echo.
+
 if "%DOWNLOAD_HIFI%"=="1" (
 echo [3/3] Downloading VB-Cable Hi-Fi...
 powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('https://download.vb-audio.com/Download_CABLE/HiFiCableAsioBridgeSetup_v1007.zip', (Join-Path $env:SS_INSTALLERS 'VBHIFI_Driver.zip'))"
@@ -109,6 +127,7 @@ echo.
 if "%DOWNLOAD_ONLY%"=="1" (
   if "%DOWNLOAD_EQUALIZER%"=="1" if not exist "%INSTALLERS%\EqualizerAPO_Setup.exe" exit /b 1
   if "%DOWNLOAD_VBCABLE%"=="1" if not exist "%INSTALLERS%\VBCABLE_Setup_x64.exe" exit /b 1
+  if "%DOWNLOAD_REAPLUGS%"=="1" if not exist "%INSTALLERS%\reaplugs_x64.exe" exit /b 1
   if "%DOWNLOAD_HIFI%"=="1" if not exist "%INSTALLERS%\HIFI_CABLE_Setup_x64.exe" exit /b 1
   echo Audio dependency downloads completed.
   endlocal
