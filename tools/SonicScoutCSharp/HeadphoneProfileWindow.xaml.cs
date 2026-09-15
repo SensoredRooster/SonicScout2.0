@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net.Http;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -22,7 +23,13 @@ public partial class HeadphoneProfileWindow : Window
     private const string ArtTuneSource = "ArtTuneDB";
     private const string AutoEqSourcesApiUrl = "https://api.github.com/repos/jaakkopasanen/AutoEq/contents/results";
     private const string AutoEqRawBaseUrl = "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/";
+    private static readonly TimeSpan AutoEqCatalogCacheTtl = TimeSpan.FromHours(24);
     private static readonly HttpClient httpClient = new() { Timeout = TimeSpan.FromSeconds(20) };
+    private static readonly JsonSerializerOptions CacheJsonOptions = new()
+    {
+        WriteIndented = false,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
     private static readonly TargetCurveOption[] TargetCurveOptions =
     [
         new("None", string.Empty),
@@ -64,14 +71,14 @@ public partial class HeadphoneProfileWindow : Window
         Loaded += async (_, _) => await LoadCatalogAsync();
     }
 
-    private async Task LoadCatalogAsync()
+    private async Task LoadCatalogAsync(bool forceRefresh = false)
     {
         StatusText.Text = "Loading headset and IEM profile catalog...";
         try
         {
             allProfiles.Clear();
             await LoadArtTuneCatalogAsync();
-            await LoadAutoEqCatalogAsync();
+            await LoadAutoEqCatalogAsync(forceRefresh);
             await LoadSquidLinkCatalogAsync();
             ApplyFilter();
         }
@@ -140,8 +147,105 @@ public partial class HeadphoneProfileWindow : Window
         });
     }
 
-    private async Task LoadAutoEqCatalogAsync()
+    private static string GetAutoEqCatalogCachePath()
     {
+        string cacheDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "SonicScout2.0",
+            "cache");
+        Directory.CreateDirectory(cacheDir);
+        return Path.Combine(cacheDir, "autoeq-catalog.json");
+    }
+
+    private bool TryLoadAutoEqCatalogFromCache()
+    {
+        string cachePath = GetAutoEqCatalogCachePath();
+        if (!File.Exists(cachePath))
+        {
+            return false;
+        }
+
+        try
+        {
+            string json = File.ReadAllText(cachePath);
+            AutoEqCatalogCache? cache = JsonSerializer.Deserialize<AutoEqCatalogCache>(json, CacheJsonOptions);
+            if (cache is null ||
+                cache.Profiles is null ||
+                cache.Profiles.Count == 0 ||
+                DateTimeOffset.UtcNow - cache.FetchedAtUtc > AutoEqCatalogCacheTtl)
+            {
+                return false;
+            }
+
+            foreach (AutoEqCatalogCacheEntry entry in cache.Profiles)
+            {
+                if (string.IsNullOrWhiteSpace(entry.Name) || string.IsNullOrWhiteSpace(entry.FilterUrl))
+                {
+                    continue;
+                }
+
+                if (allProfiles.Any(profile => profile.Source.StartsWith(ArtTuneSource, StringComparison.OrdinalIgnoreCase) &&
+                                               profile.Name.Equals(entry.Name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                allProfiles.Add(new HeadphoneProfileOption(
+                    entry.Name,
+                    string.IsNullOrWhiteSpace(entry.Category) ? "Headphones" : entry.Category,
+                    entry.FilterUrl,
+                    string.IsNullOrWhiteSpace(entry.Source) ? AutoEqSource : entry.Source));
+            }
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void SaveAutoEqCatalogCache(IReadOnlyList<HeadphoneProfileOption> profiles)
+    {
+        try
+        {
+            AutoEqCatalogCache cache = new()
+            {
+                FetchedAtUtc = DateTimeOffset.UtcNow,
+                Profiles = profiles
+                    .Where(profile => profile.Source.StartsWith(AutoEqSource, StringComparison.OrdinalIgnoreCase))
+                    .Select(profile => new AutoEqCatalogCacheEntry
+                    {
+                        Name = profile.Name,
+                        Category = profile.Category,
+                        FilterUrl = profile.FilterUrl,
+                        Source = profile.Source
+                    })
+                    .ToList()
+            };
+
+            if (cache.Profiles.Count == 0)
+            {
+                return;
+            }
+
+            string json = JsonSerializer.Serialize(cache, CacheJsonOptions);
+            File.WriteAllText(GetAutoEqCatalogCachePath(), json);
+        }
+        catch
+        {
+            // Cache write failures should not block catalog loading.
+        }
+    }
+
+    private async Task LoadAutoEqCatalogAsync(bool forceRefresh = false)
+    {
+        if (!forceRefresh && TryLoadAutoEqCatalogFromCache())
+        {
+            return;
+        }
+
+        int profileCountBefore = allProfiles.Count;
         using JsonDocument sourceDocument = JsonDocument.Parse(await httpClient.GetStringAsync(AutoEqSourcesApiUrl));
         if (sourceDocument.RootElement.ValueKind != JsonValueKind.Array)
         {
@@ -217,11 +321,16 @@ public partial class HeadphoneProfileWindow : Window
             }
         }
 
-        if (allProfiles.Count == 0)
+        if (allProfiles.Count == profileCountBefore)
         {
             // Fallback to the smaller known set if Git tree response changes or is unexpectedly empty.
             await LoadCategoryAsync("Headphones", "results/oratory1990/over-ear");
             await LoadCategoryAsync("IEMs", "results/oratory1990/in-ear");
+        }
+
+        if (allProfiles.Count > profileCountBefore)
+        {
+            SaveAutoEqCatalogCache(allProfiles);
         }
     }
 
@@ -469,7 +578,7 @@ public partial class HeadphoneProfileWindow : Window
     private async void Refresh_Click(object sender, RoutedEventArgs e)
     {
         StatusText.Text = "Refreshing headset and IEM catalog...";
-        await LoadCatalogAsync();
+        await LoadCatalogAsync(forceRefresh: true);
     }
 
     private async void ProfileListBox_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -732,4 +841,18 @@ public partial class HeadphoneProfileWindow : Window
             DragMove();
         }
     }
+}
+
+file sealed class AutoEqCatalogCache
+{
+    public DateTimeOffset FetchedAtUtc { get; set; }
+    public List<AutoEqCatalogCacheEntry> Profiles { get; set; } = new();
+}
+
+file sealed class AutoEqCatalogCacheEntry
+{
+    public string Name { get; set; } = string.Empty;
+    public string Category { get; set; } = string.Empty;
+    public string FilterUrl { get; set; } = string.Empty;
+    public string Source { get; set; } = string.Empty;
 }

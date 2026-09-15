@@ -269,7 +269,7 @@ public sealed class ScriptOrchestrator : IScriptEngineBridge
                 startedAt,
                 finishedAt,
                 execution.PayloadPath,
-                logs.ToArray(),
+                SnapshotLogs(logs),
                 errorMessage);
 
             string completionMessage = errorMessage ?? "Execution finished.";
@@ -378,12 +378,24 @@ public sealed class ScriptOrchestrator : IScriptEngineBridge
 
     private static void AppendLog(List<string> logs, string message)
     {
-        if (logs.Count >= 500)
+        // OutputDataReceived / ErrorDataReceived can arrive on concurrent thread-pool threads.
+        lock (logs)
         {
-            logs.RemoveAt(0);
-        }
+            if (logs.Count >= 500)
+            {
+                logs.RemoveAt(0);
+            }
 
-        logs.Add(message);
+            logs.Add(message);
+        }
+    }
+
+    private static string[] SnapshotLogs(List<string> logs)
+    {
+        lock (logs)
+        {
+            return logs.ToArray();
+        }
     }
 
     private void PublishState(string executionId, string scriptKey, ScriptExecutionState state, int? exitCode, string? message)

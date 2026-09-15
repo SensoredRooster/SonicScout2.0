@@ -68,7 +68,14 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer eqWriteTimer = new() { Interval = TimeSpan.FromMilliseconds(180) };
     private WasapiLoopbackCapture? loopbackCapture;
     private readonly object spectrumLock = new();
-    private readonly List<float> sampleBuffer = new();
+    private const int SpectrumSampleWindow = 512;
+    private readonly float[] sampleRing = new float[1024];
+    private int sampleRingWrite;
+    private int sampleRingCount;
+    private readonly float[] spectrumSampleScratch = new float[SpectrumSampleWindow];
+    private readonly Complex[] fftScratch = new Complex[SpectrumSampleWindow];
+    private readonly double[] spectrumBandScratch = new double[32];
+    private readonly double[] spectrumRenderCopy = new double[32];
     private double[] spectrumLevels = new double[32];
     private readonly double[] smoothedSpectrum = new double[32];
     private bool audioSignalSeen;
@@ -322,7 +329,9 @@ public partial class MainWindow : Window
             loopbackCapture.DataAvailable += LoopbackCapture_DataAvailable;
             loopbackCapture.RecordingStopped += (_, _) => { };
             loopbackCapture.StartRecording();
-            sampleBuffer.Clear();
+            sampleRingWrite = 0;
+            sampleRingCount = 0;
+            Array.Clear(sampleRing, 0, sampleRing.Length);
             Array.Clear(smoothedSpectrum, 0, smoothedSpectrum.Length);
             Array.Clear(spectrumLevels, 0, spectrumLevels.Length);
             lastAudioDataAtUtc = DateTime.MinValue;
@@ -376,25 +385,31 @@ public partial class MainWindow : Window
             for (int offset = 0; offset + frameSize <= e.BytesRecorded; offset += frameSize)
             {
                 float sample = ReadNormalizedSample(format, e.Buffer, offset, bytesPerSample);
-                sampleBuffer.Add(sample);
+                sampleRing[sampleRingWrite] = sample;
+                sampleRingWrite = (sampleRingWrite + 1) % sampleRing.Length;
+                if (sampleRingCount < sampleRing.Length)
+                {
+                    sampleRingCount++;
+                }
                 observedSample = true;
             }
 
-            if (sampleBuffer.Count >= 512)
+            if (sampleRingCount >= SpectrumSampleWindow)
             {
-                float[] latestSamples = sampleBuffer.Skip(Math.Max(0, sampleBuffer.Count - 512)).Take(512).ToArray();
-                double[] rawSpectrum = CalculateSpectrum(latestSamples);
-                for (int index = 0; index < rawSpectrum.Length; index++)
+                CopyLatestSamples(spectrumSampleScratch);
+                CalculateSpectrum(spectrumSampleScratch, spectrumBandScratch, fftScratch);
+                bool signalSeen = false;
+                for (int index = 0; index < spectrumBandScratch.Length; index++)
                 {
-                    double response = rawSpectrum[index] > smoothedSpectrum[index] ? 0.42 : 0.12;
-                    smoothedSpectrum[index] += (rawSpectrum[index] - smoothedSpectrum[index]) * response;
+                    double response = spectrumBandScratch[index] > smoothedSpectrum[index] ? 0.42 : 0.12;
+                    smoothedSpectrum[index] += (spectrumBandScratch[index] - smoothedSpectrum[index]) * response;
+                    spectrumLevels[index] = smoothedSpectrum[index];
+                    if (smoothedSpectrum[index] > 0.025)
+                    {
+                        signalSeen = true;
+                    }
                 }
-                spectrumLevels = smoothedSpectrum.ToArray();
-                audioSignalSeen = spectrumLevels.Any(level => level > 0.025);
-                if (sampleBuffer.Count > 1024)
-                {
-                    sampleBuffer.RemoveRange(0, sampleBuffer.Count - 512);
-                }
+                audioSignalSeen = signalSeen;
             }
         }
 
@@ -453,10 +468,24 @@ public partial class MainWindow : Window
         return sample;
     }
 
-    private static double[] CalculateSpectrum(float[] samples)
+    private void CopyLatestSamples(float[] destination)
+    {
+        int count = Math.Min(destination.Length, sampleRingCount);
+        int start = (sampleRingWrite - count + sampleRing.Length) % sampleRing.Length;
+        for (int i = 0; i < count; i++)
+        {
+            destination[i] = sampleRing[(start + i) % sampleRing.Length];
+        }
+    }
+
+    private static void CalculateSpectrum(float[] samples, double[] bands, Complex[] values)
     {
         int length = samples.Length;
-        Complex[] values = new Complex[length];
+        if (values.Length < length || bands.Length < 32)
+        {
+            throw new ArgumentException("Reusable spectrum buffers are too small.");
+        }
+
         for (int i = 0; i < length; i++)
         {
             double window = 0.5 * (1 - Math.Cos((2 * Math.PI * i) / (length - 1)));
@@ -495,9 +524,8 @@ public partial class MainWindow : Window
             }
         }
 
-        double[] bands = new double[32];
         int maxBin = length / 2;
-        for (int band = 0; band < bands.Length; band++)
+        for (int band = 0; band < 32; band++)
         {
             int startBin = Math.Max(1, (int)(Math.Pow(maxBin, band / 32.0)));
             int endBin = Math.Max(startBin + 1, (int)(Math.Pow(maxBin, (band + 1) / 32.0)));
@@ -512,7 +540,6 @@ public partial class MainWindow : Window
             double normalized = Math.Clamp((Math.Log10(1 + (magnitude * 40)) / 2.2), 0, 1);
             bands[band] = normalized;
         }
-        return bands;
     }
 
     private void RenderSpectrum()
@@ -527,10 +554,10 @@ public partial class MainWindow : Window
             TryRefreshSpectrumFromAudioMeter();
         }
 
-        double[] levels;
+        double[] levels = spectrumRenderCopy;
         lock (spectrumLock)
         {
-            levels = spectrumLevels.ToArray();
+            Array.Copy(spectrumLevels, levels, spectrumLevels.Length);
         }
 
         for (int index = 0; index < levels.Length; index++)
@@ -618,7 +645,7 @@ public partial class MainWindow : Window
                 smoothedSpectrum[index] += (target - smoothedSpectrum[index]) * 0.35;
             }
 
-            spectrumLevels = smoothedSpectrum.ToArray();
+            Array.Copy(smoothedSpectrum, spectrumLevels, spectrumLevels.Length);
         }
 
         audioSignalSeen = true;
@@ -695,20 +722,30 @@ public partial class MainWindow : Window
     {
         try
         {
+            // Release prior COM MMDevice instances before rebuilding lists.
+            // sonicPass* lists alias entries already held in outputDeviceReferences.
+            DisposeMmDevices(outputDeviceReferences);
+            sonicPassInputReferences.Clear();
+            sonicPassOutputReferences.Clear();
+            audioEnumerator?.Dispose();
             audioEnumerator = new MMDeviceEnumerator();
             MMDeviceCollection inputs = audioEnumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
             MMDeviceCollection outputs = audioEnumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
 
             InputDeviceComboBox.Items.Clear();
             OutputDeviceComboBox.Items.Clear();
-            outputDeviceReferences.Clear();
-            sonicPassInputReferences.Clear();
-            sonicPassOutputReferences.Clear();
             SonicPassInputComboBox.Items.Clear();
             SonicPassOutputComboBox.Items.Clear();
             foreach (MMDevice device in inputs)
             {
-                InputDeviceComboBox.Items.Add(DisplayDeviceName(device.FriendlyName));
+                try
+                {
+                    InputDeviceComboBox.Items.Add(DisplayDeviceName(device.FriendlyName));
+                }
+                finally
+                {
+                    device.Dispose();
+                }
             }
             foreach (MMDevice device in outputs)
             {
@@ -754,6 +791,22 @@ public partial class MainWindow : Window
             OutputDeviceComboBox.SelectedIndex = 0;
             RefreshWindowsLeqState();
         }
+    }
+
+    private static void DisposeMmDevices(List<MMDevice> devices)
+    {
+        for (int index = 0; index < devices.Count; index++)
+        {
+            try
+            {
+                devices[index].Dispose();
+            }
+            catch
+            {
+            }
+        }
+
+        devices.Clear();
     }
 
     private static string DisplayDeviceName(string deviceName)

@@ -15,10 +15,15 @@ using Microsoft.Win32;
 
 namespace LEQControlPanel.Services;
 
-internal sealed class AudioService
+internal sealed class AudioService : IDisposable
 {
     private readonly InitialSessionState _initialState;
     private readonly bool _isInitialized;
+    private readonly object _psLock = new();
+    private Runspace? _pooledRunspace;
+    private PowerShell? _pooledPowerShell;
+    private bool _engineLoaded;
+    private bool _disposed;
     private string _lastInstallDiag = "";
 
     /// <summary>
@@ -44,53 +49,153 @@ internal sealed class AudioService
         }
     }
 
-    private class ConfiguredPowerShell : IDisposable
+    /// <summary>
+    /// Lease over the shared PowerShell runspace. Dispose releases the lock only;
+    /// the pooled runspace stays alive for the lifetime of AudioService.
+    /// </summary>
+    private sealed class ConfiguredPowerShell : IDisposable
     {
         private readonly PowerShell _powerShell;
-        private readonly Runspace _runspace;
+        private readonly object _psLock;
         private bool _disposed;
 
-        public ConfiguredPowerShell(PowerShell powerShell, Runspace runspace)
+        public ConfiguredPowerShell(PowerShell powerShell, object psLock)
         {
             _powerShell = powerShell;
-            _runspace = runspace;
+            _psLock = psLock;
         }
 
         public PowerShell PowerShell => _powerShell;
 
         public void Dispose()
         {
-            if (!_disposed)
+            if (_disposed)
             {
-                _powerShell?.Dispose();
-                _runspace?.Dispose();
+                return;
+            }
+
+            try
+            {
+                _powerShell.Commands.Clear();
+                _powerShell.Streams.Error.Clear();
+                _powerShell.Streams.Warning.Clear();
+                _powerShell.Streams.Information.Clear();
+                _powerShell.Streams.Verbose.Clear();
+                _powerShell.Streams.Debug.Clear();
+            }
+            catch
+            {
+                // Best-effort reset before releasing the lock.
+            }
+            finally
+            {
                 _disposed = true;
+                Monitor.Exit(_psLock);
             }
         }
     }
 
     private ConfiguredPowerShell CreateConfiguredPowerShell()
     {
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(nameof(AudioService));
+        }
+
         if (!_isInitialized)
         {
             throw new InvalidOperationException("PowerShell environment not initialized");
         }
 
-        // Create runspace from configured template
+        Monitor.Enter(_psLock);
+        try
+        {
+            EnsurePooledPowerShell();
+            _pooledPowerShell!.Commands.Clear();
+            _pooledPowerShell.Streams.Error.Clear();
+            _pooledPowerShell.Streams.Warning.Clear();
+            _pooledPowerShell.Streams.Information.Clear();
+            _pooledPowerShell.Streams.Verbose.Clear();
+            _pooledPowerShell.Streams.Debug.Clear();
+            return new ConfiguredPowerShell(_pooledPowerShell, _psLock);
+        }
+        catch
+        {
+            Monitor.Exit(_psLock);
+            throw;
+        }
+    }
+
+    private void EnsurePooledPowerShell()
+    {
+        if (_pooledRunspace is not null && _pooledPowerShell is not null && _engineLoaded)
+        {
+            return;
+        }
+
+        _pooledPowerShell?.Dispose();
+        _pooledRunspace?.Dispose();
+        _pooledPowerShell = null;
+        _pooledRunspace = null;
+        _engineLoaded = false;
+
         var runspace = RunspaceFactory.CreateRunspace(_initialState);
         runspace.Open();
 
         var ps = PowerShell.Create();
         ps.Runspace = runspace;
 
-        // Load embedded scripts and dot-source to activate functions and variables
+        // Load embedded scripts once into the long-lived runspace.
         var leqEngine = LoadEmbeddedScript("LEQControlPanel.LEQ-Engine.ps1");
-
         ps.AddScript(leqEngine);
         InvokeWithTimeout(ps);
         ps.Commands.Clear();
+        ps.Streams.Error.Clear();
+        ps.Streams.Warning.Clear();
+        ps.Streams.Information.Clear();
+        ps.Streams.Verbose.Clear();
+        ps.Streams.Debug.Clear();
 
-        return new ConfiguredPowerShell(ps, runspace);
+        _pooledRunspace = runspace;
+        _pooledPowerShell = ps;
+        _engineLoaded = true;
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        lock (_psLock)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            try
+            {
+                _pooledPowerShell?.Dispose();
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                _pooledRunspace?.Dispose();
+            }
+            catch
+            {
+            }
+
+            _pooledPowerShell = null;
+            _pooledRunspace = null;
+            _engineLoaded = false;
+            _disposed = true;
+        }
     }
 
     /// <summary>
