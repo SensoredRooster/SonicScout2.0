@@ -83,6 +83,8 @@ corr_ll = 0;
 corr_rr = 0;
 corr_lr = 0;
 corr_alpha = 0;
+last_l = 0;
+last_r = 0;
 
 // --- Helper functions ---
 
@@ -273,18 +275,11 @@ wet_r *= out_gain_lin;
 spl0 = dry_l * (1 - mix) + wet_l * mix;
 spl1 = dry_r * (1 - mix) + wet_r * mix;
 
-// Write to visualization ring buffer
-viz_idx = VIZ_INDEX[0];
-VIZ_BUFFER[viz_idx * 2] = spl0;
-VIZ_BUFFER[viz_idx * 2 + 1] = spl1;
-viz_idx += 1;
-viz_idx >= VIZ_SIZE ? viz_idx = 0;
-VIZ_INDEX[0] = viz_idx;
-
-// Update correlation meter smoothed products
-corr_ll += corr_alpha * (spl0 * spl0 - corr_ll);
-corr_rr += corr_alpha * (spl1 * spl1 - corr_rr);
-corr_lr += corr_alpha * (spl0 * spl1 - corr_lr);
+// Stash last output for GUI meters. @gfx only runs when the editor is
+// open, so the audio thread does not write the ring buffer or correlation
+// EMA while the plugin is processing in Equalizer APO.
+last_l = spl0;
+last_r = spl1;
 
 @gfx 600 400
 
@@ -373,6 +368,18 @@ gfx_line(cx, viz_top + 1, cx, viz_bot - 2);
 
 // Scale factor for scatter (pixels per unit amplitude)
 viz_scale = viz_h * 0.35;
+
+// Sample meters at UI rate (not audio rate)
+viz_idx = VIZ_INDEX[0];
+VIZ_BUFFER[viz_idx * 2] = last_l;
+VIZ_BUFFER[viz_idx * 2 + 1] = last_r;
+viz_idx += 1;
+viz_idx >= VIZ_SIZE ? viz_idx = 0;
+VIZ_INDEX[0] = viz_idx;
+
+corr_ll += 0.15 * (last_l * last_l - corr_ll);
+corr_rr += 0.15 * (last_r * last_r - corr_rr);
+corr_lr += 0.15 * (last_l * last_r - corr_lr);
 
 // Draw scatter points from ring buffer
 wr_idx = VIZ_INDEX[0];
