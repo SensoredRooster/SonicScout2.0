@@ -12,7 +12,15 @@ namespace SonicScout;
 internal static class SupportService
 {
     private static readonly object Gate = new();
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(45) };
+    private static readonly HttpClient Http = CreateHttpClient();
+    private static HttpClient CreateHttpClient()
+    {
+        var client = new HttpClient { Timeout = TimeSpan.FromSeconds(45) };
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("SonicScout2.0/1.0");
+        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        return client;
+    }
+
     private static readonly string Root = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "SonicScout",
