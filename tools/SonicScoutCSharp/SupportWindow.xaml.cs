@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Input;
 
 namespace SonicScout;
 
@@ -19,18 +20,18 @@ public partial class SupportWindow : Window
         try
         {
             string bundle = SupportService.CreateBundle();
-            MessageBox.Show(this, $"Support bundle created:\n\n{bundle}", "Support bundle", MessageBoxButton.OK, MessageBoxImage.Information);
+            System.Windows.MessageBox.Show(this, $"Support bundle created:\n\n{bundle}", "Support bundle", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
             SupportService.Log("support_bundle_failed", new { error = ex.Message }, true);
-            MessageBox.Show(this, ex.Message, "Support bundle failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            System.Windows.MessageBox.Show(this, ex.Message, "Support bundle failed", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
     private async void SendDiagnostics_Click(object sender, RoutedEventArgs e)
     {
-        MessageBoxResult confirm = MessageBox.Show(
+        MessageBoxResult confirm = System.Windows.MessageBox.Show(
             this,
             "Create and send a diagnostic bundle to the SonicScout2.0 developer now?\n\nNo upload occurs unless you confirm this action.",
             "Send diagnostics?",
@@ -46,12 +47,12 @@ public partial class SupportWindow : Window
         {
             Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
             var result = await SupportService.UploadBundleAsync();
-            MessageBox.Show(this, $"Diagnostics sent successfully.\nHTTP status: {result.Status}", "Diagnostics sent", MessageBoxButton.OK, MessageBoxImage.Information);
+            System.Windows.MessageBox.Show(this, $"Diagnostics sent successfully.\nHTTP status: {result.Status}", "Diagnostics sent", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
             SupportService.Log("support_send_failed", new { error = ex.Message }, true);
-            MessageBox.Show(
+            System.Windows.MessageBox.Show(
                 this,
                 $"{ex.Message}\n\nYou can still create a local support bundle and attach it manually.",
                 "Upload failed",
