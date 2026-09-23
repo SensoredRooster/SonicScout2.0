@@ -129,6 +129,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        SupportService.Initialize();
         trayIcon = CreateTrayIcon();
         profiles = new Dictionary<string, (string, string, WpfButton)>();
         routingConfiguration = SonicRoutingConfigurationStore.Load(routingConfigurationPath);
@@ -140,6 +141,22 @@ public partial class MainWindow : Window
         scriptBridge.LogReceived += ScriptBridge_LogReceived;
         LoadSavedProfiles();
         UpdateProfileState();
+    }
+
+    private void SupportButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            SupportService.Log("support_window_opened");
+            SupportWindow window = new() { Owner = this };
+            CopyThemeResourcesTo(window);
+            window.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            SupportService.Log("support_window_failed", new { error = ex.Message }, true);
+            MessageBox.Show(this, ex.Message, "Support & Diagnostics", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private void LoadSavedProfiles()
