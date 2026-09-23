@@ -45,7 +45,7 @@
             <Button Content="SEND DIAGNOSTICS TO DEVELOPER" Margin="0,0,8,8" Padding="12,7" Click="SendDiagnostics_Click"/>
             <Button Content="OPEN LOGS FOLDER" Margin="0,0,8,8" Padding="12,7" Click="OpenLogs_Click"/>
             <Button Content="REPORT ISSUE" Margin="0,0,8,8" Padding="12,7" Click="ReportIssue_Click"/>
-            <Button Content="OPEN REPOSITORY" Margin="0,0,8,8" Padding="12,7" Click="OpenRepository_Click"/>
+            <Button Content="OPEN REPOSITORY" Margin="0,0,8,8" Padding="12,7" Click="OpenRepository_Click"/>\n            <Button Content="TESTER SHARE" Margin="0,0,8,8" Padding="12,7" Click="OpenTesterShare_Click"/>
             <Button Content="CLOSE" Margin="0,0,8,8" Padding="12,7" Click="Close_Click"/>
         </WrapPanel>
     </Grid>
