@@ -38,6 +38,19 @@ internal static class SupportService
             initialized = true;
         }
         Directory.CreateDirectory(Root);
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            try { Log("unhandled_exception", new { error = e.ExceptionObject?.ToString() ?? "unknown" }, true); } catch { }
+        };
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            try { Log("unobserved_task_exception", new { error = e.Exception.ToString() }, true); } catch { }
+            e.SetObserved();
+        };
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            try { Log("app_stop"); } catch { }
+        };
         Log("app_start", new { version = VersionString(), os = Environment.OSVersion.VersionString });
         heartbeatTimer ??= new System.Threading.Timer(_ =>
         {
@@ -57,7 +70,7 @@ internal static class SupportService
             data
         };
         string path = error ? ErrorLog : EventLog;
-        string line = JsonSerializer.Serialize(record);
+        string line = RedactText(JsonSerializer.Serialize(record));
         lock (Gate)
         {
             Rotate(path);
@@ -81,7 +94,17 @@ internal static class SupportService
             ["elevated"] = IsElevated(),
             ["free_disk_bytes"] = root.AvailableFreeSpace,
             ["base_directory"] = AppContext.BaseDirectory,
-            ["support_log_directory"] = Root
+            ["support_log_directory"] = Root,
+            ["upload_configured"] = !string.IsNullOrWhiteSpace(UploadUrl),
+            ["naudio_present"] = File.Exists(Path.Combine(AppContext.BaseDirectory, "NAudio.dll")),
+            ["setup_script_present"] = File.Exists(Path.Combine(AppContext.BaseDirectory, "setup_audio_stack.ps1")),
+            ["routing_config_present"] = File.Exists(Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "SonicScout",
+                "routing_configuration.json")),
+            ["equalizer_apo_present"] = Directory.Exists(Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                "EqualizerAPO"))
         };
     }
 
@@ -102,9 +125,21 @@ internal static class SupportService
                 "SonicScout2.0 support bundle. Created locally after explicit user action. " +
                 "No support bundle is uploaded automatically. Review the archive before sharing if desired.\r\n");
 
-            foreach (string file in Directory.EnumerateFiles(Root, "*.jsonl*"))
+            foreach (string file in Directory.EnumerateFiles(Root))
             {
-                archive.CreateEntryFromFile(file, $"logs/{Path.GetFileName(file)}", CompressionLevel.Optimal);
+                string name = Path.GetFileName(file);
+                if (!name.StartsWith("sonic-scout.jsonl", StringComparison.OrdinalIgnoreCase) &&
+                    !name.StartsWith("errors.jsonl", StringComparison.OrdinalIgnoreCase) &&
+                    !name.EndsWith(".log", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    WriteString(archive, $"logs/{name}", RedactText(File.ReadAllText(file)));
+                }
+                catch { }
             }
 
             string routing = Path.Combine(
@@ -200,13 +235,26 @@ internal static class SupportService
     private static string RedactText(string input)
     {
         string result = input;
-        foreach (string key in new[] { "token", "secret", "password", "cookie", "authorization", "credential", "api_key" })
+        foreach (string key in new[] { "token", "secret", "password", "passwd", "cookie", "authorization", "credential", "api_key", "api-key" })
         {
             result = System.Text.RegularExpressions.Regex.Replace(
                 result,
-                $"(?i)(\"?{System.Text.RegularExpressions.Regex.Escape(key)}\"?\\s*[:=]\\s*\")([^\"]+)(\")",
-                "$1[REDACTED]$3");
+                $"(?i)(\"?{System.Text.RegularExpressions.Regex.Escape(key)}\"?\\s*[:=]\\s*[\"']?)([^\"',}\\s]+)",
+                "$1[REDACTED]");
         }
+
+        result = System.Text.RegularExpressions.Regex.Replace(
+            result,
+            @"(?i)Bearer\s+[A-Za-z0-9._~+/-]+=*",
+            "Bearer [REDACTED]");
+        result = System.Text.RegularExpressions.Regex.Replace(
+            result,
+            @"(?i)([?&](?:code|token|access_token|refresh_token|client_secret|state|password)=)[^&#\s]+",
+            "$1[REDACTED]");
+        result = System.Text.RegularExpressions.Regex.Replace(
+            result,
+            @"(?<![A-Za-z0-9])[A-Za-z0-9_-]{56,}(?![A-Za-z0-9])",
+            "[REDACTED]");
         return result;
     }
 
