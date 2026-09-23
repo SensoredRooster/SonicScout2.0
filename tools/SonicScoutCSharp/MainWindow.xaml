@@ -273,7 +273,7 @@
                            HorizontalAlignment="Center"
                            Margin="24,0,24,10" />
                 <StackPanel Margin="0,0,0,0" HorizontalAlignment="Center">
-                    <UniformGrid Columns="4" Rows="1" HorizontalAlignment="Stretch">
+                    <UniformGrid Columns="5" Rows="1" HorizontalAlignment="Stretch">
                         <StackPanel Margin="6,0,6,0">
                             <TextBlock Text="METER INPUT" Foreground="{DynamicResource CyanBrush}" FontSize="10" FontWeight="Bold" TextAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,1" />
                             <Border Background="{DynamicResource PanelBrush}" BorderThickness="0" Padding="10,6" CornerRadius="6">
@@ -297,6 +297,14 @@
                             <Border Background="{DynamicResource PanelBrush}" BorderThickness="0" Padding="10,6" CornerRadius="6">
                                 <Button Height="40" MinHeight="40" Padding="6,4" FontSize="9" Click="SoundSettingsButton_Click" HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
                                     <TextBlock Text="SOUND SETTINGS" TextWrapping="Wrap" TextAlignment="Center" FontWeight="SemiBold" />
+                                </Button>
+                            </Border>
+                        </StackPanel>
+                        <StackPanel Margin="6,0,6,0">
+                            <TextBlock Text="SUPPORT" Foreground="{DynamicResource CyanBrush}" FontSize="10" FontWeight="Bold" TextAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,1" />
+                            <Border Background="{DynamicResource PanelBrush}" BorderThickness="0" Padding="10,6" CornerRadius="6">
+                                <Button Height="40" MinHeight="40" Padding="6,4" FontSize="9" Click="SupportButton_Click" HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                                    <TextBlock Text="DIAGNOSTICS" TextWrapping="Wrap" TextAlignment="Center" FontWeight="SemiBold" />
                                 </Button>
                             </Border>
                         </StackPanel>
