@@ -20,7 +20,7 @@ internal static class SupportService
     private static readonly string ErrorLog = Path.Combine(Root, "errors.jsonl");
     private static readonly string SessionIdValue = Guid.NewGuid().ToString("N")[..12];
     private static readonly DateTime StartedAtUtc = DateTime.UtcNow;
-    private static Timer? heartbeatTimer;
+    private static System.Threading.Timer? heartbeatTimer;
     private static bool initialized;
     private const long MaxLogBytes = 8L * 1024 * 1024;
     private const int MaxBackups = 6;
@@ -38,7 +38,7 @@ internal static class SupportService
         }
         Directory.CreateDirectory(Root);
         Log("app_start", new { version = VersionString(), os = Environment.OSVersion.VersionString });
-        heartbeatTimer ??= new Timer(_ =>
+        heartbeatTimer ??= new System.Threading.Timer(_ =>
         {
             try { Log("heartbeat"); } catch { }
         }, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
