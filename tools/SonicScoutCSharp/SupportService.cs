@@ -155,7 +155,7 @@ internal static class SupportService
     public static void OpenLogsFolder()
     {
         Directory.CreateDirectory(Root);
-        Process.Start(new ProcessStartInfo("explorer.exe", $""{Root}"") { UseShellExecute = true });
+        Process.Start(new ProcessStartInfo("explorer.exe", Root) { UseShellExecute = true });
     }
 
     public static void OpenRepository()
