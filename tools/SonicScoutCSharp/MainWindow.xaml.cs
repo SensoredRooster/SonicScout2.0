@@ -155,7 +155,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             SupportService.Log("support_window_failed", new { error = ex.Message }, true);
-            MessageBox.Show(this, ex.Message, "Support & Diagnostics", MessageBoxButton.OK, MessageBoxImage.Error);
+            System.Windows.MessageBox.Show(this, ex.Message, "Support & Diagnostics", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
