@@ -14,7 +14,7 @@
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0">
-            <TextBlock Text="SUPPORT & DIAGNOSTICS" FontSize="22" FontWeight="Bold"
+            <TextBlock Text="SUPPORT &amp; DIAGNOSTICS" FontSize="22" FontWeight="Bold"
                        Foreground="{DynamicResource SurfaceTextBrush}"/>
             <TextBlock Text="Diagnostics stay local unless you explicitly choose Send Diagnostics to Developer."
                        Margin="0,6,0,14" TextWrapping="Wrap"
