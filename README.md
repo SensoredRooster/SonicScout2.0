@@ -397,3 +397,26 @@ This repository carries several licences. Coverage by path:
 | Root documentation | (C) 2026 SonicScout2.0, LLC |
 
 See each LICENSE file for full terms.
+
+## Support, diagnostics, and tester sharing
+
+SonicScout2.0 includes a native WPF support center and two isolated Cloudflare services.
+
+### Support diagnostics
+
+- Worker: `https://sonicscout2-support.sensoredrooster-com.workers.dev`
+- Upload endpoint: `https://sonicscout2-support.sensoredrooster-com.workers.dev/upload`
+- R2 bucket: `sonicscout2-support-logs`
+- The Support & Diagnostics window creates redacted bundles and uploads them only after explicit confirmation.
+- `SONICSCOUT_SUPPORT_UPLOAD_URL` remains available as a development override.
+
+### Tester Share
+
+- Portal: `https://sonicscout2-share.sensoredrooster-com.workers.dev`
+- R2 bucket: `sonicscout2-share`
+- Open it from **Support & Diagnostics → TESTER SHARE**.
+- Folders: `Releases`, `Tester Uploads`, `Screenshots`, `Bug Reports`, `Logs`, `Archived`
+
+Tester access is browse/download plus tester-folder uploads. Admin access also controls releases, **Latest**, deletes, and archived content.
+
+See [docs/SUPPORT.md](docs/SUPPORT.md) and [docs/TESTER_SHARE.md](docs/TESTER_SHARE.md).
