@@ -67,6 +67,6 @@ public partial class SupportWindow : Window
 
     private void OpenLogs_Click(object sender, RoutedEventArgs e) => SupportService.OpenLogsFolder();
     private void ReportIssue_Click(object sender, RoutedEventArgs e) => SupportService.ReportIssue();
-    private void OpenRepository_Click(object sender, RoutedEventArgs e) => SupportService.OpenRepository();
+    private void OpenRepository_Click(object sender, RoutedEventArgs e) => SupportService.OpenRepository();\n    private void OpenTesterShare_Click(object sender, RoutedEventArgs e)\n        => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://sonicscout2-share.sensoredrooster-com.workers.dev") { UseShellExecute = true });
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
 }
