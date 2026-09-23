@@ -21,6 +21,7 @@ internal static class SupportService
     private static readonly string SessionIdValue = Guid.NewGuid().ToString("N")[..12];
     private static readonly DateTime StartedAtUtc = DateTime.UtcNow;
     private static Timer? heartbeatTimer;
+    private static bool initialized;
     private const long MaxLogBytes = 8L * 1024 * 1024;
     private const int MaxBackups = 6;
     private const string RepositoryUrl = "https://github.com/SensoredRooster/SonicScout2.0";
@@ -30,6 +31,11 @@ internal static class SupportService
 
     public static void Initialize()
     {
+        lock (Gate)
+        {
+            if (initialized) return;
+            initialized = true;
+        }
         Directory.CreateDirectory(Root);
         Log("app_start", new { version = VersionString(), os = Environment.OSVersion.VersionString });
         heartbeatTimer ??= new Timer(_ =>
