@@ -9,6 +9,7 @@ public partial class App : System.Windows.Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        SupportService.Initialize();
 
         DispatcherUnhandledException += (_, args) =>
         {
@@ -40,6 +41,10 @@ public partial class App : System.Windows.Application
     {
         try
         {
+            SupportService.Log(
+                "uncaught_exception",
+                new { exception_type = ex.GetType().Name, error = ex.Message, stack = ex.StackTrace },
+                error: true);
             string logDir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "SonicScout", "logs");
