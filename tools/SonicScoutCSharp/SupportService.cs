@@ -28,7 +28,9 @@ internal static class SupportService
     private const string RepositoryUrl = "https://github.com/SensoredRooster/SonicScout2.0";
 
     public static string SessionId => SessionIdValue;
-    public static string? UploadUrl { get; set; } = Environment.GetEnvironmentVariable("SONICSCOUT_SUPPORT_UPLOAD_URL");
+    private const string DefaultUploadUrl = "https://sonicscout2-support.sensoredrooster-com.workers.dev/upload";
+    public static string? UploadUrl { get; set; } =
+        Environment.GetEnvironmentVariable("SONICSCOUT_SUPPORT_UPLOAD_URL") ?? DefaultUploadUrl;
 
     public static void Initialize()
     {
