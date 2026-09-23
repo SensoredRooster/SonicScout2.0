@@ -237,9 +237,13 @@ internal static class SupportService
         string result = input;
         foreach (string key in new[] { "token", "secret", "password", "passwd", "cookie", "authorization", "credential", "api_key", "api-key" })
         {
+            string pattern =
+                "(?i)(\\\"?" +
+                System.Text.RegularExpressions.Regex.Escape(key) +
+                "\\\"?\\s*[:=]\\s*[\\\"']?)([^\\\"',}\\s]+)";
             result = System.Text.RegularExpressions.Regex.Replace(
                 result,
-                $"(?i)(\"?{System.Text.RegularExpressions.Regex.Escape(key)}\"?\\s*[:=]\\s*[\"']?)([^\"',}\\s]+)",
+                pattern,
                 "$1[REDACTED]");
         }
 
