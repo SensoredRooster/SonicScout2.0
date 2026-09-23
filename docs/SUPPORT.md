@@ -40,3 +40,12 @@ This project uses:
 It does not share diagnostic storage with RCM Tool, SubScript, or Universal AI Studio.
 
 The deployment workflow requires only the `CLOUDFLARE_API_TOKEN` GitHub Actions secret. The Cloudflare account ID is non-secret and is stored in the Wrangler/deployment configuration.
+## Production Cloudflare services
+
+- Diagnostics Worker: `https://sonicscout2-support.sensoredrooster-com.workers.dev`
+- Diagnostics R2: `sonicscout2-support-logs`
+- Tester Share: `https://sonicscout2-share.sensoredrooster-com.workers.dev`
+- Tester Share R2: `sonicscout2-share`
+
+The built-in collector is active by default; `SONICSCOUT_SUPPORT_UPLOAD_URL` remains a development override. The WPF Support window includes a **TESTER SHARE** button that opens the authenticated portal.
+
