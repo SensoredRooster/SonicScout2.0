@@ -146,7 +146,13 @@ function Enable-EapoOnHiFiCable {
 $script:boundCount = 0
 $boundNow = Enable-EapoOnHiFiCable
 if ($boundNow -eq 0) {
-    Log 'Hi-Fi Cable is not visible yet. Scheduling the finish for the next login.'
+    if ($FinishOnly) {
+        Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce' -Name 'SonicScoutFinish' -ErrorAction SilentlyContinue
+        Log 'FAIL Hi-Fi Cable still not visible after the one restart. Not restarting again.'
+        Publish-Report
+        exit 1
+    }
+    Log 'Hi-Fi Cable is not visible yet. One restart only.'
     $cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -FinishOnly"
     New-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce' -Name 'SonicScoutFinish' -Value $cmd -PropertyType String -Force | Out-Null
     Log 'Restarting in 30 seconds. Setup finishes by itself after login.'
@@ -158,5 +164,6 @@ if ($boundNow -eq 0) {
     shutdown /r /t 0 /c "Sonic Scout needs one restart to finish."
     exit 0
 }
+Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce' -Name 'SonicScoutFinish' -ErrorAction SilentlyContinue
 Log 'PASS setup finished. Hi-Fi Cable is bound. No more clicks.'
 Publish-Report
