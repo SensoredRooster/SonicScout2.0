@@ -1973,6 +1973,11 @@ function Get-Downloads {
         # CDN primary, SourceForge fallback. The CDN copy is byte-identical: 27,270,486
         # bytes, the same length SourceForge reports for HeSuVi_2.0.0.1.exe.
         $files.HeSuVi = Join-Path $script:TempPath "HeSuVi.exe"
+        $localHeSuVi = Join-Path $PSScriptRoot "..\tools\SonicScoutCSharp\installers\HeSuVi.exe"
+        if ($PSScriptRoot -and (Test-Path -LiteralPath $localHeSuVi)) {
+            Copy-Item -LiteralPath $localHeSuVi -Destination $files.HeSuVi -Force
+            Write-Host "$($script:BoxMargin)Using the HeSuVi installer already downloaded." -ForegroundColor DarkGray
+        } else {
         $specs += @{
             Key           = 'HeSuVi'
             DisplayName   = 'HeSuVi'
@@ -1984,6 +1989,7 @@ function Get-Downloads {
             FallbackUrl   = 'https://sourceforge.net/projects/hesuvi/files/HeSuVi_2.0.0.1.exe/download'
             RequireBinary = $true
             TimeoutSec    = 120
+        }
         }
     }
 

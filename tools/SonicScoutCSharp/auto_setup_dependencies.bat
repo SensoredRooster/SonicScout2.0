@@ -124,6 +124,15 @@ if exist "%INSTALLERS%\VBHIFI_Driver.zip" (
 )
 echo.
 
+echo [4/4] Downloading HeSuVi...
+powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('https://sourceforge.net/projects/hesuvi/files/HeSuVi_2.0.0.1.exe/download', (Join-Path $env:SS_INSTALLERS 'HeSuVi.exe'))"
+if exist "%INSTALLERS%\HeSuVi.exe" (
+  echo [OK] HeSuVi downloaded
+) else (
+  echo [FAIL] HeSuVi download failed
+)
+echo.
+
 if "%DOWNLOAD_ONLY%"=="1" (
   if "%DOWNLOAD_EQUALIZER%"=="1" if not exist "%INSTALLERS%\EqualizerAPO_Setup.exe" exit /b 1
   if "%DOWNLOAD_VBCABLE%"=="1" if not exist "%INSTALLERS%\VBCABLE_Setup_x64.exe" exit /b 1
