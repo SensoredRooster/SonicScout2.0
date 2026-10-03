@@ -1162,7 +1162,7 @@ function Start-ParallelDownloads {
         # Hand the timeout clock back to the poller: the HEAD above must not be charged
         # against the spec's TimeoutSec, which is a budget for the transfer.
         $prog["$key.dlstart"] = [datetime]::UtcNow
-        Invoke-WebRequest -Uri $url -OutFile $outFile -UseBasicParsing
+        Invoke-WebRequest -Uri $url -OutFile $outFile -UseBasicParsing -UserAgent 'Mozilla/5.0'
     }
 
     # Tracking structures
@@ -1955,7 +1955,7 @@ function Get-Downloads {
         DisplayName   = 'Equalizer APO'
         OutFile       = $files.EAPO
         Method        = 'IWR'
-            Url           = 'https://github.com/sensoredrooster/SonicScout2.0/releases/latest/download/EqualizerAPO-x64-1.4.2.exe'
+            Url           = 'https://sourceforge.net/projects/equalizerapo/files/1.4.2/EqualizerAPO-x64-1.4.2.exe/download'
         BaseUrl       = $null
         UrlResolver   = $null
         FallbackUrl   = 'https://sourceforge.net/projects/equalizerapo/files/1.4/EqualizerAPO64-1.4.exe/download'
@@ -1972,7 +1972,7 @@ function Get-Downloads {
             DisplayName   = 'HeSuVi'
             OutFile       = $files.HeSuVi
             Method        = 'IWR'
-            Url           = 'https://github.com/sensoredrooster/SonicScout2.0/releases/latest/download/HeSuVi_2.0.0.1.exe'
+            Url           = 'https://sourceforge.net/projects/hesuvi/files/HeSuVi_2.0.0.1.exe/download'
             BaseUrl       = $null
             UrlResolver   = $null
             FallbackUrl   = 'https://sourceforge.net/projects/hesuvi/files/HeSuVi_2.0.0.1.exe/download'
