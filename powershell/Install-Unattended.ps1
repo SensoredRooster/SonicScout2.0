@@ -48,6 +48,10 @@ function Get-File($url, $dest) {
 }
 
 Log 'SONIC SCOUT SETUP'
+if ($FinishOnly) {
+    Log 'Finishing after restart. No installers, no clicks.'
+}
+if (-not $FinishOnly) {
 Log 'Hi-Fi Cable, Equalizer APO, HeSuVi, ReaPlugs, LEQ. No choices.'
 
 $hifi = Join-Path $installers 'HIFI_CABLE_Setup_x64.exe'
@@ -95,6 +99,7 @@ if (Get-File 'https://www.reaper.fm/reaplugs/reaplugs236_x64-install.exe' $reapl
     Start-Process -FilePath $reaplugs -ArgumentList '/S' -Wait
 } else { Log 'FAIL ReaPlugs installer missing' }
 
+}
 function Enable-EapoOnHiFiCable {
     $preMix = '{EACD2258-FCAC-4FF4-B36D-419E924A6D79}'
     $postMix = '{EC1CC9CE-FAED-4822-828A-82A81A6F018F}'
