@@ -1950,17 +1950,23 @@ function Get-Downloads {
     # validated against. A new E-APO release needs a manual CDN re-upload -- see
     # $script:EapoUrlResolver for how to hand version selection back to SourceForge.
     $files.EAPO = Join-Path $script:TempPath "EqualizerAPO64.exe"
-    $specs += @{
-        Key           = 'EAPO'
-        DisplayName   = 'Equalizer APO'
-        OutFile       = $files.EAPO
-        Method        = 'IWR'
+    $localEapo = Join-Path $PSScriptRoot "..\tools\SonicScoutCSharp\installers\EqualizerAPO_Setup.exe"
+    if ($PSScriptRoot -and (Test-Path -LiteralPath $localEapo)) {
+        Copy-Item -LiteralPath $localEapo -Destination $files.EAPO -Force
+        Write-Host "$($script:BoxMargin)Using the Equalizer APO installer already downloaded." -ForegroundColor DarkGray
+    } else {
+        $specs += @{
+            Key           = 'EAPO'
+            DisplayName   = 'Equalizer APO'
+            OutFile       = $files.EAPO
+            Method        = 'IWR'
             Url           = 'https://sourceforge.net/projects/equalizerapo/files/1.4.2/EqualizerAPO-x64-1.4.2.exe/download'
-        BaseUrl       = $null
-        UrlResolver   = $null
-        FallbackUrl   = 'https://sourceforge.net/projects/equalizerapo/files/1.4/EqualizerAPO64-1.4.exe/download'
-        RequireBinary = $true
-        TimeoutSec    = 120
+            BaseUrl       = $null
+            UrlResolver   = $null
+            FallbackUrl   = 'https://sourceforge.net/projects/equalizerapo/files/1.4/EqualizerAPO64-1.4.exe/download'
+            RequireBinary = $true
+            TimeoutSec    = 120
+        }
     }
 
     if (-not $skipHeSuVi) {
