@@ -5,7 +5,7 @@ setlocal
 set "DOWNLOAD_ONLY=0"
 set "DOWNLOAD_EQUALIZER=1"
 set "DOWNLOAD_VBCABLE=1"
-set "DOWNLOAD_HIFI=0"
+set "DOWNLOAD_HIFI=1"
 set "DOWNLOAD_REAPLUGS=0"
 
 :parse_arguments

@@ -5808,18 +5808,9 @@ try {
         # cosmetic cleanup, NOT a prerequisite: VB-CABLE and Hi-Fi Cable have
         # distinct interface descriptions and Get-SonicScout20Endpoints ignores Hi-Fi
         # entirely, so nothing here needs a reboot to proceed.
-        $lingeringHifi = Get-CimInstance Win32_SoundDevice -ErrorAction SilentlyContinue |
-            Where-Object {
-                (Test-OrdinalContains "$($_.Name)" 'Hi-Fi') -or
-                (Test-OrdinalContains "$($_.Name)" 'HiFi')
-            }
+        # ASIO Bridge Hi-Fi Cable is the cable this setup keeps. Do not uninstall it.
         $hifiLeftBehind = $false
-        if ($lingeringHifi) {
-            Write-Host ""
-            Write-Host "$($script:BoxMargin)Hi-Fi Cable (the old SonicScout2.0 cable) is still installed." -ForegroundColor Yellow
-            Write-Host "$($script:BoxMargin)Removing it so it cannot be confused with the new endpoints." -ForegroundColor DarkGray
-            if ((Uninstall-ExistingHiFiCable) -ne 'Removed') { $hifiLeftBehind = $true }
-        }
+        Write-Host "$($script:BoxMargin)Keeping ASIO Bridge Hi-Fi Cable. VB-CABLE is not the route." -ForegroundColor DarkGray
 
         # Voicemeeter installs by default -- most users need a mixer -- but never
         # on top of one the user actually relies on. Detection alone cannot decide
