@@ -98,3 +98,32 @@ function Enable-EapoOnHiFiCable {
 }
 
 Enable-EapoOnHiFiCable
+
+function Set-HiFiLeqAndEnhancements {
+    $nameKey = '{a45c254e-df1c-4efd-8020-67d146a850e0},2'
+    $leqKey = '{fc52a749-4be9-4510-896e-966ba6525980},3'
+    $leqEnabled = '{fc52a749-4be9-4510-896e-966ba6525980},0'
+    $disableSysFx = '{1da5d803-d492-4edd-8c23-e0c0ffee7f0e},5'
+    $spatial = '{b3f8fa53-0004-438e-9003-51a46e139bfc},15'
+    $renderRoot = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render'
+    $enabled = [byte[]](0x0b,0,0,0,0x01,0,0,0,0xff,0xff,0,0)
+    $shortRelease = [byte[]](0x03,0,0,0,0x01,0,0,0,0x02,0,0,0)
+    $count = 0
+    Get-ChildItem $renderRoot -ErrorAction SilentlyContinue | ForEach-Object {
+        $props = Join-Path $_.PSPath 'Properties'
+        $fxKey = Join-Path $_.PSPath 'FxProperties'
+        if (-not (Test-Path $props) -or -not (Test-Path $fxKey)) { return }
+        $name = (Get-ItemProperty -Path $props -Name $nameKey -ErrorAction SilentlyContinue).$nameKey
+        if ($name -notmatch 'Hi-?Fi|ASIO Bridge') { return }
+        New-ItemProperty -Path $fxKey -Name $leqKey -Value $shortRelease -PropertyType Binary -Force | Out-Null
+        New-ItemProperty -Path $fxKey -Name $leqEnabled -Value $enabled -PropertyType Binary -Force | Out-Null
+        New-ItemProperty -Path $fxKey -Name $disableSysFx -Value 0 -PropertyType DWord -Force | Out-Null
+        New-ItemProperty -Path $props -Name $spatial -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue | Out-Null
+        Write-Host "LEQ short and enhancements set on $name"
+        $count++
+    }
+    if ($count -eq 0) { Write-Host 'Hi-Fi Cable not found for LEQ. Restart, then run setup again.' }
+    Restart-Service Audiosrv -Force -ErrorAction SilentlyContinue
+}
+
+Set-HiFiLeqAndEnhancements
