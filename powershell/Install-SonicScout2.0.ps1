@@ -1074,8 +1074,14 @@ function Build-LocalLeqControlPanel {
         comes from the csproj (PublishSingleFile + SelfContained win-x64).
     #>
     $repoRoot = $null
-    if ($MyInvocation.MyCommand.Path) {
-        $repoRoot = Split-Path (Split-Path $MyInvocation.MyCommand.Path -Parent) -Parent
+    # irm | iex has no script file, and StrictMode throws if .Path is read on that
+    # command object. A missing path just means "no vendored source", not a failed install.
+    $cmdPath = $null
+    if ($MyInvocation.MyCommand.PSObject.Properties['Path']) {
+        $cmdPath = $MyInvocation.MyCommand.Path
+    }
+    if ($cmdPath) {
+        $repoRoot = Split-Path (Split-Path $cmdPath -Parent) -Parent
     }
     if (-not $repoRoot) { return $null }
     $proj = Join-Path $repoRoot "tools\LEQControlPanel\src\LEQControlPanel\LEQControlPanel.csproj"
