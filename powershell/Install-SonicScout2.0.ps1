@@ -6008,21 +6008,6 @@ try {
         # Anonymous setup counter (success path only).
         Send-SetupPing -Mode 'voicemeeter'
 
-        # The install itself never requires a reboot. If the old Hi-Fi Cable was
-        # removed, a restart only clears it from the device list -- say so plainly
-        # so nobody reads a leftover entry as a failed install.
-        if ($lingeringHifi) {
-            Write-Host ""
-            if ($hifiLeftBehind) {
-                Write-Host "$($script:BoxMargin)Note: Hi-Fi Cable could not be fully removed." -ForegroundColor Yellow
-                Write-Host "$($script:BoxMargin)Your install is complete and working -- restart to clear it, or" -ForegroundColor DarkGray
-                Write-Host "$($script:BoxMargin)remove 'VB-Audio Hi-Fi Cable' from Device Manager." -ForegroundColor DarkGray
-            } else {
-                Write-Host "$($script:BoxMargin)Note: the old Hi-Fi Cable was removed. Restart when convenient to" -ForegroundColor DarkGray
-                Write-Host "$($script:BoxMargin)clear it from your sound device list. Nothing else is waiting on it." -ForegroundColor DarkGray
-            }
-        }
-
         # ExePresent, not Present: a leftover uninstall registry key with nothing on
         # disk is not a mixer, and must not render a green tick. ANDed with the
         # install result so a failed install is never reported as a success.
