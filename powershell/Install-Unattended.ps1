@@ -61,3 +61,40 @@ if (Test-Path $reaplugs) {
 
 Write-Host 'LEQ release time is set to short on the Hi-Fi Cable device after reboot.'
 Write-Host 'Done. Restart the PC. Enhancements and spatial sound stay off on Hi-Fi Cable.'
+
+function Enable-EapoOnHiFiCable {
+    $preMix = '{EACD2258-FCAC-4FF4-B36D-419E924A6D79}'
+    $postMix = '{EC1CC9CE-FAED-4822-828A-82A81A6F018F}'
+    $fx = '{d04e05a6-594b-4fb6-a80d-01af5eed7d1d}'
+    $nameKey = '{a45c254e-df1c-4efd-8020-67d146a850e0},2'
+    $renderRoot = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render'
+    $childRoot = 'HKLM:\SOFTWARE\EqualizerAPO\Child APOs'
+    New-Item -Path $childRoot -Force | Out-Null
+    $bound = 0
+    Get-ChildItem $renderRoot -ErrorAction SilentlyContinue | ForEach-Object {
+        $props = Join-Path $_.PSPath 'Properties'
+        $fxKey = Join-Path $_.PSPath 'FxProperties'
+        if (-not (Test-Path $props) -or -not (Test-Path $fxKey)) { return }
+        $name = (Get-ItemProperty -Path $props -Name $nameKey -ErrorAction SilentlyContinue).$nameKey
+        if ($name -notmatch 'Hi-?Fi|ASIO Bridge') { return }
+        $backup = Join-Path $childRoot $_.PSChildName
+        New-Item -Path $backup -Force | Out-Null
+        $current = Get-ItemProperty -Path $fxKey
+        foreach ($slot in 1, 2, 5, 6) {
+            $valueName = "$fx,$slot"
+            if ($current.PSObject.Properties.Name -contains $valueName) {
+                New-ItemProperty -Path $backup -Name $valueName -Value $current.$valueName -PropertyType String -Force | Out-Null
+            }
+        }
+        New-ItemProperty -Path $fxKey -Name "$fx,1" -Value $preMix -PropertyType String -Force | Out-Null
+        New-ItemProperty -Path $fxKey -Name "$fx,2" -Value $postMix -PropertyType String -Force | Out-Null
+        New-ItemProperty -Path $fxKey -Name "$fx,5" -Value $preMix -PropertyType String -Force | Out-Null
+        New-ItemProperty -Path $fxKey -Name "$fx,6" -Value $postMix -PropertyType String -Force | Out-Null
+        Write-Host "LFX/GFX bound on $name"
+        $bound++
+    }
+    if ($bound -eq 0) { Write-Host 'Hi-Fi Cable endpoint not found yet. Restart, then run setup again.' }
+    Restart-Service Audiosrv -Force -ErrorAction SilentlyContinue
+}
+
+Enable-EapoOnHiFiCable
