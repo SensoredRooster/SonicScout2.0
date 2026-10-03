@@ -353,6 +353,18 @@ if ($Mode -eq 'Install') {
 $state = Get-SystemState
 Write-Stage -Name 'Baseline scan' -State 'READY' -Detail "Detected endpoints: $($state.EndpointNames.Count). $((Get-EndpointDetail))"
 
+# Cable first. Equalizer APO's Device Selector only lists devices that already
+# exist, and it is the step a tester cannot guess. Install VB-Cable, let the
+# endpoints enumerate, then open E-APO so CABLE Input / SonicScout2.0 is present.
+if (-not $state.VirtualRouteAvailable) {
+    [void](Invoke-InstallerStage -StageName 'VB-Cable Base' `
+        -IsInstalled { (Get-SystemState).VirtualRouteAvailable } `
+        -InstallerPatterns @('*VBCABLE*Setup*.exe', '*VB-CABLE*Setup*.exe', '*Virtual*Cable*Setup*.exe') `
+        -MissingDetail 'VB-Cable is required for Sonic Scout routing.' `
+        -DownloadComponent '/vb-cable')
+    $state = Get-SystemState
+}
+
 [void](Invoke-InstallerStage -StageName 'Equalizer APO' `
     -IsInstalled { (Get-SystemState).EqualizerApoInstalled } `
     -InstallerPatterns @('EqualizerAPO*.exe', 'EqualizerAPO*.msi', '*Equalizer*APO*.exe', '*Equalizer*APO*.msi') `
@@ -385,14 +397,6 @@ if ($state.SoundBlasterAvailable) {
 }
 
 $compatibleNativeRouteAvailable = $waveLinkRouteAccepted -or $state.SoundBlasterAvailable
-
-if (-not $state.VirtualRouteAvailable) {
-    [void](Invoke-InstallerStage -StageName 'VB-Cable Base' `
-        -IsInstalled { (Get-SystemState).VirtualRouteAvailable } `
-        -InstallerPatterns @('*VBCABLE*Setup*.exe', '*VB-CABLE*Setup*.exe', '*Virtual*Cable*Setup*.exe') `
-        -MissingDetail 'VB-Cable is required for Sonic Scout routing.' `
-        -DownloadComponent '/vb-cable')
-}
 
 $state = Get-SystemState
 if (-not $state.HiFiCableDetected -and -not $compatibleNativeRouteAvailable) {
