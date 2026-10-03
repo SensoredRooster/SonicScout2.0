@@ -9,10 +9,16 @@ $root = Split-Path $PSScriptRoot -Parent
 $installers = Join-Path $root 'tools\SonicScoutCSharp\installers'
 New-Item -ItemType Directory -Force -Path $installers | Out-Null
 $log = Join-Path $env:TEMP 'SonicScout-Setup.log'
+$report = Join-Path ([Environment]::GetFolderPath('Desktop')) 'SonicScout-Setup.log'
 function Log($msg) {
     $line = "[{0}] {1}" -f (Get-Date -Format 'HH:mm:ss'), $msg
     Add-Content -Path $log -Value $line
+    Add-Content -Path $report -Value $line
     Write-Host $line
+}
+function Publish-Report {
+    Copy-Item $log $report -Force -ErrorAction SilentlyContinue
+    Log "Report saved to $report"
 }
 
 function Close-EapoDialogs {
@@ -139,7 +145,9 @@ if ($boundNow -eq 0) {
     $cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -FinishOnly"
     New-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce' -Name 'SonicScoutFinish' -Value $cmd -PropertyType String -Force | Out-Null
     Log 'Restart the PC. Setup finishes by itself after login. Do not click anything.'
+Publish-Report
     shutdown /r /t 20 /c "Sonic Scout needs one restart to finish."
     exit 0
 }
 Log 'PASS setup finished. Hi-Fi Cable is bound. No more clicks.'
+Publish-Report
