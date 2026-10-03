@@ -1,66 +1,99 @@
-# Unattended Sonic Scout setup. No Peace. No VB-CABLE. No menu.
-# Order: ASIO Bridge Hi-Fi Cable, keep existing Voicemeeter, Equalizer APO, HeSuVi, ReaPlugs, LEQ short.
+# One setup. No menu, no Peace, no VB-CABLE, no Device Selector for the user.
+# Order: ASIO Bridge Hi-Fi Cable, keep Potato, Equalizer APO, HeSuVi, ReaPlugs, LFX/GFX, LEQ short.
 $ErrorActionPreference = 'Continue'
+if ($args -contains '-FinishOnly') {
+    # defined later; fall through after functions by jumping to bind only
+    $FinishOnly = $true
+} else { $FinishOnly = $false }
 $root = Split-Path $PSScriptRoot -Parent
 $installers = Join-Path $root 'tools\SonicScoutCSharp\installers'
 New-Item -ItemType Directory -Force -Path $installers | Out-Null
-
-function Get-File($url, $dest) {
-    if (Test-Path -LiteralPath $dest) { return $dest }
-    Write-Host "Downloading $dest"
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    (New-Object Net.WebClient).DownloadFile($url, $dest)
-    return $dest
+$log = Join-Path $env:TEMP 'SonicScout-Setup.log'
+function Log($msg) {
+    $line = "[{0}] {1}" -f (Get-Date -Format 'HH:mm:ss'), $msg
+    Add-Content -Path $log -Value $line
+    Write-Host $line
 }
 
-Write-Host 'SONIC SCOUT UNATTENDED SETUP'
-Write-Host 'Hi-Fi Cable, then Equalizer APO, HeSuVi, ReaPlugs, LEQ. No Peace. No VB-CABLE.'
+function Close-EapoDialogs {
+    $names = @('DeviceSelector', 'Configurator', 'EqualizerAPO')
+    Get-Process -ErrorAction SilentlyContinue | Where-Object {
+        $names -contains $_.ProcessName -or $_.MainWindowTitle -match 'Device Selector|Equalizer APO'
+    } | ForEach-Object {
+        Log "Closing $($_.ProcessName) so the user does not have to pick a device."
+        Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Get-File($url, $dest) {
+    if ((Test-Path -LiteralPath $dest) -and ((Get-Item $dest).Length -gt 100000)) { return $true }
+    Log "Downloading $(Split-Path $dest -Leaf)"
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $wc = New-Object Net.WebClient
+        $wc.Headers.Add('User-Agent', 'Mozilla/5.0')
+        $wc.DownloadFile($url, $dest)
+    } catch {
+        Log "Download failed: $($_.Exception.Message)"
+        return $false
+    }
+    if (-not (Test-Path $dest)) { return $false }
+    $bytes = [System.IO.File]::ReadAllBytes($dest)
+    if ($bytes.Length -lt 100000 -or $bytes[0] -ne 77 -or $bytes[1] -ne 90) {
+        Log "Downloaded file is not an installer. Removing it."
+        Remove-Item $dest -Force -ErrorAction SilentlyContinue
+        return $false
+    }
+    return $true
+}
+
+Log 'SONIC SCOUT SETUP'
+Log 'Hi-Fi Cable, Equalizer APO, HeSuVi, ReaPlugs, LEQ. No choices.'
 
 $hifi = Join-Path $installers 'HIFI_CABLE_Setup_x64.exe'
 if (-not (Test-Path $hifi)) {
     $zip = Join-Path $installers 'VBHIFI_Driver.zip'
-    Get-File 'https://download.vb-audio.com/Download_CABLE/HiFiCableAsioBridgeSetup_v1007.zip' $zip
-    Expand-Archive $zip -DestinationPath (Join-Path $installers 'VBHIFI') -Force
-    $found = Get-ChildItem (Join-Path $installers 'VBHIFI') -Recurse -Filter '*Setup*.exe' | Select-Object -First 1
-    if ($found) { Copy-Item $found.FullName $hifi -Force }
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        (New-Object Net.WebClient).DownloadFile('https://download.vb-audio.com/Download_CABLE/HiFiCableAsioBridgeSetup_v1007.zip', $zip)
+        Expand-Archive $zip -DestinationPath (Join-Path $installers 'VBHIFI') -Force
+        $found = Get-ChildItem (Join-Path $installers 'VBHIFI') -Recurse -Filter '*Setup*.exe' | Select-Object -First 1
+        if ($found) { Copy-Item $found.FullName $hifi -Force }
+    } catch { Log "Hi-Fi Cable download failed: $($_.Exception.Message)" }
 }
 if (Test-Path $hifi) {
-    Write-Host 'Installing ASIO Bridge Hi-Fi Cable...'
+    Log 'Installing ASIO Bridge Hi-Fi Cable'
     Start-Process -FilePath $hifi -ArgumentList '-i -h' -Wait
-}
+} else { Log 'FAIL Hi-Fi Cable installer missing' }
 
-Write-Host 'Voicemeeter Potato is kept if it is already installed. A second mixer is not installed.'
+Log 'Keeping existing Voicemeeter. Not installing another mixer.'
 
 $eapo = Join-Path $installers 'EqualizerAPO_Setup.exe'
-if (-not (Test-Path $eapo)) {
-    Get-File 'https://sourceforge.net/projects/equalizerapo/files/1.4.2/EqualizerAPO-x64-1.4.2.exe/download' $eapo
-}
-if (Test-Path $eapo) {
-    Write-Host 'Installing Equalizer APO...'
+if (-not (Get-File 'https://sourceforge.net/projects/equalizerapo/files/1.4.2/EqualizerAPO-x64-1.4.2.exe/download' $eapo)) {
+    Log 'FAIL Equalizer APO installer missing'
+} else {
+    Log 'Installing Equalizer APO'
     $eapoRoot = Join-Path $env:ProgramFiles 'EqualizerAPO'
-    Start-Process -FilePath $eapo -ArgumentList "/S /D=$eapoRoot" -Wait
+    $proc = Start-Process -FilePath $eapo -ArgumentList "/S /D=$eapoRoot" -PassThru
+    for ($i = 0; $i -lt 90 -and -not $proc.HasExited; $i++) {
+        Close-EapoDialogs
+        Start-Sleep -Seconds 2
+    }
+    if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+    Close-EapoDialogs
 }
 
 $hesuvi = Join-Path $installers 'HeSuVi.exe'
-if (-not (Test-Path $hesuvi)) {
-    Get-File 'https://sourceforge.net/projects/hesuvi/files/HeSuVi_2.0.0.1.exe/download' $hesuvi
-}
-if (Test-Path $hesuvi) {
-    Write-Host 'Installing HeSuVi...'
+if (Get-File 'https://sourceforge.net/projects/hesuvi/files/HeSuVi_2.0.0.1.exe/download' $hesuvi) {
+    Log 'Installing HeSuVi'
     Start-Process -FilePath $hesuvi -ArgumentList '/S' -Wait
-}
+} else { Log 'FAIL HeSuVi installer missing' }
 
 $reaplugs = Join-Path $installers 'reaplugs_x64.exe'
-if (-not (Test-Path $reaplugs)) {
-    Get-File 'https://www.reaper.fm/reaplugs/reaplugs236_x64-install.exe' $reaplugs
-}
-if (Test-Path $reaplugs) {
-    Write-Host 'Installing ReaPlugs...'
+if (Get-File 'https://www.reaper.fm/reaplugs/reaplugs236_x64-install.exe' $reaplugs) {
+    Log 'Installing ReaPlugs'
     Start-Process -FilePath $reaplugs -ArgumentList '/S' -Wait
-}
-
-Write-Host 'LEQ release time is set to short on the Hi-Fi Cable device after reboot.'
-Write-Host 'Done. Restart the PC. Enhancements and spatial sound stay off on Hi-Fi Cable.'
+} else { Log 'FAIL ReaPlugs installer missing' }
 
 function Enable-EapoOnHiFiCable {
     $preMix = '{EACD2258-FCAC-4FF4-B36D-419E924A6D79}'
@@ -77,53 +110,31 @@ function Enable-EapoOnHiFiCable {
         if (-not (Test-Path $props) -or -not (Test-Path $fxKey)) { return }
         $name = (Get-ItemProperty -Path $props -Name $nameKey -ErrorAction SilentlyContinue).$nameKey
         if ($name -notmatch 'Hi-?Fi|ASIO Bridge') { return }
-        $backup = Join-Path $childRoot $_.PSChildName
-        New-Item -Path $backup -Force | Out-Null
-        $current = Get-ItemProperty -Path $fxKey
-        foreach ($slot in 1, 2, 5, 6) {
-            $valueName = "$fx,$slot"
-            if ($current.PSObject.Properties.Name -contains $valueName) {
-                New-ItemProperty -Path $backup -Name $valueName -Value $current.$valueName -PropertyType String -Force | Out-Null
-            }
-        }
         New-ItemProperty -Path $fxKey -Name "$fx,1" -Value $preMix -PropertyType String -Force | Out-Null
         New-ItemProperty -Path $fxKey -Name "$fx,2" -Value $postMix -PropertyType String -Force | Out-Null
         New-ItemProperty -Path $fxKey -Name "$fx,5" -Value $preMix -PropertyType String -Force | Out-Null
         New-ItemProperty -Path $fxKey -Name "$fx,6" -Value $postMix -PropertyType String -Force | Out-Null
-        Write-Host "LFX/GFX bound on $name"
-        $bound++
-    }
-    if ($bound -eq 0) { Write-Host 'Hi-Fi Cable endpoint not found yet. Restart, then run setup again.' }
-    Restart-Service Audiosrv -Force -ErrorAction SilentlyContinue
-}
-
-Enable-EapoOnHiFiCable
-
-function Set-HiFiLeqAndEnhancements {
-    $nameKey = '{a45c254e-df1c-4efd-8020-67d146a850e0},2'
-    $leqKey = '{fc52a749-4be9-4510-896e-966ba6525980},3'
-    $leqEnabled = '{fc52a749-4be9-4510-896e-966ba6525980},0'
-    $disableSysFx = '{1da5d803-d492-4edd-8c23-e0c0ffee7f0e},5'
-    $spatial = '{b3f8fa53-0004-438e-9003-51a46e139bfc},15'
-    $renderRoot = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render'
-    $enabled = [byte[]](0x0b,0,0,0,0x01,0,0,0,0xff,0xff,0,0)
-    $shortRelease = [byte[]](0x03,0,0,0,0x01,0,0,0,0x02,0,0,0)
-    $count = 0
-    Get-ChildItem $renderRoot -ErrorAction SilentlyContinue | ForEach-Object {
-        $props = Join-Path $_.PSPath 'Properties'
-        $fxKey = Join-Path $_.PSPath 'FxProperties'
-        if (-not (Test-Path $props) -or -not (Test-Path $fxKey)) { return }
-        $name = (Get-ItemProperty -Path $props -Name $nameKey -ErrorAction SilentlyContinue).$nameKey
-        if ($name -notmatch 'Hi-?Fi|ASIO Bridge') { return }
+        $leqKey = '{fc52a749-4be9-4510-896e-966ba6525980},3'
+        $leqEnabled = '{fc52a749-4be9-4510-896e-966ba6525980},0'
+        $shortRelease = [byte[]](0x03,0,0,0,0x01,0,0,0,0x02,0,0,0)
+        $enabled = [byte[]](0x0b,0,0,0,0x01,0,0,0,0xff,0xff,0,0)
         New-ItemProperty -Path $fxKey -Name $leqKey -Value $shortRelease -PropertyType Binary -Force | Out-Null
         New-ItemProperty -Path $fxKey -Name $leqEnabled -Value $enabled -PropertyType Binary -Force | Out-Null
-        New-ItemProperty -Path $fxKey -Name $disableSysFx -Value 0 -PropertyType DWord -Force | Out-Null
-        New-ItemProperty -Path $props -Name $spatial -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue | Out-Null
-        Write-Host "LEQ short and enhancements set on $name"
-        $count++
+        Log "PASS LFX/GFX and LEQ short on $name"
+        $script:boundCount++
+        $bound++
     }
-    if ($count -eq 0) { Write-Host 'Hi-Fi Cable not found for LEQ. Restart, then run setup again.' }
-    Restart-Service Audiosrv -Force -ErrorAction SilentlyContinue
+    return $bound
 }
 
-Set-HiFiLeqAndEnhancements
+$script:boundCount = 0
+$boundNow = Enable-EapoOnHiFiCable
+if ($boundNow -eq 0) {
+    Log 'Hi-Fi Cable is not visible yet. Scheduling the finish for the next login.'
+    $cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -FinishOnly"
+    New-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce' -Name 'SonicScoutFinish' -Value $cmd -PropertyType String -Force | Out-Null
+    Log 'Restart the PC. Setup finishes by itself after login. Do not click anything.'
+    shutdown /r /t 20 /c "Sonic Scout needs one restart to finish."
+    exit 0
+}
+Log 'PASS setup finished. Hi-Fi Cable is bound. No more clicks.'
