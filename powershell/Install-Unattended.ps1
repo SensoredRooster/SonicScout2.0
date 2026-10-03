@@ -21,12 +21,11 @@ function Publish-Report {
     Log "Report saved to $report"
 }
 
-function Close-EapoDialogs {
-    $names = @('DeviceSelector', 'Configurator', 'EqualizerAPO')
+function Close-SetupDialogs {
     Get-Process -ErrorAction SilentlyContinue | Where-Object {
-        $names -contains $_.ProcessName -or $_.MainWindowTitle -match 'Device Selector|Equalizer APO'
+        $_.ProcessName -match 'DeviceSelector|Configurator|EqualizerAPO|HeSuVi' -or $_.MainWindowTitle -match 'Device Selector|Equalizer APO|HeSuVi'
     } | ForEach-Object {
-        Log "Closing $($_.ProcessName) so the user does not have to pick a device."
+        Log "Closing $($_.ProcessName) so the user does not have to click."
         Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
     }
 }
@@ -86,17 +85,23 @@ if (-not (Get-File 'https://sourceforge.net/projects/equalizerapo/files/1.4.2/Eq
     $eapoRoot = Join-Path $env:ProgramFiles 'EqualizerAPO'
     $proc = Start-Process -FilePath $eapo -ArgumentList "/S /D=$eapoRoot" -PassThru
     for ($i = 0; $i -lt 90 -and -not $proc.HasExited; $i++) {
-        Close-EapoDialogs
+        Close-SetupDialogs
         Start-Sleep -Seconds 2
     }
     if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
-    Close-EapoDialogs
+    Close-SetupDialogs
 }
 
 $hesuvi = Join-Path $installers 'HeSuVi.exe'
 if (Get-File 'https://sourceforge.net/projects/hesuvi/files/HeSuVi_2.0.0.1.exe/download' $hesuvi) {
     Log 'Installing HeSuVi'
-    Start-Process -FilePath $hesuvi -ArgumentList '/S' -Wait
+    $hp = Start-Process -FilePath $hesuvi -ArgumentList '/S' -PassThru
+    for ($i = 0; $i -lt 45 -and -not $hp.HasExited; $i++) {
+        Close-SetupDialogs
+        Start-Sleep -Seconds 2
+    }
+    if (-not $hp.HasExited) { Stop-Process -Id $hp.Id -Force -ErrorAction SilentlyContinue }
+    Close-SetupDialogs
 } else { Log 'FAIL HeSuVi installer missing' }
 
 $reaplugs = Join-Path $installers 'reaplugs_x64.exe'
