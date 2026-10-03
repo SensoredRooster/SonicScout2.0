@@ -149,9 +149,13 @@ if ($boundNow -eq 0) {
     Log 'Hi-Fi Cable is not visible yet. Scheduling the finish for the next login.'
     $cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -FinishOnly"
     New-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce' -Name 'SonicScoutFinish' -Value $cmd -PropertyType String -Force | Out-Null
-    Log 'Restart the PC. Setup finishes by itself after login. Do not click anything.'
-Publish-Report
-    shutdown /r /t 20 /c "Sonic Scout needs one restart to finish."
+    Log 'Restarting in 30 seconds. Setup finishes by itself after login.'
+    Publish-Report
+    for ($left = 30; $left -ge 1; $left--) {
+        Write-Host "RESTART IN $left"
+        Start-Sleep -Seconds 1
+    }
+    shutdown /r /t 0 /c "Sonic Scout needs one restart to finish."
     exit 0
 }
 Log 'PASS setup finished. Hi-Fi Cable is bound. No more clicks.'
