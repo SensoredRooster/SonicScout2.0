@@ -62,25 +62,8 @@ set "INSTALLERS=%~dp0installers"
 if not exist "%INSTALLERS%" mkdir "%INSTALLERS%"
 set "SS_INSTALLERS=%INSTALLERS%"
 
-if "%DOWNLOAD_EQUALIZER%"=="1" (
-  echo [1/3] Downloading Equalizer APO...
-  powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('https://sourceforge.net/projects/equalizerapo/files/1.4.2/EqualizerAPO-x64-1.4.2.exe/download', (Join-Path $env:SS_INSTALLERS 'EqualizerAPO_Setup.exe'))"
-  if exist "%INSTALLERS%\EqualizerAPO_Setup.exe" (
-    powershell -NoProfile -Command "$bytes = [System.IO.File]::ReadAllBytes((Join-Path $env:SS_INSTALLERS 'EqualizerAPO_Setup.exe')); if ($bytes.Length -lt 1048576 -or $bytes[0] -ne 77 -or $bytes[1] -ne 90) { exit 1 }"
-    if errorlevel 1 (
-      del /q "%INSTALLERS%\EqualizerAPO_Setup.exe" >nul 2>&1
-      echo [FAIL] Equalizer APO download was not a valid Windows installer
-    ) else (
-      echo [OK] Equalizer APO downloaded
-    )
-  ) else (
-    echo [FAIL] Equalizer APO download failed
-  )
-)
-echo.
-
 if "%DOWNLOAD_VBCABLE%"=="1" (
-echo [2/3] Downloading VB-Cable...
+echo [1/3] Downloading VB-Cable...
 powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack45.zip', (Join-Path $env:SS_INSTALLERS 'VBCABLE_Driver.zip'))"
 if exist "%INSTALLERS%\VBCABLE_Driver.zip" (
   powershell -NoProfile -Command "Expand-Archive -Path (Join-Path $env:SS_INSTALLERS 'VBCABLE_Driver.zip') -DestinationPath (Join-Path $env:SS_INSTALLERS 'VBCABLE') -Force"
@@ -93,6 +76,23 @@ if exist "%INSTALLERS%\VBCABLE_Driver.zip" (
 ) else (
   echo [FAIL] VB-Cable download failed
 )
+)
+echo.
+
+if "%DOWNLOAD_EQUALIZER%"=="1" (
+  echo [2/3] Downloading Equalizer APO...
+  powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('https://sourceforge.net/projects/equalizerapo/files/1.4.2/EqualizerAPO-x64-1.4.2.exe/download', (Join-Path $env:SS_INSTALLERS 'EqualizerAPO_Setup.exe'))"
+  if exist "%INSTALLERS%\EqualizerAPO_Setup.exe" (
+    powershell -NoProfile -Command "$bytes = [System.IO.File]::ReadAllBytes((Join-Path $env:SS_INSTALLERS 'EqualizerAPO_Setup.exe')); if ($bytes.Length -lt 1048576 -or $bytes[0] -ne 77 -or $bytes[1] -ne 90) { exit 1 }"
+    if errorlevel 1 (
+      del /q "%INSTALLERS%\EqualizerAPO_Setup.exe" >nul 2>&1
+      echo [FAIL] Equalizer APO download was not a valid Windows installer
+    ) else (
+      echo [OK] Equalizer APO downloaded
+    )
+  ) else (
+    echo [FAIL] Equalizer APO download failed
+  )
 )
 echo.
 
