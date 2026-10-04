@@ -298,10 +298,20 @@ public partial class MainWindow : Window
             startInfo.ArgumentList.Add("-File");
             startInfo.ArgumentList.Add(setupScriptPath);
             startInfo.ArgumentList.Add("-Mode");
-            startInfo.ArgumentList.Add("Install");
+            // Preflight, NOT Install. This runs on EVERY app launch to decide whether
+            // the setup wizard is needed, so it must only ASK.
+            //
+            // With -Mode Install this was actively wrong twice over: Request-ElevationIfNeeded
+            // fires a UAC prompt and then `exit 0` when the app is not elevated, so a
+            // launch that installed nothing was recorded as preflight success; and when
+            // the app WAS elevated it ran the entire dependency install inline, with no
+            // timeout, every single time the app opened.
+            //
+            // Preflight skips elevation entirely (setup_audio_stack.ps1:85) and exits 2
+            // when setup is incomplete, which is the signal this method actually wants.
+            startInfo.ArgumentList.Add("Preflight");
             startInfo.ArgumentList.Add("-Quiet");
             startInfo.ArgumentList.Add("-NonInteractive");
-            startInfo.ArgumentList.Add("-OwnershipAccepted");
 
             using Process process = new() { StartInfo = startInfo };
             if (!process.Start())
@@ -309,7 +319,23 @@ public partial class MainWindow : Window
                 return null;
             }
 
-            await process.WaitForExitAsync(cancellationToken);
+            // Bounded so a wedged dependency check can never block app startup
+            // indefinitely. Returning null makes the caller treat the wizard as needed,
+            // which is the safe direction to be wrong in.
+            using CancellationTokenSource timeoutSource = new(TimeSpan.FromMinutes(3));
+            using CancellationTokenSource linked =
+                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token);
+
+            try
+            {
+                await process.WaitForExitAsync(linked.Token);
+            }
+            catch (OperationCanceledException) when (timeoutSource.IsCancellationRequested)
+            {
+                try { process.Kill(entireProcessTree: true); } catch { /* already gone */ }
+                return null;
+            }
+
             return process.ExitCode;
         }
         catch (InvalidOperationException)

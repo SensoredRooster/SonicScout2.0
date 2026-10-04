@@ -618,6 +618,211 @@ function Test-EapoInFxSlots {
     return $false
 }
 
+function Get-DeviceFxSlotSnapshot {
+    <#
+    .SYNOPSIS
+        Reads the device's LFX (,1) and GFX (,2) FX slot values so they can be put back
+        after Install-LEQRegistry overwrites them.
+    .DESCRIPTION
+        This is what removes the "open E-APO Device Selector and re-tick the device"
+        manual step. Install-LEQRegistry writes its own LEQ/OTHER APO GUIDs into slots
+        ,1 and ,2 (see the $fxValues table), which is exactly what the Device Selector
+        lets a user do by hand. Because nothing snapshotted those two values first, the
+        only way back to an E-APO chain was for the user to re-tick it in a GUI whose
+        state we could not read back or verify.
+
+        Snapshot BEFORE the install, restore AFTER. Taken after, it would just capture
+        the GUIDs Install-LEQRegistry had already written.
+
+        E-APO writes its pre-mix/post-mix child APO GUIDs into these slots, which is
+        what Test-EapoInFxSlots looks for. Those are the values worth restoring.
+
+        $null is a meaningful result, not a failure: it means the slot held nothing, and
+        restoring a value into it would ADD FX activation the user never had.
+    .PARAMETER DeviceGuid
+        Endpoint GUID (the leaf folder name under MMDevices\Audio\Render).
+    .OUTPUTS
+        PSCustomObject with Lfx and Gfx string-or-null members.
+    #>
+    param([Parameter(Mandatory)] [string]$DeviceGuid)
+
+    $DeviceGuid = $DeviceGuid.Trim('{}')
+    $fxPath = Join-Path $script:REG_MMDEVICES_RENDER "$DeviceGuid\FxProperties"
+
+    $snapshot = [pscustomobject]@{ Lfx = $null; Gfx = $null }
+
+    if (-not (Test-Path -LiteralPath $fxPath)) { return $snapshot }
+
+    $fxProps = Get-ItemProperty -LiteralPath $fxPath -ErrorAction SilentlyContinue
+    if (-not $fxProps) { return $snapshot }
+
+    foreach ($pair in @(
+        @{ Name = 'Lfx'; Slot = $script:FX_SLOT_LFX },
+        @{ Name = 'Gfx'; Slot = $script:FX_SLOT_GFX }
+    )) {
+        $propName = "$($script:FX_PROPERTY_BASE)$($pair.Slot)"
+        if ($fxProps.PSObject.Properties.Name -contains $propName) {
+            $value = $fxProps.$propName
+            # REG_SZ arrives as a string. A REG_BINARY slot cannot be represented as
+            # one and is reported as $null rather than coerced to "System.Byte[]",
+            # which would otherwise be written back verbatim as garbage.
+            if ($value -is [string] -and -not [string]::IsNullOrWhiteSpace($value)) {
+                $snapshot.$($pair.Name) = $value
+            }
+            elseif ($value -is [byte[]]) {
+                $decoded = [System.Text.Encoding]::Unicode.GetString($value).TrimEnd([char]0)
+                if ($decoded -match '^\{[0-9A-Fa-f\-]{36}\}$') {
+                    $snapshot.$($pair.Name) = $decoded
+                } else {
+                    Write-Verbose "[FX-SNAPSHOT] $($pair.Name) slot is binary and not a GUID; leaving it alone."
+                }
+            }
+        }
+    }
+
+    return $snapshot
+}
+
+function Restore-DeviceFxSlots {
+    <#
+    .SYNOPSIS
+        Writes previously snapshotted LFX/GFX values back, and verifies BOTH slots.
+    .DESCRIPTION
+        The programmatic equivalent of ticking the device in E-APO's Device Selector,
+        and unlike the GUI it reports whether it actually took effect.
+
+        Two guards make this safe to call unconditionally after an install:
+
+          - Only slots passed in a non-null snapshot value are written. A slot that was
+            empty before the install stays empty, so we never ADD FX activation.
+          - Only slots currently holding one of OUR OWN GUIDs are overwritten. If
+            something else changed the slot since the snapshot (another E-APO component,
+            a driver reinstall), this leaves it alone instead of clobbering it.
+
+        A failed audiosrv restart is not treated as failure: the registry write is the
+        durable part and Windows will pick it up on next boot regardless. That is
+        reported rather than swallowed.
+    .PARAMETER DeviceGuid
+        Endpoint GUID (the leaf folder name under MMDevices\Audio\Render).
+    .PARAMETER LfxGuid
+        Value to restore into slot ,1, or $null to leave that slot alone.
+    .PARAMETER GfxGuid
+        Value to restore into slot ,2, or $null to leave that slot alone.
+    .OUTPUTS
+        PSCustomObject @{ Restored; Verified; Detail }
+    #>
+    param(
+        [Parameter(Mandatory)] [string]$DeviceGuid,
+        [string]$LfxGuid,
+        [string]$GfxGuid
+    )
+
+    $DeviceGuid = $DeviceGuid.Trim('{}')
+    $fxPath = Join-Path $script:REG_MMDEVICES_RENDER "$DeviceGuid\FxProperties"
+
+    $result = [pscustomobject]@{ Restored = $false; Verified = $false; Detail = '' }
+
+    if (-not (Test-Path -LiteralPath $fxPath)) {
+        $result.Detail = "FxProperties key missing for $DeviceGuid."
+        return $result
+    }
+
+    if ([string]::IsNullOrWhiteSpace($LfxGuid) -and [string]::IsNullOrWhiteSpace($GfxGuid)) {
+        $result.Detail = 'Nothing to restore.'
+        return $result
+    }
+
+    $ourGuids = @($script:LEQ_APO_GUID, $script:OTHER_APO_GUID)
+    $values = @()
+
+    foreach ($pair in @(
+        @{ Slot = $script:FX_SLOT_LFX; Guid = $LfxGuid },
+        @{ Slot = $script:FX_SLOT_GFX; Guid = $GfxGuid }
+    )) {
+        if ([string]::IsNullOrWhiteSpace($pair.Guid)) { continue }
+
+        $propName = "$($script:FX_PROPERTY_BASE)$($pair.Slot)"
+
+        # Guard: only overwrite a slot that is currently ours.
+        $current = $null
+        $fxProps = Get-ItemProperty -LiteralPath $fxPath -ErrorAction SilentlyContinue
+        if ($fxProps -and $fxProps.PSObject.Properties.Name -contains $propName) {
+            $current = $fxProps.$propName
+            if ($current -is [byte[]]) {
+                $current = [System.Text.Encoding]::Unicode.GetString($current).TrimEnd([char]0)
+            }
+        }
+
+        $currentIsOurs = $false
+        if ($current -is [string]) {
+            foreach ($ours in $ourGuids) {
+                if ($current -match [regex]::Escape($ours)) { $currentIsOurs = $true; break }
+            }
+        }
+
+        if ($current -is [string] -and -not $currentIsOurs -and $current -ne $pair.Guid) {
+            Write-Output "[FX-RESTORE] Skipping slot $($pair.Slot): it now holds '$current', which this run did not write."
+            continue
+        }
+
+        $values += @{
+            Name = $propName
+            Type = [uint32]1
+            Data = [System.Text.Encoding]::Unicode.GetBytes($pair.Guid + [char]0)
+        }
+    }
+
+    if ($values.Count -eq 0) {
+        $result.Detail = 'No slots needed restoring.'
+        return $result
+    }
+
+    if (-not (Write-RegistryValues -Path $fxPath -Values $values)) {
+        $result.Detail = 'Registry write failed while restoring FX slots.'
+        return $result
+    }
+
+    $result.Restored = $true
+
+    # Verify BOTH slots. The pre-existing install verify only ever checked LFX, which
+    # is why a failed GFX restore could not be detected at all.
+    $verified = $true
+    $detail = @()
+    foreach ($pair in @(
+        @{ Slot = $script:FX_SLOT_LFX; Guid = $LfxGuid },
+        @{ Slot = $script:FX_SLOT_GFX; Guid = $GfxGuid }
+    )) {
+        if ([string]::IsNullOrWhiteSpace($pair.Guid)) { continue }
+
+        $propName = "$($script:FX_PROPERTY_BASE)$($pair.Slot)"
+        $check = Get-ItemProperty -LiteralPath $fxPath -ErrorAction SilentlyContinue
+        $actual = $null
+        if ($check -and $check.PSObject.Properties.Name -contains $propName) {
+            $actual = $check.$propName
+            if ($actual -is [byte[]]) {
+                $actual = [System.Text.Encoding]::Unicode.GetString($actual).TrimEnd([char]0)
+            }
+        }
+
+        if ($actual -is [string] -and $actual -ieq $pair.Guid) {
+            $detail += "slot $($pair.Slot) OK"
+        } else {
+            $verified = $false
+            $detail += "slot $($pair.Slot) MISMATCH (read back: '$actual')"
+        }
+    }
+
+    $result.Verified = $verified
+    $result.Detail = $detail -join '; '
+
+    # Not fatal. The registry write is durable and applies on next boot regardless.
+    try { Restart-Service audiosrv -Force -ErrorAction Stop } catch {
+        Write-Verbose "[FX-RESTORE] audiosrv restart failed: $($_.Exception.GetType().Name). Changes apply after reboot."
+    }
+
+    return $result
+}
+
 function Get-DeviceAudioFormat {
     param(
         [Parameter(Mandatory)] [string]$DeviceGuid
@@ -1157,21 +1362,31 @@ function Install-LEQRegistry {
         $verifyFailed = $true
     }
 
-    # Check LFX slot
-    $lfxSlotKey = "$($script:FX_PROPERTY_BASE)$($script:FX_SLOT_LFX)"
-    $lfxVal = $null
-    if ($fxVerify -and $fxVerify.PSObject.Properties.Name -contains $lfxSlotKey) {
-        $lfxVal = $fxVerify.PSObject.Properties |
-            Where-Object { $_.Name -eq $lfxSlotKey } |
-            Select-Object -ExpandProperty Value
-    }
-    if ($lfxVal -ieq $script:LEQ_APO_GUID) {
-        Write-Output "[INSTALL] [VERIFY] LFX slot = OK"
-    } else {
-        Write-Output "[INSTALL] [VERIFY] LFX slot = WRONG"
-        Write-Output "[INSTALL] [VERIFY]   Expected: $($script:LEQ_APO_GUID)"
-        Write-Output "[INSTALL] [VERIFY]   Actual  : $(if ($lfxVal) { $lfxVal } else { '(not set)' })"
-        $verifyFailed = $true
+    # Check BOTH the LFX and GFX slots. Only LFX was verified before, so a failed or
+    # clobbered GFX write was indistinguishable from success -- which is part of why
+    # E-APO needed re-enabling by hand and nobody could tell whether it had stuck.
+    foreach ($slotCheck in @(
+        @{ Label = 'LFX'; Slot = $script:FX_SLOT_LFX; Expected = $script:LEQ_APO_GUID },
+        @{ Label = 'GFX'; Slot = $script:FX_SLOT_GFX; Expected = $script:OTHER_APO_GUID }
+    )) {
+        $slotKey = "$($script:FX_PROPERTY_BASE)$($slotCheck.Slot)"
+        $slotVal = $null
+        if ($fxVerify -and $fxVerify.PSObject.Properties.Name -contains $slotKey) {
+            $slotVal = $fxVerify.PSObject.Properties |
+                Where-Object { $_.Name -eq $slotKey } |
+                Select-Object -ExpandProperty Value
+            if ($slotVal -is [byte[]]) {
+                $slotVal = [System.Text.Encoding]::Unicode.GetString($slotVal).TrimEnd([char]0)
+            }
+        }
+        if ($slotVal -ieq $slotCheck.Expected) {
+            Write-Output "[INSTALL] [VERIFY] $($slotCheck.Label) slot = OK"
+        } else {
+            Write-Output "[INSTALL] [VERIFY] $($slotCheck.Label) slot = WRONG"
+            Write-Output "[INSTALL] [VERIFY]   Expected: $($slotCheck.Expected)"
+            Write-Output "[INSTALL] [VERIFY]   Actual  : $(if ($slotVal) { $slotVal } else { '(not set)' })"
+            $verifyFailed = $true
+        }
     }
 
     if ($verifyFailed) {

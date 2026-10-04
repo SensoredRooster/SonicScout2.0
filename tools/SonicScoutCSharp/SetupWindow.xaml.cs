@@ -112,16 +112,41 @@ public partial class SetupWindow : Window
                 return;
             }
 
-            DefaultOutputComboBox.SelectedIndex = 0;
+            // Auto-select the output the user actually hears sound from. The old
+            // SelectedIndex = 0 picked whichever endpoint sorted first ALPHABETICALLY
+            // (DiscoverOutputEndpointsAsync orders by display name), which on a machine
+            // with a virtual cable installed routinely landed on the cable rather than
+            // the physical device -- and every later step then routed tuned audio back
+            // into the loop. Ranked now, with the reason reported so it stays visible.
+            int recommendedIndex = SelectRecommendedOutputIndex();
+            DefaultOutputComboBox.SelectedIndex = recommendedIndex;
             SetupStyleComboBox.SelectedIndex = 0;
+
+            // Auto-detect third-party mixers instead of asking. Ticking these changes
+            // routing behaviour, so a wrong guess is worse than no guess -- but they
+            // are presence facts, not preferences, and every one of them is already
+            // discoverable from the render endpoints we just enumerated.
+            DetectMixerCompatibility();
+
             OwnershipConsentCheckBox.IsChecked = false;
-            RoutingConsentCheckBox.IsChecked = false;
-            DependencyConsentCheckBox.IsChecked = false;
             UpdateSetupStyleHint();
             CheckList.Items.Add(CreateRow(new SetupCheckResult("Device discovery", "READY", $"Discovered {discoveredOutputs.Count} active output endpoint(s).")));
-            SummaryText.Text = "Select your default output and compatibility flags, then run setup.";
-            ActionHintText.Text = "Choose the device you actually hear sound from, then click RUN INSTALL SETUP.";
-            StepText.Text = "STEP 1 OF 4  |  CHOOSE YOUR OUTPUT, ROUTE STYLE, AND COMPATIBILITY";
+            CheckList.Items.Add(CreateRow(new SetupCheckResult(
+                "Default output",
+                "READY",
+                $"Pre-selected '{discoveredOutputs[recommendedIndex].DisplayName}'. If that is not what you hear sound from, change it above before running setup.")));
+            AppendMixerDetectionRows();
+
+            bool autoDetected = VoicemeeterCheckBox.IsChecked == true
+                || WaveLinkCheckBox.IsChecked == true
+                || SoundBlasterCheckBox.IsChecked == true
+                || OtherMixerCheckBox.IsChecked == true;
+
+            SummaryText.Text = "Confirm the output, then authorise setup.";
+            ActionHintText.Text = autoDetected
+                ? "Third-party mixers were detected and checked for you. Untick any that are not in use, then tick the authorisation box and run setup."
+                : "Check the output is the device you hear sound from, tick the authorisation box, then run setup.";
+            StepText.Text = "STEP 1 OF 4  |  CONFIRM YOUR OUTPUT AND AUTHORISE SETUP";
             SetInstallerInputEnabled(true);
             DoneButton.IsEnabled = true;
             DoneButton.Content = "CLOSE";
@@ -169,13 +194,169 @@ public partial class SetupWindow : Window
             selectedOutput.Id,
             selectedOutput.DisplayName,
             GetSelectedSetupStyle(),
-            OwnershipConsentCheckBox.IsChecked == true,
-            RoutingConsentCheckBox.IsChecked == true,
-            DependencyConsentCheckBox.IsChecked == true,
+OwnershipConsentCheckBox.IsChecked == true,
+        OwnershipConsentCheckBox.IsChecked == true,
+        OwnershipConsentCheckBox.IsChecked == true,
             VoicemeeterCheckBox.IsChecked == true,
             WaveLinkCheckBox.IsChecked == true,
             SoundBlasterCheckBox.IsChecked == true,
             OtherMixerCheckBox.IsChecked == true);
+    }
+
+    // Endpoint-name fragments that identify a VIRTUAL endpoint. Anything matching is
+    // not a valid "the device I actually hear sound from" answer, so it is excluded
+    // from auto-selection outright rather than merely ranked lower.
+    private static readonly string[] VirtualOutputMarkers =
+    {
+        "cable", "voicemeeter", "vb-audio", "vb-cable", "virtual",
+        "sonic scout", "sonicscout", "scoutpass", "scout pass", "loopback",
+    };
+
+    // Physical-output hints, best score first. Ranked so "Headphones (USB-1)" beats
+    // "Speakers (Realtek)" beats a name we cannot classify.
+    private static readonly (string Marker, int Score)[] PhysicalOutputHints =
+    {
+        ("headphone", 0),
+        ("headset", 0),
+        ("earphone", 0),
+        ("dac", 1),
+        ("amp", 2),
+        ("usb", 3),
+        ("speaker", 4),
+    };
+
+    private static bool IsVirtualOutputName(string name) =>
+        VirtualOutputMarkers.Any(marker => name.Contains(marker, StringComparison.OrdinalIgnoreCase));
+
+    private int SelectRecommendedOutputIndex()
+    {
+        int bestIndex = 0;
+        int bestScore = int.MaxValue;
+
+        for (int index = 0; index < discoveredOutputs.Count; index++)
+        {
+            string name = discoveredOutputs[index].DisplayName;
+            if (IsVirtualOutputName(name)) { continue; }
+
+            int score = PhysicalOutputHints
+                .Where(hint => name.Contains(hint.Marker, StringComparison.OrdinalIgnoreCase))
+                .Select(hint => hint.Score)
+                .DefaultIfEmpty(5)
+                .Min();
+
+            if (score < bestScore)
+            {
+                bestScore = score;
+                bestIndex = index;
+            }
+        }
+
+        // bestScore is still int.MaxValue when EVERY endpoint looked virtual (a
+        // Voicemeeter-only machine, say). Fall back to index 0 rather than refusing
+        // to choose -- the combo sits directly above this list and stays editable.
+        return bestIndex;
+    }
+
+    private void DetectMixerCompatibility()
+    {
+        bool voicemeeter = false;
+        bool waveLink = false;
+        bool soundBlaster = false;
+
+        foreach (AudioEndpointOption output in discoveredOutputs)
+        {
+            string name = output.DisplayName;
+            voicemeeter |= name.Contains("voicemeeter", StringComparison.OrdinalIgnoreCase);
+            waveLink |= name.Contains("wave link", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("wavelink", StringComparison.OrdinalIgnoreCase);
+            soundBlaster |= name.Contains("sound blaster", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("blaster", StringComparison.OrdinalIgnoreCase);
+        }
+
+        VoicemeeterCheckBox.IsChecked = voicemeeter;
+        WaveLinkCheckBox.IsChecked = waveLink;
+        SoundBlasterCheckBox.IsChecked = soundBlaster;
+
+        // SonicPass compatibility is deliberately NOT auto-ticked. It maps to
+        // UseOtherMixerCompatibility, which puts the app into compatibility-safe
+        // routing and REFUSES to hand the virtual endpoint to SonicScout
+        // (MainWindow.xaml.cs:2050). Ticking it by default would quietly disable
+        // the main direct route. It stays an explicit opt-in.
+        OtherMixerCheckBox.IsChecked = false;
+    }
+
+    private void AppendMixerDetectionRows()
+    {
+        (System.Windows.Controls.CheckBox Box, string Name)[] boxes =
+        {
+            (VoicemeeterCheckBox, "Voicemeeter"),
+            (WaveLinkCheckBox, "Elgato Wave Link"),
+            (SoundBlasterCheckBox, "Creative Sound Blaster"),
+            (OtherMixerCheckBox, "SonicPass compatibility"),
+        };
+
+        foreach ((System.Windows.Controls.CheckBox box, string name) in boxes)
+        {
+            bool on = box.IsChecked == true;
+            CheckList.Items.Add(CreateRow(new SetupCheckResult(
+                name,
+                "READY",
+                on
+                    ? "Detected on this PC and ticked for you. Untick it if you do not route through this mixer."
+                    : "Not detected. Tick it only if you route audio through this mixer.")));
+        }
+    }
+
+    private void AppendRemainingManualSteps(bool allChecksPassed)
+    {
+        (string Title, string Steps)[] manual =
+        {
+            ("Restart Windows",
+                "1. Save your work and click Start > Power > Restart.\n" +
+                "2. Wait for Windows to finish. Driver and audio changes are not live until after this.\n" +
+                "3. Reopen Sonic Scout. Nothing else is needed - it remembers your choices."),
+
+            ("Set your default playback device",
+                "1. Click Start, type 'Sound Settings', press Enter.\n" +
+                "2. Under 'Choose your output device', click the Sonic Scout endpoint.\n" +
+                "3. Confirm it now says 'Default' underneath.\n" +
+                "Left unchanged, Windows keeps playing through your speakers directly and the equalizer is bypassed."),
+
+            ("Turn Spatial Sound off for that device",
+                "1. Still in Sound Settings, click your Sonic Scout device to open it.\n" +
+                "2. Under Spatial sound, set it to Off.\n" +
+                "3. Do the same for the device you will actually be playing through.\n" +
+                "Windows Sonic / Dolby Atmos / DTS:X silently block Equalizer APO when left on, and the " +
+                "equalizer will appear to do nothing."),
+
+            ("Point each game or app at the virtual input",
+                "1. In each game or app's audio settings, choose the Sonic Scout VIRTUAL INPUT as its output.\n" +
+                "2. Do NOT change your Windows default device for this - only the per-app setting.\n" +
+                "3. If a game has no output selector, Windows routing (Settings > System > Sound > " +
+                "Advanced sound settings > App volume and device preferences) works instead.\n" +
+                "This is per-app by design: Sonic Scout receives the app's audio, applies your tune, " +
+                "and passes it to your speakers. Leave the app on your speakers and it bypasses the tune."),
+        };
+
+        for (int i = 0; i < manual.Length; i++)
+        {
+            CheckList.Items.Add(CreateRow(new SetupCheckResult(
+                $"MANUAL STEP {i + 1} of {manual.Length}: {manual[i].Title}",
+                "READY",
+                manual[i].Steps)));
+        }
+
+        CheckList.Items.Add(CreateRow(new SetupCheckResult(
+            "Everything else was automatic",
+            allChecksPassed ? "READY" : "UPDATE",
+            allChecksPassed
+                ? "Drivers, routing, the equalizer, the tuned channel and SonicPass were all configured " +
+                  "for you. Only the steps above need you."
+                : "Some automatic steps did not complete - see the yellow and red rows above. Fix " +
+                  "those first, then rerun setup before doing the manual steps.")));
+
+        SummaryText.Text = "Setup finished.";
+        ActionHintText.Text = "Follow the numbered MANUAL STEP rows below, then click VERIFY SETTINGS.";
     }
 
     private string GetSelectedSetupStyle()
@@ -204,8 +385,6 @@ public partial class SetupWindow : Window
         DefaultOutputComboBox.IsEnabled = enabled;
         SetupStyleComboBox.IsEnabled = enabled;
         OwnershipConsentCheckBox.IsEnabled = enabled;
-        RoutingConsentCheckBox.IsEnabled = enabled;
-        DependencyConsentCheckBox.IsEnabled = enabled;
         VoicemeeterCheckBox.IsEnabled = enabled;
         WaveLinkCheckBox.IsEnabled = enabled;
         SoundBlasterCheckBox.IsEnabled = enabled;
@@ -215,9 +394,7 @@ public partial class SetupWindow : Window
 
     private bool HasRequiredConsents()
     {
-        return OwnershipConsentCheckBox.IsChecked == true &&
-               RoutingConsentCheckBox.IsChecked == true &&
-               DependencyConsentCheckBox.IsChecked == true;
+        return OwnershipConsentCheckBox.IsChecked == true;
     }
 
     private static void SetWrappedButtonText(System.Windows.Controls.Button button, string text)
@@ -246,7 +423,7 @@ public partial class SetupWindow : Window
         BeginSetupButton.IsEnabled = setupInputsEnabled && discoveredOutputs.Count > 0;
         SetWrappedButtonText(BeginSetupButton, HasRequiredConsents()
             ? "RUN INSTALL SETUP"
-            : "CONFIRM 3 CHECKBOXES ABOVE");
+            : "TICK THE AUTHORISATION BOX ABOVE");
     }
 
     private void SetupStyleComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -273,7 +450,7 @@ public partial class SetupWindow : Window
         }
         if (!HasRequiredConsents())
         {
-            SummaryText.Text = "Confirm ownership, routing apply permission, and dependency acknowledgement before running setup.";
+            SummaryText.Text = "Tick the authorisation box before running setup.";
             return;
         }
 
@@ -318,6 +495,13 @@ public partial class SetupWindow : Window
             StepText.Text = problems == 0
                 ? "STEP 3 OF 4  |  AUDIO STACK READY - VERIFY WINDOWS SETTINGS"
                 : "STEP 3 OF 4  |  REVIEW ITEMS NEEDING ATTENTION";
+
+            // Everything the machine could do has now been done. Spell out the rest as
+            // explicit numbered steps, because a wizard that simply stops leaves the
+            // user guessing -- and these are the only actions left that no code path
+            // can perform. Each line names WHERE to click and WHAT to check, not just
+            // what needs doing.
+            AppendRemainingManualSteps(problems == 0);
         }
         catch (InvalidOperationException exception)
         {

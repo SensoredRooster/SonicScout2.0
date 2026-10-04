@@ -607,6 +607,95 @@ internal sealed class AudioService : IDisposable
     }
 
 
+    /// <summary>
+    /// Reads a device's LFX/GFX FX slot values so they can be restored after an LEQ
+    /// install overwrites them. Taken BEFORE the install -- afterwards it would just
+    /// capture what Install-LEQRegistry just wrote.
+    /// </summary>
+    public async Task<(string? Lfx, string? Gfx)> GetDeviceFxSlotSnapshotAsync(string deviceId)
+    {
+        return await Task.Run(() =>
+        {
+            try
+            {
+                using (var psWrapper = CreateConfiguredPowerShell())
+                {
+                    var ps = psWrapper.PowerShell;
+                    ps.AddCommand("Get-DeviceFxSlotSnapshot")
+                      .AddParameter("DeviceGuid", deviceId);
+
+                    var results = InvokeWithTimeout(ps);
+                    if (results != null && results.Count > 0)
+                    {
+                        var obj = results[0]?.BaseObject;
+                        if (obj is PSObject pso)
+                        {
+                            return (pso.Properties["Lfx"]?.Value as string,
+                                    pso.Properties["Gfx"]?.Value as string);
+                        }
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                #if DEBUG
+                Debug.WriteLine("AudioService: FX slot snapshot failed");
+                #endif
+                // Falling through returns (null, null), which the caller reads as
+                // "nothing to restore" and skips the restore rather than guessing a GUID.
+            }
+
+            // (null, null) means "nothing to restore", which makes the caller skip the
+            // restore rather than write a value into a slot the user never had set.
+            return ((string?)null, (string?)null);
+        });
+    }
+
+    /// <summary>
+    /// Writes previously snapshotted LFX/GFX values back and verifies BOTH slots.
+    /// This is the programmatic equivalent of re-ticking the device in E-APO's Device
+    /// Selector, with the difference that it reports whether it actually took.
+    /// </summary>
+    public async Task<(bool Restored, bool Verified, string Detail)> RestoreDeviceFxSlotsAsync(
+        string deviceId, string? lfxGuid, string? gfxGuid)
+    {
+        return await Task.Run(() =>
+        {
+            try
+            {
+                using (var psWrapper = CreateConfiguredPowerShell())
+                {
+                    var ps = psWrapper.PowerShell;
+                    ps.AddCommand("Restore-DeviceFxSlots")
+                      .AddParameter("DeviceGuid", deviceId);
+
+                    // Only pass what we actually captured. A null here means "leave this
+                    // slot alone" on the PowerShell side, which is what stops the restore
+                    // from ADDING FX activation the device never had.
+                    if (!string.IsNullOrWhiteSpace(lfxGuid)) { ps.AddParameter("LfxGuid", lfxGuid); }
+                    if (!string.IsNullOrWhiteSpace(gfxGuid)) { ps.AddParameter("GfxGuid", gfxGuid); }
+
+                    var results = InvokeWithTimeout(ps);
+                    if (results != null && results.Count > 0 && results[0]?.BaseObject is PSObject pso)
+                    {
+                        return (pso.Properties["Restored"]?.Value is true,
+                                pso.Properties["Verified"]?.Value is true,
+                                pso.Properties["Detail"]?.Value as string ?? string.Empty);
+                    }
+
+                    return (false, false, "Restore-DeviceFxSlots returned no result.");
+                }
+            }
+            catch (Exception ex)
+            {
+                #if DEBUG
+                Debug.WriteLine($"AudioService: FX slot restore failed: {ex.Message}");
+                #endif
+                return (false, false, ex.Message);
+            }
+        });
+    }
+
     public async Task<bool> InstallLeqAsync(string deviceId, bool cleanInstall = false)
     {
         return await Task.Run(() =>

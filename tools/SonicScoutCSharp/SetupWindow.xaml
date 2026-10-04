@@ -108,7 +108,7 @@
                             Padding="10"
                             Margin="0,8,0,0">
                         <StackPanel>
-                            <TextBlock Text="Ownership and Apply Confirmation"
+                            <TextBlock Text="Authorisation"
                                        Foreground="{DynamicResource PopupTextBrush}"
                                        FontSize="10.5"
                                        FontWeight="SemiBold"
@@ -118,23 +118,7 @@
                                       Margin="0,0,0,5"
                                       Checked="ConsentCheckBox_Changed"
                                       Unchecked="ConsentCheckBox_Changed">
-                                <TextBlock Text="I confirm this is my system and I authorize Sonic Scout to apply routing ownership changes."
-                                           TextWrapping="Wrap" />
-                            </CheckBox>
-                            <CheckBox x:Name="RoutingConsentCheckBox"
-                                      Foreground="{DynamicResource PopupTextBrush}"
-                                      Margin="0,0,0,5"
-                                      Checked="ConsentCheckBox_Changed"
-                                      Unchecked="ConsentCheckBox_Changed">
-                                <TextBlock Text="I approve Sonic Scout to activate tuned-channel routing and safe fallback to my physical output."
-                                           TextWrapping="Wrap" />
-                            </CheckBox>
-                            <CheckBox x:Name="DependencyConsentCheckBox"
-                                      Foreground="{DynamicResource PopupTextBrush}"
-                                      Checked="ConsentCheckBox_Changed"
-                                      Unchecked="ConsentCheckBox_Changed">
-                                <TextBlock Text="I understand creating a tuned channel may require Voicemeeter or VB-Cable when no compatible DAC/route is available."
-                                           TextWrapping="Wrap" />
+                                <TextBlock TextWrapping="Wrap">I confirm this is my own system, and I authorise Sonic Scout to install audio drivers, change routing ownership, activate the Sonic Scout tuned channel with safe fallback to my physical output, and add VB-Cable / Voicemeeter if no compatible route is available."</TextBlock>
                             </CheckBox>
                         </StackPanel>
                     </Border>

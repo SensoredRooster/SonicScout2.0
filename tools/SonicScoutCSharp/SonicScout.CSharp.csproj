@@ -22,5 +22,23 @@
     <Content Remove="profiles\**" />
     <EmbeddedResource Remove="profiles\**" />
     <None Include="targets\*.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+
+    <!-- setup_audio_stack.ps1 resolves its third-party installers from
+         <app base>\installers (setup_audio_stack.ps1:17). Without these copies the
+         wizard reports "Place the installer in ...\installers" on every published
+         build, because the folder only ever existed in the source tree. -->
+    <None Include="installers\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+    <!-- Download-Installer's last-resort fallback shells to this .bat; setup_audio_stack.ps1:263
+         returns $false without it. -->
+    <None Include="auto_setup_dependencies.bat" Condition="Exists('auto_setup_dependencies.bat')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+  </ItemGroup>
+
+  <!-- Builds ScoutPass with the app so setup never reports "SonicPass is not built".
+       ResolveSonicPassExecutablePath (MainWindow.xaml.cs:1674) looks for
+       SonicScout.ScoutPass.exe beside the app first. The Compile/EmbeddedResource/None
+       Removes above keep ScoutPass's sources out of THIS assembly, so the ProjectReference
+       is the only thing compiling them - without it the two would collide. -->
+  <ItemGroup>
+    <ProjectReference Include="ScoutPass\SonicScout.ScoutPass.csproj" />
   </ItemGroup>
 </Project>

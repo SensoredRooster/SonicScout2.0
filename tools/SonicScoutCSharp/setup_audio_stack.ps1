@@ -302,10 +302,77 @@ function Invoke-InstallerStage {
         return $false
     }
 
+    # Best-effort silent arguments, so a fresh install is not a chain of third-party
+    # GUI click-throughs.
+    #
+    # SAFETY CONTRACT: these are applied BEST-EFFORT and the caller still re-verifies
+    # with & $IsInstalled afterwards (see the FIXED/UPDATE report at the end of
+    # Invoke-InstallerStage). An installer that ignores the flags simply shows its GUI
+    # exactly as it did before, so this can never be worse than the old behaviour -- and
+    # one that accepts them but fails silently is caught by that same verification
+    # instead of being reported as success.
+    #
+    # Deliberately NOT applied to the VB-Audio / VB-Cable driver pack. It has no
+    # reliable silent mode: even with /S it raises a modal "I am aware of the potential
+    # risks" consent that must be clicked, so passing the flag only hides the earlier
+    # screens while still blocking on that one. It is left fully interactive, and
+    # guided through by the stage detail below.
+    $script:SilentInstallArguments = @{
+        'equalizerapo'  = @('/S')
+        'voicemeeter'   = @('/S')
+        'reaplugs'      = @('/S')
+        'he suvi'       = @('/S')
+        'hesuvi'        = @('/S')
+    }
+
+    function Get-SilentInstallArguments {
+        <#
+        .SYNOPSIS
+            Maps an installer file name to its silent switches.
+        .DESCRIPTION
+            Only installers known to accept them get flags. An UNKNOWN installer gets
+            nothing, on purpose: guessing a switch for software we know nothing about is
+            a worse failure mode than showing its window, and the fallback already
+            behaves correctly.
+        #>
+        param([Parameter(Mandatory)] [string]$FileName)
+
+        $name = $FileName.ToLowerInvariant()
+        foreach ($key in $script:SilentInstallArguments.Keys) {
+            if ($name -like "*$key*") {
+                return $script:SilentInstallArguments[$key]
+            }
+        }
+        return @()
+    }
+
     Write-Stage -Name $StageName -State 'RUNNING' -Detail "Launching installer: $($installer.Name)"
+
+    # VB-Audio is named explicitly because it is the one installer that must stay
+    # interactive, and saying so here is what turns an unexplained pause into
+    # step-by-step guidance.
+    $isVBAudio = $installer.Name -match '(?i)vb-?(audio|cable)'
+
+    $silentArgs = Get-SilentInstallArguments -FileName $installer.Name
     try {
         if ($installer.Extension -ieq '.msi') {
             $process = Start-Process -FilePath 'msiexec.exe' -ArgumentList "/i `"$($installer.FullName)`" /passive /norestart" -Wait -PassThru
+        }
+        elseif ($isVBAudio) {
+            Write-Stage -Name $StageName -State 'RUNNING' -Detail @"
+VB-Audio driver pack needs one confirmation from you.
+  1. A 'VBCABLE driver setup' window will appear. Read the notice.
+  2. Click 'Install Driver'.
+  3. If Windows asks to allow changes, choose Yes.
+  4. Wait for 'Installation complete', then close the window.
+Nothing else is required - this is the only manual click in the whole install.
+"@
+            $process = Start-Process -FilePath $installer.FullName -Wait -PassThru
+        }
+        elseif ($silentArgs.Count -gt 0) {
+            $joined = $silentArgs -join ' '
+            Write-Stage -Name $StageName -State 'RUNNING' -Detail "Launching installer: $($installer.Name) $joined"
+            $process = Start-Process -FilePath $installer.FullName -ArgumentList $silentArgs -Wait -PassThru
         }
         else {
             $process = Start-Process -FilePath $installer.FullName -Wait -PassThru

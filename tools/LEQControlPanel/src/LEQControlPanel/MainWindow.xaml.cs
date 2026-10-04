@@ -573,8 +573,15 @@ namespace LEQControlPanel
 
             try
             {
-            // Check if E-APO is configured on this device (used for post-install dialog)
+            // Check if E-APO is configured on this device (used for post-install restore)
             bool eapoOnDevice = false;
+            // Snapshot the device's LFX/GFX FX slot values NOW, before the install
+            // overwrites them with LEQ's own APO GUIDs. This is what lets the E-APO
+            // chain be restored programmatically afterwards instead of asking the user
+            // to re-tick the device in a GUI whose result we cannot verify.
+            // Taken after the install it would only capture what we just wrote.
+            string? eapoLfxSlot = null;
+            string? eapoGfxSlot = null;
             try
             {
                 eapoOnDevice = await _audioService.GetEapoStatusAsync(device.Guid) == true;
@@ -582,6 +589,19 @@ namespace LEQControlPanel
             catch (Exception ex)
             {
                 Log($"Warning: Could not check E-APO status: {ex.Message}");
+            }
+
+            if (eapoOnDevice)
+            {
+                try
+                {
+                    (eapoLfxSlot, eapoGfxSlot) = await _audioService.GetDeviceFxSlotSnapshotAsync(device.Guid);
+                    Log($"E-APO FX slots captured before install - LFX: {(string.IsNullOrWhiteSpace(eapoLfxSlot) ? "(empty)" : eapoLfxSlot)}, GFX: {(string.IsNullOrWhiteSpace(eapoGfxSlot) ? "(empty)" : eapoGfxSlot)}");
+                }
+                catch (Exception ex)
+                {
+                    Log($"Warning: Could not snapshot E-APO FX slots: {ex.Message}");
+                }
             }
 
             // Show pre-install warning if E-APO is active on this device
@@ -729,18 +749,59 @@ namespace LEQControlPanel
                     UpdateLeqIndicator(true, "Verified");
                     UpdateInstallButtonState(true); // Update button to "LEQ Installed" state
 
-                    // If E-APO was on this device, prompt user to reconfigure it
+                    // If E-APO was on this device, restore it programmatically. This replaces the
+                    // old "open Device Selector and make sure the device is checked" prompt:
+                    // that asked the user to redo by hand the exact two registry values we
+                    // had just overwritten, and the GUI offered no way to confirm it took.
+                    // Now it is a write plus a read-back of BOTH slots.
                     if (eapoOnDevice)
                     {
-                        Log("E-APO was active - prompting user to run Device Selector...");
-                        var eapoResult = StyledMessageBox.ShowYesNo(
-                            "E-APO needs to be reconfigured on this device.\n\n" +
-                            $"Open Device Selector, make sure {device.Name} is checked, and close it.\n\n" +
-                            "Open Device Selector now?",
-                            "Restore E-APO");
-                        if (eapoResult == MessageBoxResult.Yes)
+                        Log("E-APO was active - restoring its LFX/GFX slots automatically...");
+
+                        bool haveSnapshot = !string.IsNullOrWhiteSpace(eapoLfxSlot)
+                                         || !string.IsNullOrWhiteSpace(eapoGfxSlot);
+
+                        if (!haveSnapshot)
                         {
-                            LaunchEapoDeviceSelector();
+                            // Nothing was captured, so there is nothing safe to write back.
+                            // Falling back to the GUI is the honest option: writing a
+                            // guessed GUID would be worse than asking.
+                            Log("No E-APO FX slot snapshot available - falling back to Device Selector.");
+                            var fallback = StyledMessageBox.ShowYesNo(
+                                "E-APO was active on this device and Sonic Scout could not read its\n" +
+                                $"current settings, so it cannot restore them automatically.\n\n" +
+                                $"Open E-APO Device Selector, make sure '{device.Name}' is ticked for\n" +
+                                "LFX and GFX, then close it.\n\n" +
+                                "Open Device Selector now?",
+                                "Restore E-APO");
+                            if (fallback == MessageBoxResult.Yes)
+                            {
+                                LaunchEapoDeviceSelector();
+                            }
+                        }
+                        else
+                        {
+                            var restore = await _audioService.RestoreDeviceFxSlotsAsync(
+                                device.Guid, eapoLfxSlot, eapoGfxSlot);
+
+                            if (restore.Restored && restore.Verified)
+                            {
+                                Log($"E-APO LFX/GFX restored and verified ({restore.Detail}).");
+                                UpdateLeqIndicator(true, "LEQ installed - E-APO re-enabled");
+                            }
+                            else if (restore.Restored)
+                            {
+                                // Written but not confirmed. Say so rather than claim success.
+                                Log($"E-APO FX slots written but NOT verified: {restore.Detail}");
+                                Log("Reopen Sonic Scout; if audio is wrong, open E-APO Device Selector and confirm the device is ticked.");
+                                UpdateLeqIndicator(true, "LEQ installed - E-APO unconfirmed");
+                            }
+                            else
+                            {
+                                Log($"E-APO FX slot restore failed: {restore.Detail}");
+                                Log("Open E-APO Device Selector and tick the device for LFX and GFX.");
+                                UpdateLeqIndicator(true, "LEQ installed - E-APO needs attention");
+                            }
                         }
                     }
                 }
@@ -1607,11 +1668,23 @@ namespace LEQControlPanel
             }
             else if (!hasLfxGfx)
             {
+                // Previously this branch DISABLED the button and told the user to run
+                // E-APO's Device Selector first -- while Install-LEQRegistry is the very
+                // thing that writes the LFX/GFX slots (,1 and ,2) this check is looking
+                // for. That was a deadlock: the app blocked its own fix and sent the user
+                // to a GUI whose result it could not verify.
+                //
+                // hasLfxGfx is a proxy -- "does FxProperties hold at least one value" --
+                // not a real slot check, and RegSetValueEx creates values that are not
+                // there yet. So an empty FxProperties key is installable. The one genuine
+                // blocker is a MISSING key, which the engine detects and reports as
+                // "Device does not support audio enhancements" -- an informative error
+                // beats a button that can never become enabled.
                 InstallLeqButton.Style = (Style)FindResource("InstallLeqButtonStyle");
-                InstallLeqButton.IsEnabled = false;
+                InstallLeqButton.IsEnabled = true;
                 InstallLeqIcon.Text = "\u2B07";
                 InstallLeqText.Text = "Install LEQ";
-                InstallLeqButton.ToolTip = "Run E-APO Device Selector first";
+                InstallLeqButton.ToolTip = "Installing LEQ also enables the LFX/GFX slots this device needs";
             }
             else
             {
