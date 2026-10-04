@@ -84,6 +84,16 @@ $script:PluginRemoval = [pscustomobject]@{
 # the desktop-shortcut TargetPath, and every config.txt include.
 $script:SonicScout20Root = Join-Path $env:ProgramFiles "EqualizerAPO\config\SonicScout2.0"
 
+# ---- Backup root resolution ---------------------------------------------
+# Cache for the PROVEN-writable backup root, plus whether THIS run created it.
+# Resolving a backup root is not a read-only act (it creates the folder and writes a
+# probe file to prove usability), so the two are tracked separately: Remove-UnusedBackupRoot
+# must only ever delete a root this run created, never one the user already had holding
+# previous backups. Declared here so StrictMode cannot fault on the many paths where
+# resolution never ran.
+$script:BackupRoot = $null
+$script:BackupRootCreatedByUs = $false
+
 # R2-hosted assets: endpoint icons, HRIR wavs, and the third-party installer mirror.
 $script:AssetBase = "https://raw.githubusercontent.com/sensoredrooster/SonicScout2.0/main"
 
@@ -2116,55 +2126,246 @@ function Get-UrlToFile {
 # ============================================================================
 
 
+function Get-SonicScout20BackupRoot {
+    <#
+    .SYNOPSIS
+        Resolves a "SonicScout2.0 Backups" root that is PROVEN writable, or $null.
+    .DESCRIPTION
+        Every candidate is proven rather than assumed, because the checks that look
+        sufficient are not. Measured on PS 5.1:
+
+          New-Item -ItemType Directory -Force  reports success, returns zero objects,
+          throws nothing even under $ErrorActionPreference = 'Stop', and creates
+          NOTHING when the path runs through a dangling reparse point.
+
+        That single behaviour is why a backup could fail with "Could not find a part
+        of the path '...\SonicScout2.0 Backups\library-<stamp>'" on a machine whose
+        Documents folder was a stale OneDrive Known Folder Move junction.
+
+        The chain deliberately ends at LOCALAPPDATA. $script:SonicScout20Root is NOT a
+        candidate: this helper is shared with Uninstall-ExistingEAPO, and uninstall
+        removes the SonicScout2.0 tree -- a backup written there would be destroyed
+        along with the thing it was backing up.
+    .PARAMETER Force
+        Re-probe and ignore the cache. Passed by the retry affordances so a folder the
+        user has just fixed is re-detected instead of a stale failure being reused.
+    .OUTPUTS
+        Backup root path, or $null when no candidate survived.
+    #>
+    param([switch]$Force)
+
+    if (-not $Force -and $script:BackupRoot) { return $script:BackupRoot }
+
+    # Candidate 1 is GetFolderPath. SpecialFolderOption.None VERIFIES and returns
+    # String.Empty for a missing folder -- it is NOT DoNotVerify. Measured on
+    # PS 5.1.26100.8875 / CLR 4.0.30319. An empty return therefore means Documents is
+    # gone, and the candidate is skipped rather than joined onto: joining it
+    # unconditionally, outside any try, turns it into an uncaught terminating error
+    # under StrictMode that kills the installer instead of degrading.
+    $candidates = @(
+        [Environment]::GetFolderPath('MyDocuments')
+        $(if ($env:OneDrive)    { Join-Path $env:OneDrive 'Documents'    } else { '' })
+        $(if ($env:USERPROFILE) { Join-Path $env:USERPROFILE 'Documents' } else { '' })
+        $env:USERPROFILE
+        $env:LOCALAPPDATA
+    )
+
+    foreach ($candidate in $candidates) {
+        if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+
+        $root       = Join-Path $candidate 'SonicScout2.0 Backups'
+        $preExisted = Test-Path -LiteralPath $root
+        $accepted   = $false
+
+        try {
+            New-Item -Path $root -ItemType Directory -Force | Out-Null
+
+            # Do not trust the line above. Zero objects returned is a signal, not
+            # noise: through a dangling reparse point New-Item reports success and
+            # creates nothing. This assert is the only thing that catches that, and
+            # it also rejects a plain FILE sitting at this name (Directory::Exists is
+            # false for a file).
+            if ([IO.Directory]::Exists($root)) {
+
+                # Probe write. THIS IS THE LOAD-BEARING GUARD. It is the only check
+                # that catches every failing state, and the sole detector for a
+                # dangling junction sitting at 'SonicScout2.0 Backups' ITSELF, where
+                # [IO.Directory]::Exists returns True and every cheaper check passes.
+                # It also catches Controlled Folder Access, which fails on write
+                # rather than on create. Do not optimize it out.
+                $probeFile = Join-Path $root '.sonicscout-write-probe'
+                try {
+                    Set-Content -LiteralPath $probeFile -Value 'probe' -Encoding Ascii -ErrorAction Stop
+                    Remove-Item -LiteralPath $probeFile -Force -ErrorAction Stop
+                    $accepted = $true
+                }
+                catch {
+                    Write-Verbose "Backup root '$root': probe write failed ($($_.Exception.GetType().Name))."
+                    # Only ever remove what THIS run created. A pre-existing folder is
+                    # the user's, whatever state it turned out to be in.
+                    if (-not $preExisted) {
+                        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+                    }
+                }
+            }
+            else {
+                Write-Verbose "Backup root '$root': New-Item reported success but created nothing."
+            }
+        }
+        catch {
+            Write-Verbose "Backup root '$root': $($_.Exception.GetType().Name)."
+        }
+
+        if ($accepted) {
+            $script:BackupRoot            = $root
+            $script:BackupRootCreatedByUs = (-not $preExisted)
+            return $root
+        }
+    }
+
+    return $null
+}
+
+function Remove-UnusedBackupRoot {
+    <#
+    .SYNOPSIS
+        Removes the backup root when THIS run created it and nothing was written in.
+    .DESCRIPTION
+        Resolving a backup root is not a read-only act: Get-SonicScout20BackupRoot creates
+        the folder and writes a probe file to prove it is usable. So an uninstall that
+        resolves a root and is then cancelled would leave a directory behind, and the
+        cancel message ("nothing was changed") would be false.
+
+        Two things this deliberately will NOT do:
+          - touch a root that already existed. That folder is the user's, holding
+            previous backups, whatever this run decided about it.
+          - delete a NON-EMPTY root. A partial copy is still the user's data; it is
+            reported instead, so they can find it.
+    #>
+    if (-not $script:BackupRootCreatedByUs) { return }
+    if (-not $script:BackupRoot) { return }
+    if (-not (Test-Path -LiteralPath $script:BackupRoot)) {
+        # Already gone -- something else removed it. The cache still names it, and a
+        # cached path to a directory that no longer exists is the same defect class as
+        # caching a $null: a later caller would trust a hit that cannot be written to.
+        $script:BackupRoot            = $null
+        $script:BackupRootCreatedByUs = $false
+        return
+    }
+
+    $contents = @(Get-ChildItem -LiteralPath $script:BackupRoot -Force -ErrorAction SilentlyContinue)
+    if ($contents.Count -gt 0) {
+        Write-Host "$($script:BoxMargin)A partial backup was left at: $($script:BackupRoot)" -ForegroundColor DarkGray
+        return
+    }
+
+    Remove-Item -LiteralPath $script:BackupRoot -Recurse -Force -ErrorAction SilentlyContinue
+    # Clear the cache too: the proven-writable path no longer exists, and a later
+    # caller must re-resolve rather than trust a stale hit.
+    $script:BackupRoot            = $null
+    $script:BackupRootCreatedByUs = $false
+}
+
 function Backup-SonicScout20Library {
     <#
     .SYNOPSIS
         Backs up the SonicScout2.0 library folder before destructive operations.
     .OUTPUTS
-        Backup folder path if successful, $null otherwise.
+        Backup folder path if successful, $null when there is nothing to back up,
+        $false when a backup was attempted and failed.
     .PARAMETER Rolling
         Use a single fixed backup dest (library-previous), overwriting any prior
         backup, instead of a timestamped folder. Used by the library updater.
+    .PARAMETER RefreshBackupRoot
+        Forwarded to Get-SonicScout20BackupRoot as -Force. Passed by the retry affordance
+        so a folder the user has just fixed is re-detected rather than a cached
+        result being reused.
     #>
-    param([switch]$Rolling)
+    param([switch]$Rolling, [switch]$RefreshBackupRoot)
 
-    $libraryPath = Join-Path $env:ProgramFiles "EqualizerAPO\config\SonicScout2.0\library"
+    # Via $script:SonicScout20Root, not a second Join-Path off $env:ProgramFiles.
+    # Identical in production, but this function decides whether the library may be
+    # destroyed, so it must read the SAME root the lay-down and the state check use --
+    # one definition, no chance of the two drifting apart.
+    $libraryPath = Join-Path $script:SonicScout20Root "library"
 
     if (-not (Test-Path $libraryPath)) { return $null }
 
     $childItems = @(Get-ChildItem -Path $libraryPath -Recurse -File -ErrorAction SilentlyContinue)
     if ($childItems.Count -eq 0) { return $null }
 
-    $docsFolder = [Environment]::GetFolderPath('MyDocuments')
-    $backupRoot = Join-Path $docsFolder "SonicScout2.0 Backups"
-    if ($Rolling) {
-        # Single rolling dest -- overwrite any prior backup (no timestamped pile).
-        $backupDest = Join-Path $backupRoot "library-previous"
-    } else {
-        $timestamp  = Get-Date -Format "yyyy-MM-dd_HHmmss"
-        $backupDest = Join-Path $backupRoot "library-$timestamp"
+    # Proven writable, not assumed. Get-SonicScout20BackupRoot also guarantees the root
+    # exists, which is why there is no New-Item on it below: the New-Item that used to
+    # live here is exactly the call whose reported success could not be trusted.
+    $backupRoot = Get-SonicScout20BackupRoot -Force:$RefreshBackupRoot
+    if (-not $backupRoot) {
+        Write-Host ""
+        Write-Host "$($script:BoxMargin)Warning: no writable backup location could be found." -ForegroundColor Yellow
+        return $false
     }
 
     Write-Host ""
     Write-Host "$($script:BoxMargin)Backing up SonicScout2.0 library ($($childItems.Count) files)..." -ForegroundColor Cyan
 
     try {
-        if (-not (Test-Path $backupRoot)) {
-            New-Item -Path $backupRoot -ItemType Directory -Force | Out-Null
+        # Inside the try on purpose. Join-Path resolves the PSDrive and throws
+        # "Cannot find drive" if it is gone -- and the root was proven writable a
+        # moment ago, not now. A removable drive pulled, or the folder deleted,
+        # between resolve and use would otherwise crash the installer uncaught,
+        # which is the same shape as the bug this whole change exists to fix.
+        if ($Rolling) {
+            # Single rolling dest -- overwrite any prior backup (no timestamped pile).
+            $backupDest = Join-Path $backupRoot "library-previous"
+        } else {
+            $timestamp  = Get-Date -Format "yyyy-MM-dd_HHmmss"
+            $backupDest = Join-Path $backupRoot "library-$timestamp"
         }
+
         if ($Rolling -and (Test-Path $backupDest)) {
             Remove-Item $backupDest -Recurse -Force -ErrorAction SilentlyContinue
         }
         Copy-Item -Path $libraryPath -Destination $backupDest -Recurse -Force
+
+        # Verify HERE, inside this function and before the return, never in a caller.
+        # Callers render a destructive-confirm prompt on the strength of the value
+        # returned below, so it has to be final by the time they see it.
+        #
+        # The baseline is re-enumerated WITHOUT -ErrorAction SilentlyContinue: the
+        # count taken at the top of this function suppresses errors, so an unreadable
+        # source file silently drops out of it and a short copy would compare equal.
+        # Unsuppressed, any such error throws into the catch and is reported as the
+        # failure it is. Bytes as well as count, because a copy that stalls mid-file
+        # yields the right file count and the wrong size.
+        # -lt, not -ne. The check exists to catch an INCOMPLETE copy, and the
+        # destination legitimately ends up with MORE than the source: Get-ChildItem
+        # -Recurse does not descend a junction inside library\, while Copy-Item
+        # -Recurse copies straight through it (measured: 1 file enumerated, 4 copied).
+        # Treating that as failure would send a user whose backup actually succeeded
+        # to a menu whose option destroys the library.
+        $srcFiles  = @(Get-ChildItem -LiteralPath $libraryPath -Recurse -File)
+        $destFiles = @(Get-ChildItem -LiteralPath $backupDest  -Recurse -File)
+        $srcBytes  = ($srcFiles  | Measure-Object -Property Length -Sum).Sum
+        $destBytes = ($destFiles | Measure-Object -Property Length -Sum).Sum
+        if ($destFiles.Count -lt $srcFiles.Count -or $destBytes -lt $srcBytes) {
+            Write-Host "$($script:BoxMargin)Warning: backup verify failed -- copied $($destFiles.Count) of $($srcFiles.Count) files, $destBytes of $srcBytes bytes." -ForegroundColor Yellow
+            Write-Host "$($script:BoxMargin)Incomplete backup left at: $backupDest" -ForegroundColor DarkGray
+            return $false
+        }
+
         Write-Host "$($script:BoxMargin)Library backed up to:" -ForegroundColor Green
         Write-Host "$($script:BoxMargin)$backupDest" -ForegroundColor DarkGray
         return $backupDest
     }
     catch {
-        Write-Host "$($script:BoxMargin)Warning: Library backup failed: $_" -ForegroundColor Yellow
-        Write-Host "$($script:BoxMargin)Continuing with uninstall..." -ForegroundColor Yellow
+        # Exception TYPE as well as message: the three filesystem states that produce
+        # this are indistinguishable from the message alone, and support cannot tell
+        # them apart without it.
+        Write-Host "$($script:BoxMargin)Warning: Library backup failed: $($_.Exception.GetType().Name): $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "$($script:BoxMargin)Backup location was: $backupRoot" -ForegroundColor DarkGray
         # $false, not $null: callers must be able to tell a FAILED backup from the two
         # "nothing to back up" cases above, which legitimately return $null.
+        # No caller-specific follow-up line here -- this function is shared by the
+        # install and uninstall paths, and each prints its own.
         return $false
     }
 }
@@ -2369,6 +2570,46 @@ function Uninstall-ExistingEAPO {
 
     Write-Host "$($script:BoxMargin)Uninstalling E-APO..." -ForegroundColor Red
 
+    # Detection only, and deliberately hoisted above every mutation below so GATE 1
+    # can run before the machine has been touched at all.
+    $libraryPath = Join-Path $eapoPath "config\SonicScout2.0\library"
+    $libraryFiles = @(Get-ChildItem -Path $libraryPath -Recurse -File -ErrorAction SilentlyContinue)
+
+    # -- GATE 1: no backup location at all ----------------------------------
+    # Placed HERE, above the process kills, and that placement is load-bearing.
+    # Everything from the top of this function to this line is detection: path
+    # joins, a Test-Path, a Get-ChildItem. Nothing has been killed, stopped,
+    # deleted or written, so declining below leaves the machine exactly as found.
+    #
+    # One line further down is irreversible. The Stop-Process pair closes the
+    # user's audio tools, and the E-APO uninstaller further still deletes
+    # config\SonicScout2.0\library outright -- it is the FIRST thing that destroys
+    # the library, not the Remove-Item near the end of this function.
+    #
+    # Every failure state measured for the backup bug fails at root resolution, so
+    # this gate catches all of them before any cost is paid.
+    $acceptedNoBackup = $false
+    if ($libraryFiles.Count -gt 0 -and -not (Get-SonicScout20BackupRoot)) {
+        Write-Host ""
+        Write-Host "$($script:BoxMargin)No writable backup location could be found." -ForegroundColor Red
+        Write-Host "$($script:BoxMargin)Your SonicScout2.0 library ($($libraryFiles.Count) files), including any squig.link" -ForegroundColor Yellow
+        Write-Host "$($script:BoxMargin)EQs you added, would be deleted with NO backup and no way to recover it." -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "$($script:BoxMargin)Type 'yes' to uninstall anyway, or anything else to cancel: " -ForegroundColor Yellow -NoNewline
+        $proceedNoBackup = Read-Host
+        if ($proceedNoBackup -ne 'yes') {
+            Remove-UnusedBackupRoot
+            Write-Host ""
+            Write-Host "$($script:BoxMargin)Uninstall cancelled. Nothing on this PC was changed -- no files were" -ForegroundColor Green
+            Write-Host "$($script:BoxMargin)removed, no programs were closed, and no settings were altered." -ForegroundColor Green
+            return 'Skipped'
+        }
+        # Consent recorded so GATE 2 does not ask the same question twice. With no
+        # root resolvable the backup below is certain to fail, and re-prompting on
+        # that failure reads as the script not having heard the answer just given.
+        $acceptedNoBackup = $true
+    }
+
     # Kill LEQ Control Panel before device removal -- its COM audio callbacks
     # can crash if a third-party driver (e.g. Elgato) corrupts shared state
     # during audio subsystem destabilization (AccessViolationException).
@@ -2377,12 +2618,45 @@ function Uninstall-ExistingEAPO {
 
     # Back up user data before destroying E-APO folder: the SonicScout2.0 library
     # (dated, so squig.link EQs stay recoverable) AND the full E-APO config.
-    $libraryPath = Join-Path $eapoPath "config\SonicScout2.0\library"
-    $libraryFiles = @(Get-ChildItem -Path $libraryPath -Recurse -File -ErrorAction SilentlyContinue)
+    # $libraryPath / $libraryFiles came from the detection block above.
+    $libraryBackupFailed = $false
     if ($libraryFiles.Count -gt 0) {
-        $null = Backup-SonicScout20Library
+        $libraryBackup = Backup-SonicScout20Library
+        # -is [bool] rather than -eq $false: a returned path string compared against
+        # $false would coerce and could never match, so the guard has to test the
+        # type. $null (nothing to back up) is not a failure.
+        if ($libraryBackup -is [bool] -and -not $libraryBackup) { $libraryBackupFailed = $true }
     }
     $null = Backup-EAPOConfig
+
+    # -- GATE 2: the backup ran and failed ----------------------------------
+    # Reached only when resolution succeeded but the copy itself did not, so gate 1
+    # could not have caught it. Still above the Stop-Service pair and well above the
+    # E-APO uninstaller, so declining stops the library from being destroyed.
+    #
+    # This abort is BOUNDED, NOT CLEAN, and the message must not pretend otherwise:
+    # the Stop-Process calls above have already closed the user's audio tools and
+    # nothing here undoes them. That is why the follow-up names them.
+    #
+    # Backup-SonicScout20Library verifies its own copy before returning, so the value
+    # tested here is already final -- there is no in-flight work behind this prompt.
+    if ($libraryBackupFailed -and -not $acceptedNoBackup) {
+        Write-Host ""
+        Write-Host "$($script:BoxMargin)The library backup FAILED, so there is nothing to restore from." -ForegroundColor Red
+        Write-Host "$($script:BoxMargin)Continuing deletes your SonicScout2.0 library ($($libraryFiles.Count) files) and any" -ForegroundColor Yellow
+        Write-Host "$($script:BoxMargin)squig.link EQs in it, permanently." -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "$($script:BoxMargin)Type 'yes' to uninstall anyway, or anything else to cancel: " -ForegroundColor Yellow -NoNewline
+        $proceedFailedBackup = Read-Host
+        if ($proceedFailedBackup -ne 'yes') {
+            Remove-UnusedBackupRoot
+            Write-Host ""
+            Write-Host "$($script:BoxMargin)Uninstall cancelled. Your library was NOT deleted." -ForegroundColor Green
+            Write-Host "$($script:BoxMargin)Note: LEQ Control Panel, Peace, HeSuVi and the E-APO editor were closed" -ForegroundColor DarkGray
+            Write-Host "$($script:BoxMargin)before the backup ran. Nothing else changed -- reopen them as normal." -ForegroundColor DarkGray
+            return 'Skipped'
+        }
+    }
 
     # Stop audio services first (E-APO hooks into them)
     Stop-Service -Name 'Audiosrv' -Force -ErrorAction SilentlyContinue
@@ -4305,15 +4579,582 @@ function Get-SonicScout20LibraryState {
     return [pscustomobject]@{ State = 'None'; Version = '' }
 }
 
+function Test-LibraryBackupPreflight {
+    <#
+    .SYNOPSIS
+        Fails fast, BEFORE the download, on the backup problems a retry cannot fix.
+    .DESCRIPTION
+        Every check here catches a failure that would otherwise surface only after a
+        1 MB fetch, as a mid-copy error, with the real cause buried.
+
+        MAX_PATH is computed PER FILE as <root>\SonicScout2.0 Backups\library-<stamp>\ plus
+        that file's path RELATIVE to the library root, taking the max over the set.
+        Longest-source-path plus root length is the wrong maximum: the longest source
+        path can have a short relative segment. PS 5.1's FileSystem provider does not
+        get long-path support from the LongPathsEnabled policy alone, so 260 is real.
+
+        The enumeration deliberately omits -ErrorAction SilentlyContinue. A source path
+        already over the limit is exactly what this check exists to find, and a
+        suppressed enumeration would silently skip it.
+    .OUTPUTS
+        [bool] -- $false when the caller should not proceed to the download.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$LibraryPath,
+        [Parameter(Mandatory)][string]$BackupRoot
+    )
+
+    try {
+        $files = @(Get-ChildItem -LiteralPath $LibraryPath -Recurse -File)
+    } catch {
+        Write-Host ""
+        Write-Host "$($script:BoxMargin)Your existing library cannot be read, so it cannot be backed up." -ForegroundColor Yellow
+        Write-Host "$($script:BoxMargin)$($_.Exception.GetType().Name): $($_.Exception.Message)" -ForegroundColor DarkGray
+        return $false
+    }
+    if ($files.Count -eq 0) { return $true }
+
+    # -- free space on the drive that will hold the backup --------------------
+    $needed = ($files | Measure-Object -Property Length -Sum).Sum
+    try {
+        $driveRoot = [IO.Path]::GetPathRoot($BackupRoot)
+        $drive     = New-Object IO.DriveInfo($driveRoot)
+        # IsReady is checked FIRST and the whole check skipped when false. On a
+        # not-ready drive (disconnected network share, empty removable bay) the
+        # constructor still succeeds and AvailableFreeSpace yields nothing rather than
+        # throwing, so the catch below never fires -- and a null there compares as 0,
+        # which would report a perfectly good machine as having a full disk.
+        $freeBytes = if ($drive.IsReady) { $drive.AvailableFreeSpace } else { $null }
+        if ($null -ne $freeBytes -and $freeBytes -lt $needed) {
+            Write-Host ""
+            Write-Host "$($script:BoxMargin)Not enough free space to back up your library first." -ForegroundColor Yellow
+            Write-Host "$($script:BoxMargin)Needs $([math]::Round($needed / 1MB, 1)) MB on $driveRoot, $([math]::Round($freeBytes / 1MB, 1)) MB is free." -ForegroundColor DarkGray
+            return $false
+        }
+    } catch {
+        # Not fatal: an unreadable drive is not a reason to block a backup that may
+        # well succeed. Recorded rather than swallowed.
+        Write-Verbose "Free-space check skipped: $($_.Exception.GetType().Name)."
+    }
+
+    # -- free space for the STAGED copy, on the library's own drive ------------
+    # The lay-down stages the new tree as a sibling of library\ before swapping it
+    # in, so peak usage on THIS drive is two copies. Different drive from the backup
+    # in general, hence a second probe rather than a bigger number above.
+    #
+    # PROXY, not the real figure: the incoming release has not been downloaded yet,
+    # so the existing library's size stands in for it. The authoritative check is in
+    # Invoke-AtomicLibraryLayDown, which measures the extracted payload exactly and
+    # also covers the fresh-install path that skips this pre-flight entirely.
+    try {
+        $stageDriveRoot = [IO.Path]::GetPathRoot($LibraryPath)
+        $stageDrive     = New-Object IO.DriveInfo($stageDriveRoot)
+        # Same IsReady-first shape as above, for the same reason. Do not collapse it.
+        $stageFree = if ($stageDrive.IsReady) { $stageDrive.AvailableFreeSpace } else { $null }
+        if ($null -ne $stageFree -and $stageFree -lt $needed) {
+            Write-Host ""
+            Write-Host "$($script:BoxMargin)Not enough free space to install the new library." -ForegroundColor Yellow
+            Write-Host "$($script:BoxMargin)Needs about $([math]::Round($needed / 1MB, 1)) MB on $stageDriveRoot, $([math]::Round($stageFree / 1MB, 1)) MB is free." -ForegroundColor DarkGray
+            return $false
+        }
+    } catch {
+        Write-Verbose "Staging free-space check skipped: $($_.Exception.GetType().Name)."
+    }
+
+    # -- MAX_PATH, per file ---------------------------------------------------
+    # "library-yyyy-MM-dd_HHmmss" is 25 characters; +2 for the two separators.
+    $prefixLength = $BackupRoot.TrimEnd('\').Length + 2 + 25
+    $sourceBase   = $LibraryPath.TrimEnd('\').Length + 1
+    $longest      = 0
+    $longestName  = ''
+    foreach ($file in $files) {
+        $projected = $prefixLength + ($file.FullName.Length - $sourceBase)
+        if ($projected -gt $longest) { $longest = $projected; $longestName = $file.Name }
+    }
+    if ($longest -ge 260) {
+        Write-Host ""
+        Write-Host "$($script:BoxMargin)A backup copy would exceed Windows' 260-character path limit." -ForegroundColor Yellow
+        Write-Host "$($script:BoxMargin)Longest would be $longest characters, ending in '$longestName'." -ForegroundColor DarkGray
+        Write-Host "$($script:BoxMargin)Shorten that file's name, or move the backup folder nearer the drive root." -ForegroundColor DarkGray
+        return $false
+    }
+
+    return $true
+}
+
+function Get-LibraryLockReport {
+    <#
+    .SYNOPSIS
+        After a refused lay-down, names the files that are open and the E-APO
+        ecosystem processes that are running. Diagnostic ONLY -- nothing is gated on
+        the answer.
+    .DESCRIPTION
+        MEASURED (Step 0, PS 5.1.26100.8875 / Win 11 26100, NTFS): a handle on ANY
+        file inside a directory blocks [IO.Directory]::Move unconditionally. All six
+        share modes failed -- None, Read, ReadWrite, Delete, Read|Delete,
+        ReadWrite|Delete.
+
+        MEASURED AND CORRECTED: FILE_SHARE_DELETE was first read as the deciding bit,
+        because a handle on the DIRECTORY carrying that bit did not block. The
+        isolation test disproved it for child handles -- all three *-del file modes
+        still failed. It decides only for a handle on the directory itself. Do not
+        reintroduce "share-delete readers are harmless" here; it was measured false.
+
+        A FileShare.None probe therefore detects exactly what blocks the rename: any
+        handle at all. It is the same probe the Step 0 harness used to prove its own
+        locks were real.
+
+        This runs only AFTER a rename has already been refused, and that is what
+        makes the TOCTOU race harmless -- a stale answer costs an imprecise message,
+        not a wrong decision. A pre-flight of this same shape was considered for the
+        library-destroy path and dropped for exactly the reason that does not apply here.
+    .OUTPUTS
+        pscustomobject @{ Files; More; Processes }
+    #>
+    param([Parameter(Mandatory)][string]$Path)
+
+    $locked = @()
+    $more   = 0
+
+    foreach ($file in @(Get-ChildItem -LiteralPath $Path -Recurse -File -Force -ErrorAction SilentlyContinue)) {
+        $stream = $null
+        try {
+            $stream = [IO.File]::Open($file.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
+        }
+        catch {
+            # Refused open == a handle exists. The exception is the signal itself, so
+            # there is nothing to record beyond which file it was.
+            # Reported relative to the library folder: the absolute path is ~90
+            # characters of Program Files boilerplate that buries the one part the
+            # user needs to recognise.
+            if ($locked.Count -lt 5) {
+                $rel = $file.FullName
+                if ($rel.Length -gt $Path.Length) {
+                    $rel = Join-Path (Split-Path $Path -Leaf) $rel.Substring($Path.Length).TrimStart('\')
+                }
+                $locked += $rel
+            } else {
+                $more++
+            }
+        }
+        finally {
+            if ($null -ne $stream) { $stream.Dispose() }
+        }
+    }
+
+    # Same names Stop-EAPOEcosystemProcesses works from, so the two cannot drift.
+    $running = @()
+    foreach ($name in @('Peace', 'HeSuVi', 'Configurator', 'DeviceSelector')) {
+        if (@(Get-Process -Name $name -ErrorAction SilentlyContinue).Count -gt 0) { $running += $name }
+    }
+    $eapoPath = Join-Path $env:ProgramFiles "EqualizerAPO"
+    $editors = @(Get-Process -Name 'Editor' -ErrorAction SilentlyContinue |
+        Where-Object {
+            try { $_.Path -and $_.Path.StartsWith($eapoPath, [System.StringComparison]::OrdinalIgnoreCase) }
+            catch { $false }
+        })
+    if ($editors.Count -gt 0) { $running += 'E-APO Editor' }
+
+    return [pscustomobject]@{ Files = $locked; More = $more; Processes = $running }
+}
+
+function Restore-InterruptedLibrarySwap {
+    <#
+    .SYNOPSIS
+        Recovers or clears the transient folders an interrupted lay-down leaves
+        behind. RESTORES first, deletes second.
+    .DESCRIPTION
+        The lay-down renames library\ -> library.old-<stamp>\ and then
+        library.new-<stamp>\ -> library\. A crash between those two renames leaves the
+        real library under library.old-<stamp>\ with no library\ at all. That tree
+        holds the user's squig.link EQs and is the only irreplaceable thing in play,
+        so it is NEVER deleted while library\ is missing -- it is put back.
+
+        library.new-<stamp>\ is a staged copy that never went live. Always safe to
+        delete: it came from the release zip and is re-downloadable.
+
+        Runs at the TOP of Install-SonicScout20Library, before this run stages anything, so
+        every folder matching these patterns is by definition from an earlier run.
+
+        Concurrency is NOT handled, and that is stated rather than quietly assumed:
+        two installer instances would race here. They already share $script:TempPath
+        and kill each other's processes, so single-instance is a pre-existing
+        assumption of the whole script. Solving it here alone would be worse than
+        naming it.
+
+        A library kept deliberately (the library-destroy path) is named
+        library-previous-<stamp>, OUTSIDE both patterns, so a tree the user was told to
+        go and collect can never be swept away by this function.
+    #>
+    param([Parameter(Mandatory)][string]$LibraryRoot)
+
+    $parent = Split-Path $LibraryRoot -Parent
+    if (-not (Test-Path -LiteralPath $parent)) { return }
+
+    $all = @(Get-ChildItem -LiteralPath $parent -Directory -Force -ErrorAction SilentlyContinue)
+    # Newest stamp first. "yyyy-MM-dd_HHmmss" sorts lexically, so this is chronological.
+    $olds = @($all | Where-Object { $_.Name -like 'library.old-*' } | Sort-Object Name -Descending)
+    $news = @($all | Where-Object { $_.Name -like 'library.new-*' })
+    if ($olds.Count -eq 0 -and $news.Count -eq 0) { return }
+
+    $libExisted = Test-Path -LiteralPath $LibraryRoot
+
+    # -- restore first --------------------------------------------------------
+    if (-not $libExisted -and $olds.Count -gt 0) {
+        $survivor = $olds[0]
+        $restored = $false
+        try {
+            [IO.Directory]::Move($survivor.FullName, $LibraryRoot)
+            $restored = $true
+        }
+        catch {
+            # Called through PowerShell method syntax, the real IOException arrives
+            # wrapped in a MethodInvocationException. Unwrap or the type is useless.
+            $err = $_.Exception
+            if ($err.InnerException) { $err = $err.InnerException }
+            Write-Host ""
+            Write-Host "$($script:BoxMargin)A previous run was interrupted. Your library is currently at:" -ForegroundColor Red
+            Write-Host "$($script:BoxMargin)$($survivor.FullName)" -ForegroundColor White
+            Write-Host "$($script:BoxMargin)It could not be moved back automatically ($($err.GetType().Name))." -ForegroundColor DarkGray
+            Write-Host "$($script:BoxMargin)Rename that folder to 'library' to restore it, then run this again." -ForegroundColor Yellow
+        }
+        if (-not $restored) { return }
+
+        Write-Host ""
+        Write-Host "$($script:BoxMargin)A previous run was interrupted mid-install. Your library has been put" -ForegroundColor Yellow
+        Write-Host "$($script:BoxMargin)back from $($survivor.Name) -- nothing was lost." -ForegroundColor Yellow
+        $olds = @($olds | Select-Object -Skip 1)
+    }
+
+    # -- then sweep -----------------------------------------------------------
+    foreach ($dir in $news) {
+        Remove-Item -LiteralPath $dir.FullName -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    if ($olds.Count -eq 0) { return }
+    if ($libExisted) {
+        # library\ was already in place, so these are spent copies of a swap that
+        # finished. Safe to clear.
+        foreach ($dir in $olds) {
+            Remove-Item -LiteralPath $dir.FullName -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+    else {
+        # We just restored one. Anything still here predates it and may hold an even
+        # older library -- reported, never deleted on a guess.
+        Write-Host "$($script:BoxMargin)Older leftover folders were kept: $(($olds | ForEach-Object { $_.Name }) -join ', ')" -ForegroundColor DarkGray
+    }
+}
+
+function Invoke-AtomicLibraryLayDown {
+    <#
+    .SYNOPSIS
+        Stages the new library beside the live one, verifies it, then swaps it in with
+        two renames. Never leaves a partial library.
+    .DESCRIPTION
+        Replaces a nuke-then-copy that left 89 of 92 files and no backup when a source
+        file was locked. The sequence:
+
+          S1  ensure the SonicScout2.0 root exists (and PROVE it)
+          S2  stage    $SourceRoot\* -> library.new-<stamp>\
+          S3  verify   staged tree against $SourceRoot, exactly
+          S4  R1       library\           -> library.old-<stamp>\   WINDOW OPENS
+          S5  R2       library.new-<stamp>\ -> library\             window closes
+          S6  dispose of library.old-<stamp>\
+
+        THE SWAP USES [IO.Directory]::Move ONLY. Move-Item is disqualified and must
+        not be substituted for it, however much more PowerShell-ish it looks.
+        Measured over 28 cases: [IO.Directory]::Move produced 0 partial results, and
+        every failure left the source intact and the destination absent. Move-Item, on
+        the same locked-file cases, left 88 FILES IN THE SOURCE AND 4 IN THE
+        DESTINATION -- it walks the tree item by item through the FileSystem provider,
+        which is the exact disease this function exists to cure.
+
+        This is NOT lock-immune, and is not meant to be. A handle on any file inside
+        library\ refuses R1 outright (see Get-LibraryLockReport). Refusal is the
+        expected common path: it costs the install, never the library.
+
+        S4 is skipped when library\ does not exist (fresh install), so that path has
+        no dangerous window at all.
+    .PARAMETER PreserveOld
+        Keep the replaced library as library-previous-<stamp> instead of deleting it.
+        Used when no successful backup was taken this run, so that path stops being
+        a one-way door.
+    .OUTPUTS
+        pscustomobject @{ Ok; FailedStep; Reason; Lock; PreservedPath; FileCount }
+        FailedStep is one of root/space/stage/verify/swap/rollback.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$SourceRoot,
+        [Parameter(Mandatory)][string]$LibraryRoot,
+        [switch]$PreserveOld
+    )
+
+    # Same stamp format as the backup folders, so the two read alike on disk.
+    $stamp = Get-Date -Format "yyyy-MM-dd_HHmmss"
+    $root  = Split-Path $LibraryRoot -Parent
+    $stage = Join-Path $root "library.new-$stamp"
+    $old   = Join-Path $root "library.old-$stamp"
+
+    $result = [pscustomobject]@{
+        Ok            = $false
+        FailedStep    = ''
+        Reason        = ''
+        Lock          = $null
+        PreservedPath = $null
+        FileCount     = 0
+    }
+
+    # -- S1: the root must really exist ---------------------------------------
+    # New-Item -Force is not trusted here. Through a dangling reparse point it
+    # reports success, returns zero objects, throws nothing even under
+    # $ErrorActionPreference = 'Stop', and creates NOTHING -- the defect documented at
+    # Get-SonicScout20BackupRoot. [IO.Directory]::Exists is the only thing that catches it.
+    try {
+        New-Item -ItemType Directory -Path $root -Force | Out-Null
+    }
+    catch {
+        $result.FailedStep = 'root'
+        $result.Reason     = "$($_.Exception.GetType().Name): $($_.Exception.Message)"
+        return $result
+    }
+    if (-not [IO.Directory]::Exists($root)) {
+        $result.FailedStep = 'root'
+        $result.Reason     = "The folder could not be created: $root"
+        return $result
+    }
+
+    # -- source size, and the authoritative free-space check ------------------
+    $srcFiles = @(Get-ChildItem -LiteralPath $SourceRoot -Recurse -File -Force -ErrorAction SilentlyContinue)
+    $srcBytes = [int64]0
+    if ($srcFiles.Count -gt 0) {
+        $srcSum = ($srcFiles | Measure-Object -Property Length -Sum).Sum
+        if ($null -ne $srcSum) { $srcBytes = [int64]$srcSum }
+    }
+    try {
+        $driveRoot = [IO.Path]::GetPathRoot($root)
+        $drive     = New-Object IO.DriveInfo($driveRoot)
+        # IsReady first, exactly as Test-LibraryBackupPreflight does it: on a not-ready
+        # drive AvailableFreeSpace yields nothing rather than throwing, and a null
+        # compared as 0 would report a healthy machine as full.
+        $freeBytes = if ($drive.IsReady) { $drive.AvailableFreeSpace } else { $null }
+        if ($null -ne $freeBytes -and $freeBytes -lt $srcBytes) {
+            $result.FailedStep = 'space'
+            $result.Reason     = "Needs $([math]::Round($srcBytes / 1MB, 1)) MB on $driveRoot, $([math]::Round($freeBytes / 1MB, 1)) MB is free."
+            return $result
+        }
+    }
+    catch {
+        Write-Verbose "Lay-down free-space check skipped: $($_.Exception.GetType().Name)."
+    }
+
+    # -- S2: stage ------------------------------------------------------------
+    try {
+        if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue }
+        New-Item -ItemType Directory -Path $stage -Force | Out-Null
+        Copy-Item -Path (Join-Path $SourceRoot '*') -Destination $stage -Recurse -Force
+    }
+    catch {
+        Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+        $result.FailedStep = 'stage'
+        $result.Reason     = "$($_.Exception.GetType().Name): $($_.Exception.Message)"
+        return $result
+    }
+
+    # -- S3: verify -----------------------------------------------------------
+    # -ne, NOT the -lt the backup verify uses. That -lt exists because the backup's
+    # source is the LIVE library\, where Get-ChildItem -Recurse refuses to descend a
+    # user-made junction while Copy-Item -Recurse copies straight through it, so the
+    # destination legitimately ends up larger. This source is Expand-Archive output,
+    # and zip extraction creates no reparse points -- measured: 0 in the payload. So
+    # the counts must match exactly, and exact comparison also catches a surplus that
+    # -lt would wave through.
+    $stageFiles = @(Get-ChildItem -LiteralPath $stage -Recurse -File -Force -ErrorAction SilentlyContinue)
+    $stageBytes = [int64]0
+    if ($stageFiles.Count -gt 0) {
+        $stageSum = ($stageFiles | Measure-Object -Property Length -Sum).Sum
+        if ($null -ne $stageSum) { $stageBytes = [int64]$stageSum }
+    }
+    if ($stageFiles.Count -ne $srcFiles.Count -or $stageBytes -ne $srcBytes) {
+        Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+        $result.FailedStep = 'verify'
+        $result.Reason     = "staged $($stageFiles.Count) of $($srcFiles.Count) files, $stageBytes of $srcBytes bytes."
+        return $result
+    }
+
+    # -- S4: R1 ---------------------------------------------------------------
+    $hadLibrary = Test-Path -LiteralPath $LibraryRoot
+    if ($hadLibrary) {
+        try {
+            [IO.Directory]::Move($LibraryRoot, $old)
+        }
+        catch {
+            # Nothing has been touched yet. The staged tree goes, library\ stays.
+            Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+            $err = $_.Exception
+            if ($err.InnerException) { $err = $err.InnerException }
+            $result.FailedStep = 'swap'
+            $result.Reason     = "$($err.GetType().Name): $($err.Message)"
+            $result.Lock       = Get-LibraryLockReport -Path $LibraryRoot
+            return $result
+        }
+    }
+
+    # -- S5: R2. THE DANGEROUS WINDOW IS OPEN FROM HERE ------------------------
+    # Retried because Step 0 found no case where R1 succeeds and R2/rollback fails:
+    # the locks that would threaten this window refuse R1 outright, so anything
+    # arriving here was acquired INSIDE the window and is transient by nature. Three
+    # attempts, then stop -- never spin.
+    $moved = $false
+    for ($attempt = 1; $attempt -le 3 -and -not $moved; $attempt++) {
+        try {
+            [IO.Directory]::Move($stage, $LibraryRoot)
+            $moved = $true
+        }
+        catch {
+            Write-Verbose "Lay-down R2 attempt $attempt failed: $($_.Exception.GetType().Name)."
+            Start-Sleep -Milliseconds 400
+        }
+    }
+
+    if (-not $moved) {
+        $rolled  = $false
+        $rollErr = $null
+        if ($hadLibrary) {
+            for ($attempt = 1; $attempt -le 3 -and -not $rolled; $attempt++) {
+                try {
+                    [IO.Directory]::Move($old, $LibraryRoot)
+                    $rolled = $true
+                }
+                catch {
+                    $rollErr = $_.Exception
+                    if ($rollErr.InnerException) { $rollErr = $rollErr.InnerException }
+                    Start-Sleep -Milliseconds 400
+                }
+            }
+        }
+        Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+
+        if ($rolled -or -not $hadLibrary) {
+            # Rolled back, or there was never a library to lose. Nothing lost either way.
+            $result.FailedStep = 'swap'
+            $result.Reason     = 'The new library could not be moved into place.'
+        }
+        else {
+            # The one genuinely bad state. Never seen in 28 measured cases, but a handle
+            # taken inside the window is a real race, so it is handled rather than assumed away.
+            $result.FailedStep    = 'rollback'
+            $result.PreservedPath = $old
+            $result.Reason        = if ($rollErr) { "$($rollErr.GetType().Name): $($rollErr.Message)" } else { 'The library could not be moved back.' }
+        }
+        return $result
+    }
+
+    # -- S6: dispose of the replaced tree -------------------------------------
+    if ($hadLibrary) {
+        if ($PreserveOld) {
+            $preserved = Join-Path $root "library-previous-$stamp"
+            try {
+                [IO.Directory]::Move($old, $preserved)
+                $result.PreservedPath = $preserved
+            }
+            catch {
+                # Could not rename it aside. Name where it actually is instead of
+                # deleting what may be the only surviving copy.
+                Write-Verbose "Could not rename the replaced library aside: $($_.Exception.GetType().Name)."
+                $result.PreservedPath = $old
+            }
+        }
+        else {
+            # Non-fatal. A tree left here is picked up by Restore-InterruptedLibrarySwap
+            # on the next run, and the swap itself has already succeeded.
+            Remove-Item -LiteralPath $old -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    $result.Ok        = $true
+    $result.FileCount = @(Get-ChildItem -LiteralPath $LibraryRoot -Recurse -File -ErrorAction SilentlyContinue).Count
+    return $result
+}
+
+function Write-LibraryLayDownFailure {
+    <#
+    .SYNOPSIS
+        Renders a failed lay-down. The refusal case is the COMMON path, not an error,
+        and is worded accordingly.
+    .DESCRIPTION
+        The raw exception is deliberately not echoed as the cause. R1's message is
+        "Access to the path '...\library' is denied.", which names the DIRECTORY, reads
+        as a permissions problem, and points at a path the user can see is fine. The
+        real cause is a handle on a file inside it.
+    #>
+    param([Parameter(Mandatory)]$Result)
+
+    Write-Host ""
+    if ($Result.FailedStep -eq 'rollback') {
+        Write-Host "$($script:BoxMargin)The install was interrupted at the worst moment and your library is" -ForegroundColor Red
+        Write-Host "$($script:BoxMargin)currently in this folder:" -ForegroundColor Red
+        Write-Host "$($script:BoxMargin)$($Result.PreservedPath)" -ForegroundColor White
+        Write-Host "$($script:BoxMargin)Nothing was deleted. Rename that folder to 'library' to put it back --" -ForegroundColor Yellow
+        Write-Host "$($script:BoxMargin)or just run this installer again and it will do it for you." -ForegroundColor Yellow
+        return
+    }
+
+    Write-Host "$($script:BoxMargin)Your library was not changed." -ForegroundColor Green
+    Write-Host ""
+
+    if ($Result.FailedStep -eq 'swap') {
+        Write-Host "$($script:BoxMargin)Something on this PC is still using it, so the new library could not" -ForegroundColor Yellow
+        Write-Host "$($script:BoxMargin)be put in place. Nothing was deleted -- your library is exactly as it was." -ForegroundColor DarkGray
+
+        if ($Result.Lock -and $Result.Lock.Files.Count -gt 0) {
+            Write-Host ""
+            Write-Host "$($script:BoxMargin)  Still in use:" -ForegroundColor Yellow
+            foreach ($f in $Result.Lock.Files) {
+                Write-Host "$($script:BoxMargin)    $f" -ForegroundColor DarkGray
+            }
+            if ($Result.Lock.More -gt 0) {
+                Write-Host "$($script:BoxMargin)    (and $($Result.Lock.More) more)" -ForegroundColor DarkGray
+            }
+        }
+
+        # ALWAYS reached, whether or not a file was named. Naming the file without
+        # saying what to do about it leaves the user with a path and no next step --
+        # and the process list is empty whenever the holder is something we do not
+        # recognise, which is exactly when the generic advice matters most.
+        Write-Host ""
+        if ($Result.Lock -and $Result.Lock.Processes.Count -gt 0) {
+            Write-Host "$($script:BoxMargin)  Close these, then choose [r]:" -ForegroundColor Yellow
+            foreach ($p in $Result.Lock.Processes) {
+                Write-Host "$($script:BoxMargin)    $p" -ForegroundColor White
+            }
+        } else {
+            Write-Host "$($script:BoxMargin)  Close Peace, HeSuVi, the E-APO editor, or any text editor or Explorer" -ForegroundColor Yellow
+            Write-Host "$($script:BoxMargin)  window open on the library folder, then choose [r]." -ForegroundColor Yellow
+        }
+        return
+    }
+
+    switch ($Result.FailedStep) {
+        'space'  { Write-Host "$($script:BoxMargin)There is not enough free disk space to install it. $($Result.Reason)" -ForegroundColor Yellow }
+        'verify' { Write-Host "$($script:BoxMargin)The downloaded library did not copy completely, so it was discarded." -ForegroundColor Yellow
+                   Write-Host "$($script:BoxMargin)$($Result.Reason)" -ForegroundColor DarkGray }
+        'stage'  { Write-Host "$($script:BoxMargin)The new library could not be written next to your existing one." -ForegroundColor Yellow
+                   Write-Host "$($script:BoxMargin)$($Result.Reason)" -ForegroundColor DarkGray }
+        default  { Write-Host "$($script:BoxMargin)The install folder could not be prepared." -ForegroundColor Yellow
+                   Write-Host "$($script:BoxMargin)$($Result.Reason)" -ForegroundColor DarkGray }
+    }
+}
+
 function Install-SonicScout20Library {
     <#
     .SYNOPSIS
         Fetches the latest SonicScout2.0 library release (.zip asset) and lays it down in
         the canonical SonicScout2.0 root, automating the old manual "drag the library
         folder into E-APO config" ritual. Any existing library is backed up to a dated
-        folder (unless -SkipBackup), then wiped and replaced with the fresh release
-        (backup-then-nuke; no state file). The library is load-bearing, so hard failures
-        surface with a retry affordance (never silently pass).
+        folder (unless -SkipBackup), then replaced by an atomic stage-verify-swap
+        (Invoke-AtomicLibraryLayDown; no state file). The library is load-bearing, so
+        hard failures surface with a retry affordance (never silently pass).
     .PARAMETER SkipBackup
         Skip the dated backup of the existing library. Used by the Setup fresh-install
         path when there is no real library worth preserving.
@@ -4321,6 +5162,30 @@ function Install-SonicScout20Library {
     param([switch]$SkipBackup)
 
     $libRoot = Join-Path $script:SonicScout20Root "library"
+
+    # BEFORE anything else, including the pre-flight. An earlier run killed between
+    # the two renames leaves the real library under library.old-<stamp>\ with no
+    # library\ at all, and every check below would then read a healthy machine as
+    # having no library. This restores it. Runs before this run stages anything, so
+    # whatever it finds is by definition not ours.
+    Restore-InterruptedLibrarySwap -LibraryRoot $libRoot
+
+    # Set by the [r] affordance below so the next backup attempt re-probes the root
+    # instead of reusing a cached failure. Declared here because StrictMode faults on
+    # reading it before the first assignment.
+    $refreshRoot = $false
+
+    # Pre-flight BEFORE the fetch. Neither of these can be fixed by downloading, and
+    # discovering them afterwards costs the user a transfer and hides the cause behind
+    # a mid-copy error. Skipped when no root resolves at all -- that case is already
+    # handled properly by the backup itself and its menu.
+    if (-not $SkipBackup -and (Test-Path $libRoot)) {
+        $preflightRoot = Get-SonicScout20BackupRoot
+        if ($preflightRoot -and -not (Test-LibraryBackupPreflight -LibraryPath $libRoot -BackupRoot $preflightRoot)) {
+            Write-Host "$($script:BoxMargin)Nothing was downloaded and your library was not touched." -ForegroundColor Yellow
+            return $false
+        }
+    }
 
     :libRetry while ($true) {
         Write-Host "$($script:BoxMargin)Fetching SonicScout2.0 library release..." -ForegroundColor Cyan
@@ -4414,23 +5279,48 @@ function Install-SonicScout20Library {
                 $backupDest = $null
                 $backupFailed = $false
                 if (-not $SkipBackup -and (Test-Path $libRoot)) {
-                    $backupDest = Backup-SonicScout20Library
+                    $backupDest = Backup-SonicScout20Library -RefreshBackupRoot:$refreshRoot
+                    $refreshRoot = $false
                     if ($backupDest -is [bool] -and -not $backupDest) { $backupFailed = $true }
                 }
 
                 if (-not $backupFailed) {
-                    New-Item -ItemType Directory -Path $libRoot -Force | Out-Null
-                    Get-ChildItem -Path $libRoot -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-                    Copy-Item -Path (Join-Path $localBundle '*') -Destination $libRoot -Recurse -Force
-                    $fileCount = @(Get-ChildItem -LiteralPath $libRoot -Recurse -File -ErrorAction SilentlyContinue).Count
-                    if ($backupDest) {
-                        Write-Host "$($script:BoxMargin)Previous library backed up to: $backupDest" -ForegroundColor DarkGray
+                    # Atomic, same as the download path: stage beside library\, verify,
+                    # then swap with two renames. The old nuke-then-copy left a partial
+                    # library if any source file was locked, with the user's squig.link
+                    # EQs already destroyed. PreserveOld covers the case where the
+                    # backup failed or was skipped, so this is never a one-way door.
+                    $noBackupTaken = (-not $backupDest) -or ($backupDest -is [bool])
+                    $layDown = $null
+                    try {
+                        $layDown = Invoke-AtomicLibraryLayDown -SourceRoot $localBundle -LibraryRoot $libRoot -PreserveOld:$noBackupTaken
                     }
-                    Write-Host "$($script:BoxMargin)SonicScout2.0 library installed from local bundle ($fileCount files)." -ForegroundColor Green
-                    return $true
-                }
+                    catch {
+                        Write-Host ""
+                        Write-Host "$($script:BoxMargin)Could not install the local library: $($_.Exception.GetType().Name)" -ForegroundColor Red
+                        Write-Host "$($script:BoxMargin)$($_.Exception.Message)" -ForegroundColor DarkGray
+                        $layDown = $null
+                    }
 
-                Write-Host "$($script:BoxMargin)Backup failed; local bundle install was not applied." -ForegroundColor Yellow
+                    if ($layDown -and $layDown.Ok) {
+                        if ($backupDest -and -not ($backupDest -is [bool])) {
+                            Write-Host "$($script:BoxMargin)Previous library backed up to: $backupDest" -ForegroundColor DarkGray
+                        }
+                        if ($layDown.PreservedPath) {
+                            Write-Host "$($script:BoxMargin)Your previous library was kept here: $($layDown.PreservedPath)" -ForegroundColor Cyan
+                        }
+                        Write-Host "$($script:BoxMargin)SonicScout2.0 library installed from local bundle ($($layDown.FileCount) files)." -ForegroundColor Green
+                        return $true
+                    }
+
+                    if ($layDown) {
+                        Write-LibraryLayDownFailure -Result $layDown
+                    }
+                    Write-Host "$($script:BoxMargin)Local bundle install was not applied." -ForegroundColor Yellow
+                }
+                else {
+                    Write-Host "$($script:BoxMargin)Backup failed; local bundle install was not applied." -ForegroundColor Yellow
+                }
             }
         }
 
@@ -4451,40 +5341,191 @@ function Install-SonicScout20Library {
                 # Normalize to the full/long path form so Copy-Item has a valid source.
                 $srcRoot = (Get-Item -LiteralPath $srcRoot).FullName
 
-                # --- Back up any existing library (dated), then wipe and replace ---
-                # -is [bool] rather than -eq $false: a returned path string compared
-                # against $false would coerce and could never match, so the guard has to
-                # test the type. $null (nothing to back up) is not a failure.
-                $backupDest = $null
-                $backupFailed = $false
-                if (-not $SkipBackup -and (Test-Path $libRoot)) {
-                    $backupDest = Backup-SonicScout20Library
-                    if ($backupDest -is [bool] -and -not $backupDest) { $backupFailed = $true }
-                }
+                # --- Back up any existing library (dated), then swap in the new one ---
+                # This inner loop is the fix for the reported dead end. The download
+                # and extract above have already succeeded, so retrying THEM cannot
+                # clear a filesystem problem -- yet re-downloading was the only thing
+                # the old menu offered, which made a failed backup an inescapable loop.
+                # Everything below retries the BACKUP, and the staging tree is kept so
+                # no option here costs another transfer.
+                #
+                # HOISTED out of the loop on purpose. A refused lay-down leaves library\
+                # byte-identical (the swap is atomic), so a backup taken on an earlier
+                # pass is still a faithful copy of exactly the same tree. Re-running it
+                # per retry would pile up dated duplicates -- and with a lock now the
+                # expected reason to retry, that pile would be the common case.
+                $backupDest   = $null
+                $backupWaived = $false
+                :backupRetry while ($true) {
 
-                if (-not $backupFailed) {
-                    New-Item -ItemType Directory -Path $libRoot -Force | Out-Null
-                    # Nuke the existing library so only the fresh release remains.
-                    Get-ChildItem -Path $libRoot -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+                    $backupFailed = $false
+                    $proceed      = $false
 
-                    # Lay down the fresh release.
-                    Copy-Item -Path (Join-Path $srcRoot '*') -Destination $libRoot -Recurse -Force
-                    $fileCount = @(Get-ChildItem -LiteralPath $libRoot -Recurse -File -ErrorAction SilentlyContinue).Count
+                    if ($SkipBackup -or $backupWaived -or -not (Test-Path $libRoot)) {
+                        $proceed = $true
+                    } elseif ($backupDest -and -not ($backupDest -is [bool]) -and (Test-Path -LiteralPath "$backupDest")) {
+                        # Already have one from an earlier pass of this loop, and library\
+                        # is provably unchanged since. Reuse it.
+                        $proceed = $true
+                    } else {
+                        # -is [bool] rather than -eq $false: a returned path string
+                        # compared against $false would coerce and could never match,
+                        # so the guard has to test the type. $null (nothing to back up)
+                        # is not a failure.
+                        $backupDest  = Backup-SonicScout20Library -RefreshBackupRoot:$refreshRoot
+                        $refreshRoot = $false
+                        if ($backupDest -is [bool] -and -not $backupDest) { $backupFailed = $true }
+                        else { $proceed = $true }
+                    }
+
+                    if ($backupFailed) {
+                        # The existing library is left exactly as it is: the user's
+                        # squig.link EQs live inside the tree the swap would replace, and
+                        # there would be nothing to restore them from.
+                        $menuOpen = $true
+                        while ($menuOpen) {
+                            Write-Host ""
+                            Write-Host "$($script:BoxMargin)Could not back up your existing library, so it was left untouched." -ForegroundColor Red
+                            Write-Host "$($script:BoxMargin)The download already worked -- retrying that cannot fix this." -ForegroundColor DarkGray
+                            Write-Host ""
+                            $null = Write-CenteredBlock @(
+                                @{ Text = '[r] Try the backup again'; Color = 'Yellow' }
+                                @{ Text = '[o] Show me the library folder so I can copy it myself'; Color = 'White' }
+                                @{ Text = '[b] Install anyway - REPLACES your library'; Color = 'Red' }
+                                @{ Text = '[d] Open an issue for help'; Color = 'White' }
+                                @{ Text = '[s] Skip - continue without the library'; Color = 'DarkGray' }
+                            )
+                            Write-Host ""
+                            Write-Host "$($script:BoxMargin)" -NoNewline
+                            Write-Host "Choice: " -ForegroundColor Yellow -NoNewline
+                            $bkChoice = "$(Read-Host)".ToLower()
+
+                            if ($bkChoice -eq 's') {
+                                Write-Host "$($script:BoxMargin)Skipping library. Tunes and bundled VST/JSFX will be missing." -ForegroundColor Yellow
+                                Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+                                return $false
+                            }
+                            elseif ($bkChoice -eq 'r') {
+                                # Re-probe instead of trusting the cache. The whole
+                                # point of this option is that the user has just fixed
+                                # the folder, and a cached failure would ignore that.
+                                $refreshRoot = $true
+                                $menuOpen    = $false
+                            }
+                            elseif ($bkChoice -eq 'o') {
+                                # Path printed as plain text FIRST. Explorer launched
+                                # from an elevated process does not reliably surface in
+                                # the user's session, and with nothing on screen the
+                                # option looks like it did nothing at all.
+                                Write-Host ""
+                                Write-Host "$($script:BoxMargin)Your library is here:" -ForegroundColor Cyan
+                                Write-Host "$($script:BoxMargin)$libRoot" -ForegroundColor White
+                                Write-Host "$($script:BoxMargin)Copy it somewhere safe, then choose [b] to install the new one." -ForegroundColor DarkGray
+                                Start-Process -FilePath 'explorer.exe' -ArgumentList "`"$libRoot`""
+                            }
+                            elseif ($bkChoice -eq 'd') {
+                                Start-Process 'https://github.com/sensoredrooster/SonicScout2.0/issues'
+                                Write-Host "$($script:BoxMargin)Opened in browser." -ForegroundColor Green
+                            }
+                            elseif ($bkChoice -eq 'b') {
+                                Write-Host ""
+                                Write-Host "$($script:BoxMargin)This REPLACES your current library. Any squig.link EQs you added" -ForegroundColor Red
+                                Write-Host "$($script:BoxMargin)are removed, and the failed backup means they cannot be restored." -ForegroundColor Red
+                                Write-Host "$($script:BoxMargin)Type 'yes' to replace it, or anything else to go back: " -ForegroundColor Yellow -NoNewline
+                                if ("$(Read-Host)" -eq 'yes') {
+                                    $backupDest = $null
+                                    # Remembered, so a later lay-down retry does not
+                                    # re-ask a question already answered. It also keeps
+                                    # $backupDest null, which is what turns PreserveOld
+                                    # on and stops [b] being a one-way door.
+                                    $backupWaived = $true
+                                    $proceed      = $true
+                                    $menuOpen     = $false
+                                }
+                            }
+                        }
+                    }
+
+                    if (-not $proceed) { continue backupRetry }
+
+                    # Atomic: stage beside library\, verify, then swap in with two
+                    # renames. It can REFUSE -- any process holding a file in library\
+                    # open blocks the rename -- but it can never half-finish, so the
+                    # failure paths below all leave the library exactly as it was.
+                    #
+                    # PreserveOld keeps the replaced tree as library-previous-<stamp>
+                    # whenever no backup was taken this run. That is the [b] path, where
+                    # the backup failed and this would otherwise be a one-way door.
+                    $noBackupTaken = (-not $backupDest) -or ($backupDest -is [bool])
+
+                    # Still guarded. Not for a half-cleared library -- that state no
+                    # longer exists -- but because this function must never let a hard
+                    # failure escape silently, and a crash is not "surfacing" it.
+                    $layDown = $null
+                    try {
+                        $layDown = Invoke-AtomicLibraryLayDown -SourceRoot $srcRoot -LibraryRoot $libRoot -PreserveOld:$noBackupTaken
+                    }
+                    catch {
+                        Write-Host ""
+                        Write-Host "$($script:BoxMargin)Could not install the new library: $($_.Exception.GetType().Name)" -ForegroundColor Red
+                        Write-Host "$($script:BoxMargin)$($_.Exception.Message)" -ForegroundColor DarkGray
+                        continue backupRetry
+                    }
+
+                    if (-not $layDown.Ok) {
+                        Write-LibraryLayDownFailure -Result $layDown
+
+                        # A MENU, not a bare retry. The message above tells the user to
+                        # close something and choose [r], and looping straight back would
+                        # spin on the same lock forever without ever offering it -- fast,
+                        # silent, and impossible to escape. Refusal is now the expected
+                        # common path, so this is the path that has to behave.
+                        $layMenuOpen = $true
+                        while ($layMenuOpen) {
+                            Write-Host ""
+                            $null = Write-CenteredBlock @(
+                                @{ Text = '[r] Try again - I closed what was using it'; Color = 'Yellow' }
+                                @{ Text = '[o] Show me the library folder'; Color = 'White' }
+                                @{ Text = '[s] Skip - keep my current library as it is'; Color = 'DarkGray' }
+                            )
+                            Write-Host ""
+                            Write-Host "$($script:BoxMargin)" -NoNewline
+                            Write-Host "Choice: " -ForegroundColor Yellow -NoNewline
+                            $layChoice = "$(Read-Host)".ToLower()
+
+                            if ($layChoice -eq 'r') {
+                                $layMenuOpen = $false
+                            }
+                            elseif ($layChoice -eq 's') {
+                                Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+                                Write-Host "$($script:BoxMargin)Skipped. Your library was not changed." -ForegroundColor Yellow
+                                return $false
+                            }
+                            elseif ($layChoice -eq 'o') {
+                                # After a failed rollback the library is NOT at $libRoot,
+                                # so point at where it actually is.
+                                $showPath = if ($layDown.PreservedPath) { $layDown.PreservedPath } else { $libRoot }
+                                Write-Host ""
+                                Write-Host "$($script:BoxMargin)Your library is here:" -ForegroundColor Cyan
+                                Write-Host "$($script:BoxMargin)$showPath" -ForegroundColor White
+                                Start-Process -FilePath 'explorer.exe' -ArgumentList "`"$showPath`""
+                            }
+                        }
+                        continue backupRetry
+                    }
 
                     Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
                     Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
 
-                    if ($backupDest) {
+                    if ($backupDest -and -not ($backupDest -is [bool])) {
                         Write-Host "$($script:BoxMargin)Previous library backed up to: $backupDest" -ForegroundColor DarkGray
                     }
-                    Write-Host "$($script:BoxMargin)SonicScout2.0 library installed ($fileCount files)." -ForegroundColor Green
+                    if ($layDown.PreservedPath) {
+                        Write-Host "$($script:BoxMargin)Your previous library was kept here: $($layDown.PreservedPath)" -ForegroundColor Cyan
+                    }
+                    Write-Host "$($script:BoxMargin)SonicScout2.0 library installed ($($layDown.FileCount) files)." -ForegroundColor Green
                     return $true
                 }
-
-                # Backup failed. Leave the existing library exactly as it is: the user's
-                # squig.link EQs live inside the tree the nuke would clear, and there
-                # would be nothing to restore them from. Fall through to the retry menu.
-                Write-Host "$($script:BoxMargin)Backup failed; your existing library was left untouched." -ForegroundColor Yellow
             }
             Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
         }

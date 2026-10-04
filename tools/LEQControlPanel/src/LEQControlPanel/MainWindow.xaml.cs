@@ -3490,7 +3490,8 @@ namespace LEQControlPanel
             // Legacy "Art Tune" endpoints and current "SonicScout2.0" endpoints are
             // the same managed virtual cable; match both so gating works on
             // machines renamed by the SonicScout2.0 installer.
-            return device.Name.StartsWith("SonicScout2.0", StringComparison.OrdinalIgnoreCase);
+            return device.Name.StartsWith("SonicScout2.0", StringComparison.OrdinalIgnoreCase)
+                || device.Name.StartsWith("Art Tune", StringComparison.OrdinalIgnoreCase);
         }
 
         private void UpdateSonicScoutGating()
