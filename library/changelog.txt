@@ -1,3 +1,44 @@
+## 2026.09-V5Styles
+
+- BO7 V5: three new tuning styles, Classic, Classic+ and Open. What they
+  share is much slower leveller timing, and that turns out to be the biggest
+  single change in how V5 feels. The processing stops drawing attention to
+  itself and the tune sits far closer to the old Loudness Equalization
+  character, while keeping V5's footstep detail and gunfire control.
+- Classic is the calmest of the three, and the least audible processing in
+  the family. If V5 has ever felt like it was working on the sound, this is
+  the one to try first.
+- Classic+ is Classic with more footstep lift: distant steps come through
+  louder, and close ones are no longer held back the way they were. File
+  names spell it ClassicPlus.
+- Open is the least filtered of the three, built on Balanced's more forward
+  voicing rather than Competitive's, so mid-level sound comes up harder and
+  less bright content is held back.
+- New self gun level on every style: Ultra Low (UltraLoGun). It sits below
+  Low and pushes your own gunfire to the engine's limit. One thing to listen
+  for: the room reflection after a shot is not ducked at this tier, so with
+  the gun this far down the ring-out can end up the loudest part of your own
+  fire. If that bothers you, Low is unchanged and one file away.
+- Recommended starting file: BO7_V5_16ch_ClassicPlus-UltraLoGun.txt.
+- Your own footsteps are held down harder and for longer, on every style and
+  every self gun level. The dip now covers the whole of your footfall rather
+  than only its leading edge, holding for around two thirds of a second, and
+  it goes deeper, so your own steps stay clear of the ones you are listening
+  for.
+- Your own gunfire comes back up more gradually to match, on every self gun
+  level except Stock: roughly six to eight tenths of a second after firing
+  rather than about a third.
+- Capped, Immersive and Balanced are deprecated. They are the original V5
+  styles, and the newer ones cover the same ground better. Nothing is
+  removed: their files still ship and still work.
+- Full and Competitive are unchanged apart from the footstep change above.
+- V5 now ships 40 configs: eight styles at five self gun levels.
+- The V5 target curve is unchanged, so your existing V5 squig.link EQ still
+  applies.
+- New headphone measurements: the Tipsy TG4, in both switch positions, and
+  the I/O Audio Cielo.
+- All other games and versions are unchanged.
+
 ## 2026.07.1-Overhaul
 
 - BO7 V5: Full and Balanced retuned. Full now lifts footsteps with combat

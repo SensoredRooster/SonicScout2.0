@@ -13,7 +13,7 @@ $ErrorActionPreference = 'Stop'
 $script:REG_MMDEVICES_RENDER = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render"
 
 # Device Property GUIDs
-# PKEY_Device_FriendlyName - the user-editable name shown in Sound settings (e.g., "Art Tune (Game)")
+# PKEY_Device_FriendlyName - the user-editable name shown in Sound settings (e.g., "SonicScout2.0 (Game)")
 $script:PROP_DEVICE_FRIENDLY_NAME = "{a45c254e-df1c-4efd-8020-67d146a850e0},2"
 # PKEY_Device_DeviceDesc - the driver/hardware description (e.g., "Sound Blaster GC7")
 $script:PROP_DEVICE_DESC = "{b3f8fa53-0004-438e-9003-51a46e139bfc},6"

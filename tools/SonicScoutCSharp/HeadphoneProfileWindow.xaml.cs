@@ -20,7 +20,7 @@ public partial class HeadphoneProfileWindow : Window
 {
     private const string AutoEqSource = "AutoEq";
     private const string SquidLinkSource = "SquidLink";
-    private const string ArtTuneSource = "ArtTuneDB";
+    private const string SonicScoutSource = "SonicScout";
     private const string AutoEqSourcesApiUrl = "https://api.github.com/repos/jaakkopasanen/AutoEq/contents/results";
     private const string AutoEqRawBaseUrl = "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/";
     private static readonly TimeSpan AutoEqCatalogCacheTtl = TimeSpan.FromHours(24);
@@ -77,7 +77,7 @@ public partial class HeadphoneProfileWindow : Window
         try
         {
             allProfiles.Clear();
-            await LoadArtTuneCatalogAsync();
+            await LoadSonicScoutCatalogAsync();
             await LoadAutoEqCatalogAsync(forceRefresh);
             await LoadSquidLinkCatalogAsync();
             ApplyFilter();
@@ -96,11 +96,39 @@ public partial class HeadphoneProfileWindow : Window
         }
     }
 
-    private async Task LoadArtTuneCatalogAsync()
+    private static string ResolveSonicScoutLibraryPath()
     {
-        string libraryPath = Environment.GetEnvironmentVariable("ART_TUNE_LIBRARY") ??
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "ArtTuneDB-main", "library");
-        if (!Directory.Exists(libraryPath))
+        // ART_TUNE_LIBRARY is honored as a legacy fallback so existing installs that
+        // point at a non-default library keep working after the rebrand.
+        string? configured = Environment.GetEnvironmentVariable("SONICSCOUT_LIBRARY");
+        if (string.IsNullOrWhiteSpace(configured))
+        {
+            configured = Environment.GetEnvironmentVariable("ART_TUNE_LIBRARY");
+        }
+
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return configured;
+        }
+
+        // This mirrors the installer's own resolution: the library lands in the
+        // E-APO config tree under the SonicScout2.0 folder. The previous default
+        // (Documents\ArtTuneDB-main\library) is a source-checkout path that never
+        // exists on an installed machine, so the catalog silently loaded nothing.
+        string installedPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            "EqualizerAPO",
+            "config",
+            "SonicScout2.0",
+            "library");
+
+        return Directory.Exists(installedPath) ? installedPath : string.Empty;
+    }
+
+    private async Task LoadSonicScoutCatalogAsync()
+    {
+        string libraryPath = ResolveSonicScoutLibraryPath();
+        if (string.IsNullOrEmpty(libraryPath))
         {
             return;
         }
@@ -135,9 +163,9 @@ public partial class HeadphoneProfileWindow : Window
                     .Replace(" [1.0]", string.Empty, StringComparison.OrdinalIgnoreCase)
                     .Trim();
                 string category = NormalizeCategory(string.Empty, profileName);
-                string source = $"{ArtTuneSource}/{game}/{version}";
+                string source = $"{SonicScoutSource}/{game}/{version}";
                 if (allProfiles.Any(profile => profile.Name.Equals(profileName, StringComparison.OrdinalIgnoreCase) &&
-                                               profile.Source.StartsWith(ArtTuneSource, StringComparison.OrdinalIgnoreCase)))
+                                               profile.Source.StartsWith(SonicScoutSource, StringComparison.OrdinalIgnoreCase)))
                 {
                     continue;
                 }
@@ -184,7 +212,7 @@ public partial class HeadphoneProfileWindow : Window
                     continue;
                 }
 
-                if (allProfiles.Any(profile => profile.Source.StartsWith(ArtTuneSource, StringComparison.OrdinalIgnoreCase) &&
+                if (allProfiles.Any(profile => profile.Source.StartsWith(SonicScoutSource, StringComparison.OrdinalIgnoreCase) &&
                                                profile.Name.Equals(entry.Name, StringComparison.OrdinalIgnoreCase)))
                 {
                     continue;
@@ -309,7 +337,7 @@ public partial class HeadphoneProfileWindow : Window
                     continue;
                 }
 
-                if (allProfiles.Any(profile => profile.Source.StartsWith(ArtTuneSource, StringComparison.OrdinalIgnoreCase) &&
+                if (allProfiles.Any(profile => profile.Source.StartsWith(SonicScoutSource, StringComparison.OrdinalIgnoreCase) &&
                                                profile.Name.Equals(profileName, StringComparison.OrdinalIgnoreCase)))
                 {
                     continue;
@@ -529,7 +557,7 @@ public partial class HeadphoneProfileWindow : Window
             {
                 Profile = profile,
                 Score = ComputeMatchScore(profile, modelTokens, normalizedModelQuery),
-                SourcePriority = profile.Source.StartsWith(ArtTuneSource, StringComparison.OrdinalIgnoreCase) ? 2 : 1
+                SourcePriority = profile.Source.StartsWith(SonicScoutSource, StringComparison.OrdinalIgnoreCase) ? 2 : 1
             })
             .Where(item => item.Score >= 0)
             .OrderByDescending(item => item.Score)
@@ -549,10 +577,10 @@ public partial class HeadphoneProfileWindow : Window
         string scopeLabel = queryMentionsHeadphones ^ queryMentionsIems
             ? (queryMentionsHeadphones ? "Headphones" : "IEMs")
             : selectedCategory;
-        int artTuneCount = allProfiles.Count(profile => profile.Source.StartsWith(ArtTuneSource, StringComparison.OrdinalIgnoreCase));
+        int sonicScoutCount = allProfiles.Count(profile => profile.Source.StartsWith(SonicScoutSource, StringComparison.OrdinalIgnoreCase));
         string sourceLabel = squidLinkCount > 0
-            ? $"{artTuneCount:N0} ArtTuneDB + {autoEqCount:N0} AutoEq + {squidLinkCount:N0} SquidLink"
-            : $"{artTuneCount:N0} ArtTuneDB + {autoEqCount:N0} AutoEq";
+            ? $"{sonicScoutCount:N0} SonicScout + {autoEqCount:N0} AutoEq + {squidLinkCount:N0} SquidLink"
+            : $"{sonicScoutCount:N0} SonicScout + {autoEqCount:N0} AutoEq";
         bool squidConfigured = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("SQUIDLINK_API_URL"));
         StatusText.Text = squidConfigured
             ? $"{visibleProfiles.Count:N0} matches in {scopeLabel} ({sourceLabel})."

@@ -84,7 +84,7 @@ SonicPass still needs a virtual audio driver such as VB-Cable because a normal W
 
 - Sonic Scout automatically starts SonicPass once a valid saved route exists, right after startup finishes refreshing device state.
 - The title bar provides setup, SonicPass, theme, minimize, maximize, and close controls. Closing the main window performs a real shutdown: it stops the audio monitor and any running SonicPass process before the app exits. It no longer minimizes to tray on close.
-- When Windows LEQ is enabled, Sonic Scout starts or adopts the authenticated Art Relay process for the tuned audio path; disabling it stops a relay process Sonic Scout owns.
+- Windows LEQ and the SONICPASS button drive the same engine. Enabling Windows LEQ starts SonicPass for the tuned audio path; disabling it stops SonicPass only when the toggle started it, so a SonicPass you launched yourself keeps running.
 - Equalizer APO is a system-wide audio filter, not a process Sonic Scout starts or stops; only SonicPass is owned and managed by the app's lifecycle.
 
 ### SonicPass install order

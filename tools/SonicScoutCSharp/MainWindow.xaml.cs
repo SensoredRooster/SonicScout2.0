@@ -102,8 +102,7 @@ public partial class MainWindow : Window
     private bool windowsLeqEnabled;
     private bool apoLinked;
     private Process? sonicPassProcess;
-    private Process? artRelayProcess;
-    private bool artRelayOwned;
+    private bool sonicPassStartedByLeqToggle;
     private SonicRoutingConfiguration routingConfiguration;
     private readonly QueuedScoutAudioController scriptAudioController;
     private readonly ScriptOrchestrator scriptBridge;
@@ -228,7 +227,7 @@ public partial class MainWindow : Window
         }
         RefreshWindowsLeqState();
         SonicPassButton_Click(SonicPassButton, new RoutedEventArgs());
-        if (StartArtRelay())
+        if (sonicPassProcess is not null && !sonicPassProcess.HasExited)
         {
             windowsLeqEnabled = true;
             WindowsLeqToggle.IsChecked = true;
@@ -693,7 +692,6 @@ public partial class MainWindow : Window
         try
         {
             StopSonicPass();
-            StopArtRelay();
             scriptBridge.StateChanged -= ScriptBridge_StateChanged;
             scriptBridge.LogReceived -= ScriptBridge_LogReceived;
             scriptAudioController.DisposeAsync().AsTask().GetAwaiter().GetResult();
@@ -979,16 +977,13 @@ public partial class MainWindow : Window
         bool sonicScoutProvisioned = routingConfiguration.SonicScoutProvisioned &&
             !string.IsNullOrWhiteSpace(routingConfiguration.SonicScoutEndpointId);
         bool sonicPassRunning = sonicPassProcess is not null && !sonicPassProcess.HasExited;
-        bool artRelayRunning = artRelayProcess is not null && !artRelayProcess.HasExited;
-        bool engaged = sonicScoutProvisioned && (sonicPassRunning || artRelayRunning);
+        bool engaged = sonicScoutProvisioned && sonicPassRunning;
 
         routingConfiguration.SonicScoutEngaged = engaged;
         routingConfiguration.ActiveOutputDeviceId = GetSelectedOutputDeviceId();
         routingConfiguration.ActiveOutputDeviceName = OutputDeviceComboBox.SelectedItem?.ToString();
         routingConfiguration.LastRoutingNote = engaged
-            ? artRelayRunning
-                ? "Art Relay is running from the tuned capture endpoint to the physical output."
-                : "SonicPass is running from the configured virtual input to the physical output."
+            ? "SonicPass is running from the configured virtual input to the physical output."
             : "No audio relay engine is running.";
         SonicRoutingConfigurationStore.Save(routingConfigurationPath, routingConfiguration);
 
@@ -1080,24 +1075,55 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (wantsEnabled && !StartArtRelay())
+        if (wantsEnabled)
         {
-            windowsLeqEnabled = false;
-            WindowsLeqToggle.IsChecked = false;
-            MessageText.Text = "Art Relay could not start. Keep SonicPass running or check ArtTuneKit sign-in.";
-            RefreshWindowsLeqState();
-            return;
+            if (string.IsNullOrWhiteSpace(routingConfiguration.SelectedPhysicalOutputId))
+            {
+                windowsLeqEnabled = false;
+                WindowsLeqToggle.IsChecked = false;
+                routingConfiguration.SonicScoutEngaged = false;
+                RefreshWindowsLeqState();
+                MessageText.Text = BuildSonicPassSetupGuidance();
+                return;
+            }
+
+            if (sonicPassProcess is null || sonicPassProcess.HasExited)
+            {
+                if (ResolveSonicPassExecutablePath() is null)
+                {
+                    windowsLeqEnabled = false;
+                    WindowsLeqToggle.IsChecked = false;
+                    routingConfiguration.SonicScoutEngaged = false;
+                    RefreshWindowsLeqState();
+                    MessageText.Text = "SonicPass is not built. Run CSharp\\run_scoutpass.bat once.";
+                    return;
+                }
+
+                if (!TryStartSonicPass(routingConfiguration.SonicScoutEndpointId!, routingConfiguration.SelectedPhysicalOutputId))
+                {
+                    windowsLeqEnabled = false;
+                    WindowsLeqToggle.IsChecked = false;
+                    routingConfiguration.SonicScoutEngaged = false;
+                    RefreshWindowsLeqState();
+                    MessageText.Text = "SonicPass could not start. Check the endpoint state.";
+                    return;
+                }
+
+                sonicPassStartedByLeqToggle = true;
+            }
         }
 
         windowsLeqEnabled = wantsEnabled;
-        if (!wantsEnabled)
+        if (!wantsEnabled && sonicPassStartedByLeqToggle)
         {
-            StopArtRelay();
+            sonicPassStartedByLeqToggle = false;
+            StopSonicPass();
         }
+
         routingConfiguration.SonicScoutEngaged = wantsEnabled;
         RefreshWindowsLeqState();
         MessageText.Text = windowsLeqEnabled
-            ? $"Live equalizer enabled. Art Relay is processing the tuned audio path."
+            ? "Live equalizer enabled. SonicPass is processing the tuned audio path."
             : "Windows LEQ disabled. Audio remains on your selected output path.";
     }
 
@@ -1341,6 +1367,7 @@ public partial class MainWindow : Window
         {
             cancellationToken.ThrowIfCancellationRequested();
             ApplySafePhysicalOutputFallback();
+            sonicPassStartedByLeqToggle = false;
             StopSonicPass();
             MessageText.Text = $"Script bridge activated safe bypass mode. {reason}";
             SonicPassStatusText.Text = "BYPASS - safe physical output fallback is active";
@@ -1496,12 +1523,34 @@ public partial class MainWindow : Window
             return;
         }
 
-        string? sonicPassPath = ResolveSonicPassExecutablePath();
-        if (sonicPassPath is null)
+        if (ResolveSonicPassExecutablePath() is null)
         {
             MessageText.Text = "SonicPass is not built. Run CSharp\\run_scoutpass.bat once.";
             SonicPassStatusText.Text = "NOT BUILT - build SonicPass before starting";
             return;
+        }
+
+        if (!TryStartSonicPass(routingConfiguration.SonicScoutEndpointId, physicalOutputId))
+        {
+            SonicPassStatusText.Text = "ERROR - SonicPass could not start";
+            MessageText.Text = "SonicPass could not start. Check the endpoint state.";
+            return;
+        }
+
+        sonicPassStartedByLeqToggle = false;
+        SonicPassButton.Content = "STOP SONICPASS";
+        SonicPassStartButton.Content = "STOP SONICPASS";
+        SonicPassStatusText.Text = "RUNNING - virtual input is routing to the physical output";
+        MessageText.Text = "SonicPass started. Virtual audio is routing to the selected physical output.";
+        UpdateTunedVirtualCableStatusIndicator();
+    }
+
+    private bool TryStartSonicPass(string inputId, string outputId)
+    {
+        string? sonicPassPath = ResolveSonicPassExecutablePath();
+        if (sonicPassPath is null)
+        {
+            return false;
         }
 
         try
@@ -1515,9 +1564,9 @@ public partial class MainWindow : Window
                 WorkingDirectory = Path.GetDirectoryName(sonicPassPath)!
             };
             startInfo.ArgumentList.Add("--input-id");
-            startInfo.ArgumentList.Add(routingConfiguration.SonicScoutEndpointId);
+            startInfo.ArgumentList.Add(inputId);
             startInfo.ArgumentList.Add("--output-id");
-            startInfo.ArgumentList.Add(physicalOutputId);
+            startInfo.ArgumentList.Add(outputId);
             startInfo.ArgumentList.Add("--buffer-ms");
             startInfo.ArgumentList.Add(GetComboValue(SonicPassBufferComboBox, "100"));
             startInfo.ArgumentList.Add("--input-gain-db");
@@ -1533,19 +1582,13 @@ public partial class MainWindow : Window
             }
             sonicPassProcess.BeginOutputReadLine();
             sonicPassProcess.BeginErrorReadLine();
-
-            SonicPassButton.Content = "STOP SONICPASS";
-            SonicPassStartButton.Content = "STOP SONICPASS";
-            SonicPassStatusText.Text = "RUNNING - virtual input is routing to the physical output";
-            MessageText.Text = "SonicPass started. Virtual audio is routing to the selected physical output.";
-            UpdateTunedVirtualCableStatusIndicator();
+            return true;
         }
         catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)
         {
             sonicPassProcess?.Dispose();
             sonicPassProcess = null;
-            SonicPassStatusText.Text = "ERROR - SonicPass could not start";
-            MessageText.Text = $"SonicPass could not start: {exception.Message}";
+            return false;
         }
     }
 
@@ -1554,149 +1597,23 @@ public partial class MainWindow : Window
         Dispatcher.Invoke(() =>
         {
             bool unexpectedExit = !exitRequested && sonicPassProcess is not null && sonicPassProcess.ExitCode != 0;
+            sonicPassStartedByLeqToggle = false;
             SonicPassButton.Content = "SONICPASS";
             SonicPassStartButton.Content = "START SONICPASS";
             SonicPassStatusText.Text = unexpectedExit ? "ERROR - SonicPass stopped unexpectedly" : "STOPPED - SonicPass is not routing audio";
-            if (unexpectedExit)
-            {
-                MessageText.Text = "SonicPass stopped unexpectedly. Check the endpoint state.";
-            }
-            UpdateTunedVirtualCableStatusIndicator();
-        });
-    }
-
-    private bool StartArtRelay()
-    {
-        if (artRelayProcess is not null && !artRelayProcess.HasExited)
-        {
-            return true;
-        }
-
-        Process? existingRelay = Process.GetProcessesByName("atk_relay").FirstOrDefault();
-        if (existingRelay is not null)
-        {
-            artRelayProcess = existingRelay;
-            artRelayOwned = false;
-            return true;
-        }
-
-        string relayPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "ArtTuneKit", "tools", "relay", "atk_relay.exe");
-        if (!File.Exists(relayPath) || string.IsNullOrWhiteSpace(routingConfiguration.SelectedPhysicalOutputId))
-        {
-            return false;
-        }
-
-        MMDevice? captureDevice = audioEnumerator?.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active)
-            .Cast<MMDevice>()
-            .FirstOrDefault(device => device.FriendlyName.Contains("Unified Output", StringComparison.OrdinalIgnoreCase));
-        if (captureDevice is null)
-        {
-            return false;
-        }
-
-        ProcessStartInfo startInfo = new(relayPath)
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            RedirectStandardInput = true,
-            WorkingDirectory = Path.GetDirectoryName(relayPath)!
-        };
-        startInfo.ArgumentList.Add("--out-guid");
-        startInfo.ArgumentList.Add(routingConfiguration.SelectedPhysicalOutputId);
-        startInfo.ArgumentList.Add("--out-name");
-        startInfo.ArgumentList.Add(routingConfiguration.SelectedPhysicalOutputName ?? "Physical output");
-        startInfo.ArgumentList.Add("--out-desc");
-        startInfo.ArgumentList.Add(routingConfiguration.SelectedPhysicalOutputName ?? "Physical output");
-        startInfo.ArgumentList.Add("--out-form");
-        startInfo.ArgumentList.Add("1");
-        startInfo.ArgumentList.Add("--capture-guid");
-        startInfo.ArgumentList.Add(captureDevice.ID);
-        startInfo.ArgumentList.Add("--capture-name");
-        startInfo.ArgumentList.Add(captureDevice.FriendlyName);
-        startInfo.ArgumentList.Add("--buffer");
-        startInfo.ArgumentList.Add("small");
-        startInfo.ArgumentList.Add("--volume");
-        startInfo.ArgumentList.Add("0.99");
-        startInfo.ArgumentList.Add("--exit-on-stdin-close");
-
-        try
-        {
-            artRelayProcess = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
-            artRelayProcess.Exited += ArtRelayProcess_Exited;
-            if (!artRelayProcess.Start())
-            {
-                artRelayProcess.Dispose();
-                artRelayProcess = null;
-                return false;
-            }
-            artRelayProcess.BeginOutputReadLine();
-            artRelayProcess.BeginErrorReadLine();
-            artRelayOwned = true;
-            return true;
-        }
-        catch (InvalidOperationException)
-        {
-            artRelayProcess?.Dispose();
-            artRelayProcess = null;
-            return false;
-        }
-        catch (Win32Exception)
-        {
-            artRelayProcess?.Dispose();
-            artRelayProcess = null;
-            return false;
-        }
-    }
-
-    private void ArtRelayProcess_Exited(object? sender, EventArgs e)
-    {
-        Dispatcher.BeginInvoke(() =>
-        {
             if (!exitRequested && windowsLeqEnabled)
             {
                 windowsLeqEnabled = false;
                 WindowsLeqToggle.IsChecked = false;
-                MessageText.Text = "Art Relay stopped. Live equalizer is off; SonicPass remains available.";
+                routingConfiguration.SonicScoutEngaged = false;
+                RefreshWindowsLeqState();
+                MessageText.Text = "SonicPass stopped. Live equalizer is off; start SonicPass again to resume.";
+            }
+            else if (unexpectedExit)
+            {
+                MessageText.Text = "SonicPass stopped unexpectedly. Check the endpoint state.";
             }
             UpdateTunedVirtualCableStatusIndicator();
-        });
-    }
-
-    private void StopArtRelay()
-    {
-        Process? processToStop = artRelayProcess;
-        artRelayProcess = null;
-        if (processToStop is null || !artRelayOwned)
-        {
-            return;
-        }
-
-        artRelayOwned = false;
-        _ = Task.Run(() =>
-        {
-            try
-            {
-                if (!processToStop.HasExited)
-                {
-                    processToStop.StandardInput.Close();
-                    if (!processToStop.WaitForExit(1500))
-                    {
-                        processToStop.Kill(entireProcessTree: true);
-                    }
-                }
-            }
-            catch (InvalidOperationException)
-            {
-            }
-            catch (Win32Exception)
-            {
-            }
-            finally
-            {
-                processToStop.Dispose();
-            }
         });
     }
 
