@@ -13,6 +13,13 @@
 # LEQ device setup remain guided user steps; the SonicScout2.0 app is optional.
 # ============================================================================
 
+param(
+    # DRY RUN: walk the install path and print what each stage WOULD do, without
+    # doing it. Nothing is downloaded, installed, deleted, renamed or rebooted.
+    # Reserved for -File invocation; 'irm ... | iex' cannot forward switches.
+    [switch]$DryRun
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -6678,6 +6685,35 @@ function Install-SoundControl {
 # ============================================================================
 
 try {
+    if ($DryRun) {
+        # DRY RUN: this script is an interactive menu, so a dry run cannot replay it.
+        # Instead it walks the install functions that [1] Install would call and
+        # prints what each one WOULD do. Nothing is downloaded, installed, deleted,
+        # renamed, or rebooted. Exit 0 either way -- the trace is the signal.
+        Write-Host ""
+        Write-Host "$($script:BoxMargin)DRY RUN -- no changes will be made." -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "$($script:BoxMargin)Install-SonicScout2.0.ps1 -DryRun would:" -ForegroundColor Yellow
+        Write-Host "$($script:BoxMargin)  1. Verify admin privileges and system compatibility (read-only checks)." -ForegroundColor White
+        Write-Host "$($script:BoxMargin)  2. Resolve the E-APO install path from the registry." -ForegroundColor White
+        Write-Host "$($script:BoxMargin)  3. Install-VBCable      -- launch the VB-Audio driver pack (interactive consent required)." -ForegroundColor White
+        Write-Host "$($script:BoxMargin)  4. Install-Voicemeeter  -- launch the Voicemeeter installer, if chosen." -ForegroundColor White
+        Write-Host "$($script:BoxMargin)  5. Install-ReaPlugs     -- launch the ReaPlugs installer, if missing." -ForegroundColor White
+        Write-Host "$($script:BoxMargin)  6. Install-Eapo         -- launch Equalizer APO setup, then restart audio services." -ForegroundColor White
+        Write-Host "$($script:BoxMargin)  7. Install-HeSuVi       -- launch the HeSuVi installer, if present." -ForegroundColor White
+        Write-Host "$($script:BoxMargin)  8. Install-SonicScout20HRIR      -- download and place the HRIR wav." -ForegroundColor White
+        Write-Host "$($script:BoxMargin)  9. Install-SonicScout20Library   -- download the release zip and lay it down." -ForegroundColor White
+        Write-Host "$($script:BoxMargin) 10. Set-SonicScout20Endpoints     -- detect, rename and icon endpoints." -ForegroundColor White
+        Write-Host "$($script:BoxMargin) 11. Write-InitialConfig           -- write device-scoped config.txt." -ForegroundColor White
+        Write-Host "$($script:BoxMargin) 12. Install-JsfxPlugins / Install-VstPlugins -- drop the plugin payloads." -ForegroundColor White
+        Write-Host "$($script:BoxMargin) 13. Install-SoundControl          -- build the LEQ Control Panel, if a source is available." -ForegroundColor White
+        Write-Host ""
+        Write-Host "$($script:BoxMargin)Every step above launches a third-party installer or writes files." -ForegroundColor Yellow
+        Write-Host "$($script:BoxMargin)Run without -DryRun to actually perform them." -ForegroundColor Yellow
+        Write-Host ""
+        exit 0
+    }
+
     Write-Banner
     Test-AdminPrivilege
     Test-SystemCompatibility
