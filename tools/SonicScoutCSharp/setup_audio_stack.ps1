@@ -4,6 +4,7 @@ param(
     [switch]$Quiet,
     [switch]$NonInteractive,
     [switch]$OwnershipAccepted,
+    [switch]$DryRun,
     [ValidateSet('Auto', 'Yes', 'No')]
     [string]$WaveLinkRouting = 'Auto',
     [ValidateSet('Auto', 'Yes', 'No')]
@@ -13,6 +14,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $script:Stages = [System.Collections.Generic.List[object]]::new()
+$script:DryRunPlannedInstalls = @{}
 $script:ScriptRootPath = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:InstallersDirectory = Join-Path $script:ScriptRootPath 'installers'
 $script:LogDirectory = Join-Path $env:LOCALAPPDATA 'SonicScout\logs'
@@ -39,6 +41,26 @@ function Write-Stage {
     if (-not $Quiet) {
         $prefix = "[{0}] {1}" -f $State, $Name
         Write-Host "$prefix - $Detail"
+    }
+}
+
+function Write-DryRunTrace {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$Action,
+        [Parameter(Mandatory = $true)][string]$Detail
+    )
+
+    $entry = [pscustomobject]@{
+        timestamp = (Get-Date).ToString('o')
+        name = $Name
+        state = 'DRYRUN'
+        detail = "WOULD $Action : $Detail"
+    }
+    $script:Stages.Add($entry)
+
+    if (-not $Quiet) {
+        Write-Host "[DRYRUN] $Name - WOULD $Action : $Detail"
     }
 }
 
@@ -83,6 +105,16 @@ function Test-Administrator {
 
 function Request-ElevationIfNeeded {
     if ($Mode -ne 'Install') {
+        return
+    }
+
+    # DRY RUN NEVER ELEVATES. The whole point of the flag is to walk the code
+    # path on the current token, so relaunching elevated would defeat it and
+    # also fire a second UAC prompt for something that changes nothing.
+    if ($DryRun) {
+        if (-not $Quiet) {
+            Write-Host "[DRYRUN] Would request administrator elevation for dependency installation."
+        }
         return
     }
 
@@ -260,6 +292,11 @@ function Download-Installer {
     )
 
     $downloader = Join-Path $script:ScriptRootPath 'auto_setup_dependencies.bat'
+    if ($DryRun) {
+        Write-DryRunTrace -Name 'Dependency download' -Action 'download' -Detail "Would request $Component from $downloader."
+        return $false
+    }
+
     if (-not (Test-Path $downloader)) {
         return $false
     }
@@ -292,6 +329,18 @@ function Invoke-InstallerStage {
     }
 
     $installer = Find-InstallerFile -Patterns $InstallerPatterns
+    if ($null -eq $installer -and $DryRun) {
+        $downloader = Join-Path $script:ScriptRootPath 'auto_setup_dependencies.bat'
+        if (-not [string]::IsNullOrWhiteSpace($DownloadComponent) -and (Test-Path -LiteralPath $downloader)) {
+            $script:DryRunPlannedInstalls[$StageName] = $true
+            Write-DryRunTrace -Name $StageName -Action 'download and install' -Detail "No local installer found. Would request $DownloadComponent through $downloader, then install it."
+        }
+        else {
+            Write-DryRunTrace -Name $StageName -Action 'install' -Detail "$MissingDetail No local installer was found in $($script:InstallersDirectory), and no usable download source is available."
+        }
+        return $false
+    }
+
     if ($null -eq $installer -and -not [string]::IsNullOrWhiteSpace($DownloadComponent)) {
         if (Download-Installer -Component $DownloadComponent) {
             $installer = Find-InstallerFile -Patterns $InstallerPatterns
@@ -346,14 +395,33 @@ function Invoke-InstallerStage {
         return @()
     }
 
+    $isVBAudio = $installer.Name -match '(?i)vb-?(audio|cable)'
+    $silentArgs = Get-SilentInstallArguments -FileName $installer.Name
+
+    # DRY RUN: report exactly what would happen and stop. Nothing is downloaded,
+    # nothing is launched, and the caller's re-verification below is skipped so
+    # the trace never claims a dependency that was not actually installed.
+    if ($DryRun) {
+        $script:DryRunPlannedInstalls[$StageName] = $true
+        if ($installer.Extension -ieq '.msi') {
+            $arguments = "/i `"$($installer.FullName)`" /passive /norestart"
+            Write-DryRunTrace -Name $StageName -Action 'install' -Detail "Would launch msiexec.exe $arguments."
+        }
+        elseif ($isVBAudio) {
+            Write-DryRunTrace -Name $StageName -Action 'install interactively' -Detail "Would launch $($installer.FullName). VB-Audio has no reliable silent mode; its modal consent must be clicked."
+        }
+        else {
+            $arguments = if ($silentArgs.Count -gt 0) { $silentArgs -join ' ' } else { '(interactive; no known silent switches)' }
+            Write-DryRunTrace -Name $StageName -Action 'install' -Detail "Would launch $($installer.FullName) $arguments."
+        }
+        return $false
+    }
+
     Write-Stage -Name $StageName -State 'RUNNING' -Detail "Launching installer: $($installer.Name)"
 
     # VB-Audio is named explicitly because it is the one installer that must stay
     # interactive, and saying so here is what turns an unexplained pause into
     # step-by-step guidance.
-    $isVBAudio = $installer.Name -match '(?i)vb-?(audio|cable)'
-
-    $silentArgs = Get-SilentInstallArguments -FileName $installer.Name
     try {
         if ($installer.Extension -ieq '.msi') {
             $process = Start-Process -FilePath 'msiexec.exe' -ArgumentList "/i `"$($installer.FullName)`" /passive /norestart" -Wait -PassThru
@@ -401,20 +469,24 @@ Nothing else is required - this is the only manual click in the whole install.
 Request-ElevationIfNeeded
 
 if ($Mode -eq 'Install') {
-    Write-Stage -Name 'Ownership confirmation' -State 'RUNNING' -Detail 'Confirming permission to apply Sonic Scout routing ownership changes.'
-    if ($NonInteractive) {
-        $ownershipAccepted = $OwnershipAccepted.IsPresent
+    if ($DryRun) {
+        Write-DryRunTrace -Name 'Ownership confirmation' -Action 'request' -Detail 'Would ask the user to authorize routing ownership changes; the dry run continues without applying changes.'
     }
     else {
-        $ownershipAccepted = Read-YesNo -Prompt 'Do you authorize Sonic Scout setup to apply audio routing ownership/settings on this machine?' -DefaultYes $false
+        if ($NonInteractive) {
+            $ownershipAccepted = $OwnershipAccepted.IsPresent
+        }
+        else {
+            $ownershipAccepted = Read-YesNo -Prompt 'Do you authorize Sonic Scout setup to apply audio routing ownership/settings on this machine?' -DefaultYes $false
+        }
+        if (-not $ownershipAccepted) {
+            $blockedDetail = if ($NonInteractive) { 'Ownership/apply authorization was not provided by the app request.' } else { 'User did not approve ownership/apply authorization.' }
+            Write-Stage -Name 'Ownership confirmation' -State 'BLOCKED' -Detail $blockedDetail
+            Save-SetupHistory
+            exit 1
+        }
+        Write-Stage -Name 'Ownership confirmation' -State 'READY' -Detail 'Ownership/apply authorization accepted.'
     }
-    if (-not $ownershipAccepted) {
-        $blockedDetail = if ($NonInteractive) { 'Ownership/apply authorization was not provided by the app request.' } else { 'User did not approve ownership/apply authorization.' }
-        Write-Stage -Name 'Ownership confirmation' -State 'BLOCKED' -Detail $blockedDetail
-        Save-SetupHistory
-        exit 1
-    }
-    Write-Stage -Name 'Ownership confirmation' -State 'READY' -Detail 'Ownership/apply authorization accepted.'
 }
 
 $state = Get-SystemState
@@ -442,7 +514,21 @@ $state = Get-SystemState
 $waveLinkRouteAccepted = $state.WaveLinkAvailable
 if ($state.WaveLinkAvailable) {
     if ($Mode -eq 'Install') {
-        if ($NonInteractive) {
+        if ($DryRun) {
+            if ($NonInteractive) {
+                if ($WaveLinkRouting -eq 'Yes') {
+                    $waveLinkRouteAccepted = $true
+                }
+                elseif ($WaveLinkRouting -eq 'No') {
+                    $waveLinkRouteAccepted = $false
+                }
+            }
+            else {
+                Write-DryRunTrace -Name 'Elgato Wave Link' -Action 'prompt' -Detail 'Would ask whether to use Wave Link routing; simulating the default Yes response.'
+                $waveLinkRouteAccepted = $true
+            }
+        }
+        elseif ($NonInteractive) {
             if ($WaveLinkRouting -eq 'Yes') {
                 $waveLinkRouteAccepted = $true
             }
@@ -478,7 +564,16 @@ $state = Get-SystemState
     if (-not $state.VirtualRouteAvailable -and -not $compatibleNativeRouteAvailable -and -not $state.VoicemeeterInstalled) {
     $installVoicemeeter = $false
     if ($Mode -eq 'Install') {
-        if ($NonInteractive) {
+        if ($DryRun) {
+            if ($NonInteractive) {
+                $installVoicemeeter = $VoicemeeterFallback -ne 'No'
+            }
+            else {
+                Write-DryRunTrace -Name 'Voicemeeter Fallback' -Action 'prompt' -Detail 'Would ask whether to install Voicemeeter; simulating the default Yes response.'
+                $installVoicemeeter = $true
+            }
+        }
+        elseif ($NonInteractive) {
             if ($VoicemeeterFallback -eq 'No') {
                 $installVoicemeeter = $false
             }
@@ -517,9 +612,15 @@ if (-not $((Get-ChildItem "${env:ProgramFiles}\VSTPlugins\ReaPlugs\*.dll" -Error
 }
 
 $finalState = Get-SystemState
-$readyForTesting = $finalState.EqualizerApoInstalled -and ($finalState.VirtualRouteAvailable -or $waveLinkRouteAccepted -or $finalState.SoundBlasterAvailable -or $finalState.VoicemeeterInstalled -or $finalState.VoicemeeterEndpointDetected)
+$equalizerApoWouldBeInstalled = $finalState.EqualizerApoInstalled -or (
+    $DryRun -and $script:DryRunPlannedInstalls.ContainsKey('Equalizer APO')
+)
+$readyForTesting = $equalizerApoWouldBeInstalled -and ($finalState.VirtualRouteAvailable -or $waveLinkRouteAccepted -or $finalState.SoundBlasterAvailable -or $finalState.VoicemeeterInstalled -or $finalState.VoicemeeterEndpointDetected)
 
-if (-not $finalState.EqualizerApoFilesReady) {
+if ($DryRun -and $script:DryRunPlannedInstalls.ContainsKey('Equalizer APO') -and -not $finalState.EqualizerApoFilesReady) {
+    Write-DryRunTrace -Name 'Equalizer APO verification' -Action 'verify' -Detail 'Would verify Equalizer APO config.txt and runtime files after the planned installation; the dry run cannot verify files that were not installed.'
+}
+elseif (-not $finalState.EqualizerApoFilesReady) {
     Write-Stage -Name 'Equalizer APO verification' -State 'UPDATE' -Detail 'Equalizer APO was not verified by its config.txt and runtime files.'
 }
 else {
@@ -534,7 +635,10 @@ else {
     Write-Stage -Name 'Windows audio service' -State 'READY' -Detail 'Windows Audio service is running.'
 }
 
-if ($readyForTesting) {
+if ($readyForTesting -and $DryRun) {
+    Write-DryRunTrace -Name 'APO Configuration' -Action 'configure' -Detail 'Would detect and configure audio endpoints, set device-scoped Equalizer APO binding, and write config.txt.'
+}
+elseif ($readyForTesting) {
     Write-Stage -Name 'APO Configuration' -State 'RUNNING' -Detail 'Invoking main installer endpoint configuration to bind APO to correct Hi-Fi tunnel device.'
     
     # Locate the main Install-SonicScout2.0.ps1 installer
@@ -596,15 +700,25 @@ if ($readyForTesting) {
 }
 
 if ($readyForTesting) {
-    Write-Stage -Name 'Final verification' -State 'READY' -Detail 'Audio stack order checks passed. System is ready for Sonic Scout tester flow.'
+    if ($DryRun) {
+        Write-DryRunTrace -Name 'Final verification' -Action 'verify' -Detail 'Would run final audio-stack checks after the planned installs; no installation was performed or verified.'
+    }
+    else {
+        Write-Stage -Name 'Final verification' -State 'READY' -Detail 'Audio stack order checks passed. System is ready for Sonic Scout tester flow.'
+    }
 }
 else {
     Write-Stage -Name 'Final verification' -State 'UPDATE' -Detail 'Setup did not detect a complete tuned-channel route. Install missing dependencies and rerun setup_audio_stack.ps1.'
 }
 
-Save-SetupHistory
+if ($DryRun) {
+    Write-DryRunTrace -Name 'Setup history' -Action 'save' -Detail "Would save the setup report under $script:LogDirectory; no files are written during a dry run."
+}
+else {
+    Save-SetupHistory
+}
 
-if ($readyForTesting) {
+if ($readyForTesting -and (-not $DryRun -or $finalState.AudioServiceRunning)) {
     exit 0
 }
 

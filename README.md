@@ -64,7 +64,29 @@ The main menu offers:
 | `[b] SonicScout2.0` | Opens the page for the automated, auto-updating app |
 | `[Q] Quit` | Exit |
 
-The script writes the Equalizer APO starter chain and `[5] Setup Profile` activates real library files. Routing, channel format, mixer routing, and LEQ setup remain guided Windows steps covered by the [video guide](https://www.github.com/sensoredrooster).
+The script writes the Equalizer APO starter chain and `[5] Setup Profile` activates real library files. LEQ installation, and the LFX/GFX enablement E-APO's Device Selector would otherwise be used for, are both handled automatically -- see [What is automated](#what-is-automated).
+
+## What is automated
+
+Most of the chain needs no manual steps. These are all handled for you:
+
+| Step | How |
+|------|-----|
+| Output device selection | Physical endpoints are detected and ranked (headphone/headset > DAC > amp > USB > speaker). Virtual cables are excluded, so a cable never gets auto-selected as "the device you hear" |
+| Third-party mixer detection | Voicemeeter, Elgato Wave Link and Sound Blaster are detected from your endpoints and ticked for you |
+| Driver installs | Equalizer APO, Voicemeeter, ReaPlugs and HeSuVi install silently. VB-Audio needs one confirmation click, and the wizard shows you exactly what to click while it waits |
+| LFX / GFX | E-APO's Device Selector is never needed. Sonic Scout snapshots the device's FX slots before installing LEQ, restores them afterwards, and verifies both |
+| SonicPass | Built and shipped with the app. There is no separate "run the bat once" step |
+| Dependencies | Installers ship with the app; nothing needs downloading or placing by hand |
+
+## What you still have to do
+
+Four things no installer can do for you. The setup wizard prints these as numbered steps at the end of every run:
+
+1. **Restart Windows.** Driver and audio changes are not live until after a reboot.
+2. **Leave your default playback device alone.** Keep it on your physical device (Realtek or similar). Sonic Scout is opt-in per app, so nothing needs to change here.
+3. **Turn Spatial Sound off** for the devices you listen through. Windows Sonic, Dolby Atmos and DTS:X silently block Equalizer APO when left on, and the equalizer will appear to do nothing.
+4. **Point each game or app at the SonicScout2.0 virtual input.** This is per-app by design: Sonic Scout receives the app's audio, applies your tune, and passes it to your speakers. Apps left on your speakers bypass the tune.
 
 ## Turnkey Setup Wizard (C# app)
 
@@ -77,10 +99,15 @@ Primary entry points:
 
 Behavior:
 
-- Startup is gated: first-run checks execute before normal app controls are shown.
+- Startup is gated: first-run checks execute before normal app controls are shown. The check is a **read-only preflight** -- it reports what is missing without installing anything or prompting for elevation.
 - If setup is incomplete, the setup wizard opens first and guides install/routing.
-- Setup actions run non-interactively in the backend script bridge using the user's wizard choices.
+- The wizard is four steps: confirm output and authorise, run install/checks, audio stack ready, verify Windows settings.
+- Setup actions run non-interactively in the backend script bridge using the user's wizard choices. One authorisation checkbox covers driver installation, routing changes, and dependency fallback.
 - When setup passes, the main app UI opens for profile/live use.
+
+### What is automated
+
+See [What is automated](#what-is-automated) and [What you still have to do](#what-you-still-have-to-do) above. In short: output selection, mixer detection, silent driver installs, LFX/GFX, and SonicPass are all handled. The four remaining steps are printed as a numbered checklist when setup finishes.
 
 ## What the installer does
 
@@ -89,7 +116,7 @@ Behavior:
 1. **VB-CABLE** - the virtual audio cable the whole chain routes through
 2. **Voicemeeter** - only when you need it. Skipped if you already run Elgato Wave Link or a paid Voicemeeter edition, so your existing mixer is left alone
 3. **ReaPlugs** - the VST host and effects the tunes use
-4. **Audio endpoints** - names and icons for the three devices below. Setup does not set the channel formats; that is a manual step covered in the [video guide](https://www.github.com/sensoredrooster)
+4. **Audio endpoints** - names and icons for the three devices below. The **SonicScout2.0** endpoint's speaker configuration is also set to 7.1 Surround here (see [Audio endpoints](#audio-endpoints)); the 16-channel endpoint is left at its driver default
 5. **Equalizer APO**, then the tune library, fetched automatically
 6. **HeSuVi** - virtual surround via HRIR convolution
 7. **HRIR files**, then a starter `config.txt`

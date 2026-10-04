@@ -46,6 +46,7 @@ Script payloads are serialized to `%LOCALAPPDATA%\SonicScout\bridge\requests\` a
 - Runs `-Mode Preflight -Quiet` when not elevated, then continues UI checks and reports that admin relaunch is required for dependency installs.
 - On script failure, bridge fallback forces safe physical-output bypass and reports status in setup checks.
 - Script prompts are disabled for app-driven runs (`-NonInteractive`); ownership and routing choices come from the setup UI checkboxes/toggles.
+- For a read-only install trace, run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\setup_audio_stack.ps1 -Mode Install -DryRun`. Dry-run never elevates, prompts, downloads, launches installers, changes endpoints/configuration, or writes setup history; it simulates interactive prompt defaults and reports planned installs as conditional.
 
 Startup is now gated for turnkey install/setup:
 
