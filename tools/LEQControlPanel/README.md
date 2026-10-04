@@ -1,5 +1,5 @@
 <p align="center">
- <img width="150" height="150" alt="AIW's LEQ Control Panel" src="https://github.com/user-attachments/assets/0d625a9c-447c-462b-8775-a37b95ea5774" />
+ <img width="150" height="150" alt="Sonic Scout LEQ Control Panel" src="https://github.com/user-attachments/assets/0d625a9c-447c-462b-8775-a37b95ea5774" />
 </p>
 
 <p align="center">

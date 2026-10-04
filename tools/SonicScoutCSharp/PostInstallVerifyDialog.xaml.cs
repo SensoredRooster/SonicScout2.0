@@ -14,8 +14,8 @@ public partial class PostInstallVerifyDialog : Window
     private static readonly VerificationItem[] Items =
     [
         new(
-            "Is your default playback device set to the Sonic Scout endpoint?",
-            "Windows Sound Settings > Output. The active output must match the endpoint Sonic Scout provisioned during SETUP."),
+            "Is your Windows default playback still your physical device (Realtek etc.)?",
+            "It should be. Sonic Scout is opt-in per app, so leave the system default on your Realtek or other physical device. Only change it if you deliberately want every app routed through Sonic Scout."),
         new(
             "Is Windows Spatial Sound turned OFF for that device?",
             "Sound Settings > (device) > Spatial sound. Windows Sonic, Dolby Atmos, and DTS:X will silently block Equalizer APO processing if left on."),

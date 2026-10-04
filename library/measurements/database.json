@@ -174,14 +174,13 @@
       "aliases": []
     },
     {
-      "id": "local_tipsy_ts12_aiw_copy",
+      "id": "local_tipsy_ts12",
       "brand": "Tipsy",
-      "model": "TS12 (AIW Copy)",
-      "file": "Tipsy TS12 (AIW Copy).txt",
+      "model": "TS12",
+      "file": "Tipsy TS12.txt",
       "source": "local",
       "type": "Unknown",
       "aliases": [
-        "TS12(AIWCopy)",
         "TS12"
       ]
     },

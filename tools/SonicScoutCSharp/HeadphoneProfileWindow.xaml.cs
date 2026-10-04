@@ -98,8 +98,13 @@ public partial class HeadphoneProfileWindow : Window
 
     private static string ResolveSonicScoutLibraryPath()
     {
-        // ART_TUNE_LIBRARY is honored as a legacy fallback so existing installs that
-        // point at a non-default library keep working after the rebrand.
+        // DEPRECATED SHIM -- the old variable name is still read on purpose.
+        // SONICSCOUT_LIBRARY is the supported name. The pre-rebrand name below is a
+        // MIGRATION PATH, not a supported setting: anyone who set it before the rebrand
+        // would otherwise have their custom library path silently ignored, and the
+        // profile catalog would quietly fall back to the default location. Nothing in
+        // this codebase writes either variable -- they are user-set only. Safe to delete
+        // once the pre-rebrand variable is no longer a realistic possibility.
         string? configured = Environment.GetEnvironmentVariable("SONICSCOUT_LIBRARY");
         if (string.IsNullOrWhiteSpace(configured))
         {
@@ -108,13 +113,19 @@ public partial class HeadphoneProfileWindow : Window
 
         if (!string.IsNullOrWhiteSpace(configured))
         {
+            // Debug-only: this is a static resolver with no UI surface of its own, and
+            // touching StatusText from here would need a dispatcher hop for a message
+            // the user did not ask for. The deprecation is documented at the shim above.
+            System.Diagnostics.Debug.WriteLine(
+                $"[LIBRARY] Using the deprecated pre-rebrand library variable. " +
+                $"Set SONICSCOUT_LIBRARY instead. Value: {configured}");
             return configured;
         }
 
         // This mirrors the installer's own resolution: the library lands in the
-        // E-APO config tree under the SonicScout2.0 folder. The previous default
-        // (Documents\ArtTuneDB-main\library) is a source-checkout path that never
-        // exists on an installed machine, so the catalog silently loaded nothing.
+        // E-APO config tree under the SonicScout2.0 folder. The pre-rebrand
+        // default was a source-checkout folder that never exists on an
+        // installed machine, so the catalog silently loaded nothing.
         string installedPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
             "EqualizerAPO",

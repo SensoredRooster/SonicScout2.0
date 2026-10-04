@@ -3560,9 +3560,21 @@ namespace LEQControlPanel
         private static bool IsSonicScoutDevice(AudioDevice? device)
         {
             if (device == null) return false;
-            // Legacy "Art Tune" endpoints and current "SonicScout2.0" endpoints are
-            // the same managed virtual cable; match both so gating works on
-            // machines renamed by the SonicScout2.0 installer.
+
+            // DEPRECATED SHIM -- the pre-rebrand prefix below is still matched on purpose.
+            //
+            // Removing it is a breaking change, not a cleanup. The installer RENAMES the
+            // VB-CABLE endpoints to the current name (Install-SonicScout2.0.ps1:6419), so
+            // a machine that installed a build from before that rename still has endpoints
+            // carrying the old name. Dropping the match would make this device silently
+            // stop being recognised: the SonicScout overlay would not gate, and
+            // RefreshSonicScoutDetection would report no route -- with no error anywhere,
+            // just a quiet loss of function on exactly the machines least able to
+            // diagnose it.
+            //
+            // Nothing creates endpoints with this name any more; it is read-only
+            // recognition of state an older installer left behind. Delete it once support
+            // for pre-rename installs is dropped.
             return device.Name.StartsWith("SonicScout2.0", StringComparison.OrdinalIgnoreCase)
                 || device.Name.StartsWith("Art Tune", StringComparison.OrdinalIgnoreCase);
         }

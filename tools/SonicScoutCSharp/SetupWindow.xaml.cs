@@ -316,11 +316,11 @@ OwnershipConsentCheckBox.IsChecked == true,
                 "2. Wait for Windows to finish. Driver and audio changes are not live until after this.\n" +
                 "3. Reopen Sonic Scout. Nothing else is needed - it remembers your choices."),
 
-            ("Set your default playback device",
-                "1. Click Start, type 'Sound Settings', press Enter.\n" +
-                "2. Under 'Choose your output device', click the Sonic Scout endpoint.\n" +
-                "3. Confirm it now says 'Default' underneath.\n" +
-                "Left unchanged, Windows keeps playing through your speakers directly and the equalizer is bypassed."),
+            ("Leave your default playback device alone",
+                "1. Do NOT change your Windows default output. Leave it on your Realtek (or other\n" +
+                "   physical) device - Sonic Scout is designed to work with that unchanged.\n" +
+                "2. Games and apps join Sonic Scout individually, via the step below.\n" +
+                "Changing the system default here is not needed and will not improve the sound."),
 
             ("Turn Spatial Sound off for that device",
                 "1. Still in Sound Settings, click your Sonic Scout device to open it.\n" +
