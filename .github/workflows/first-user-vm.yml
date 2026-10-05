@@ -76,6 +76,14 @@ jobs:
           $packageDry=$LASTEXITCODE
           Add-Result 'unpacked package guided setup dry-run' 'exit 0' "exit $packageDry" ($packageDry -eq 0)
 
+          # Exercise live dependency sources without installing anything.
+          $downloadBat = Join-Path $freshRoot 'auto_setup_dependencies.bat'
+          $downloadAll = Start-Process -FilePath 'cmd.exe' -WorkingDirectory $freshRoot -ArgumentList '/d','/c',"\"$downloadBat\" /download-only" -PassThru -Wait -NoNewWindow -RedirectStandardOutput (Join-Path $logDir 'download-default.stdout.log') -RedirectStandardError (Join-Path $logDir 'download-default.stderr.log')
+          Add-Result 'dependency downloads: default stack' 'exit 0' "exit $($downloadAll.ExitCode)" ($downloadAll.ExitCode -eq 0)
+
+          $downloadRea = Start-Process -FilePath 'cmd.exe' -WorkingDirectory $freshRoot -ArgumentList '/d','/c',"\"$downloadBat\" /download-only /reaplugs" -PassThru -Wait -NoNewWindow -RedirectStandardOutput (Join-Path $logDir 'download-reaplugs.stdout.log') -RedirectStandardError (Join-Path $logDir 'download-reaplugs.stderr.log')
+          Add-Result 'dependency downloads: ReaPlugs path' 'exit 0' "exit $($downloadRea.ExitCode)" ($downloadRea.ExitCode -eq 0)
+
           # WPF smoke: a first launch should stay alive rather than crash immediately.
           $appProc = Start-Process -FilePath (Join-Path $freshRoot 'SonicScout.exe') -PassThru
           Start-Sleep -Seconds 20
