@@ -132,6 +132,19 @@ jobs:
           $manual51=$LASTEXITCODE
           Add-Result 'manual installer Windows PowerShell 5.1 dry-run' 'exit 0' "exit $manual51" ($manual51 -eq 0)
 
+          $remoteInstaller = Join-Path $env:RUNNER_TEMP 'Install-SonicScout2.0-remote.ps1'
+          try {
+            Invoke-WebRequest -UseBasicParsing -Uri 'https://raw.githubusercontent.com/sensoredrooster/SonicScout2.0/main/powershell/Install-SonicScout2.0.ps1' -OutFile $remoteInstaller -TimeoutSec 60
+            $remoteHash=(Get-FileHash $remoteInstaller -Algorithm SHA256).Hash
+            $localHash=(Get-FileHash 'powershell\Install-SonicScout2.0.ps1' -Algorithm SHA256).Hash
+            Add-Result 'README raw installer download' 'remote main installer matches checkout' "hashMatch=$($remoteHash -eq $localHash)" ($remoteHash -eq $localHash)
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File $remoteInstaller -DryRun *> (Join-Path $logDir 'manual-installer-remote-dryrun.log')
+            $remoteDry=$LASTEXITCODE
+            Add-Result 'README raw installer remote dry-run' 'exit 0' "exit $remoteDry" ($remoteDry -eq 0)
+          } catch {
+            Add-Result 'README raw installer download' 'download succeeds' $_.Exception.Message $false
+          }
+
           $pwshOut = Join-Path $logDir 'manual-installer-pwsh.log'
           $proc = Start-Process -FilePath 'pwsh.exe' -ArgumentList '-NoProfile','-File','powershell\Install-SonicScout2.0.ps1' -PassThru -NoNewWindow -RedirectStandardOutput $pwshOut -RedirectStandardError (Join-Path $logDir 'manual-installer-pwsh.err.log')
           if(-not $proc.WaitForExit(15000)){ $proc.Kill(); $proc.WaitForExit(); $pwshCode=124 } else { $pwshCode=$proc.ExitCode }
