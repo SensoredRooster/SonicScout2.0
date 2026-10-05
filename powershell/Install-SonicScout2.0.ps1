@@ -5269,15 +5269,24 @@ function Install-SonicScout20Library {
         if (-not $downloaded) {
             $localBundle = $null
             if ($PSScriptRoot) {
+                # Source checkout: <repo>\powershell\Install-SonicScout2.0.ps1 and
+                # <repo>\library. Published app: installer and library are siblings.
                 $repoRoot = Split-Path $PSScriptRoot -Parent
-                $candidate = Join-Path $repoRoot 'library'
-                if (Test-Path -LiteralPath $candidate) {
+                $candidates = @(
+                    (Join-Path $PSScriptRoot 'library'),
+                    (Join-Path $repoRoot 'library')
+                )
+                foreach ($candidate in $candidates) {
+                    if (-not (Test-Path -LiteralPath $candidate)) { continue }
                     $required = @('BF6', 'BO6', 'BO7', 'version.txt')
                     $ok = $true
                     foreach ($req in $required) {
                         if (-not (Test-Path -LiteralPath (Join-Path $candidate $req))) { $ok = $false; break }
                     }
-                    if ($ok) { $localBundle = $candidate }
+                    if ($ok) {
+                        $localBundle = $candidate
+                        break
+                    }
                 }
             }
 
