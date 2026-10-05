@@ -725,7 +725,16 @@ else {
     Save-SetupHistory
 }
 
-if ($readyForTesting -and (-not $DryRun -or $finalState.AudioServiceRunning)) {
+# A dry run validates that the setup decision tree can be traversed safely.
+# It intentionally performs no installs, so a clean machine cannot become
+# "readyForTesting" during the trace. Reaching this point without an exception is
+# therefore success for DryRun and must not be confused with Preflight's
+# "setup incomplete" exit code 2.
+if ($DryRun) {
+    exit 0
+}
+
+if ($readyForTesting -and $finalState.AudioServiceRunning) {
     exit 0
 }
 
