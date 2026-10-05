@@ -48,11 +48,11 @@ Script payloads are serialized to `%LOCALAPPDATA%\SonicScout\bridge\requests\` a
 - Script prompts are disabled for app-driven runs (`-NonInteractive`); ownership and routing choices come from the setup UI checkboxes/toggles.
 - For a read-only install trace, run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\setup_audio_stack.ps1 -Mode Install -DryRun`. Dry-run never elevates, prompts, downloads, launches installers, changes endpoints/configuration, or writes setup history; it simulates interactive prompt defaults and reports planned installs as conditional.
 
-Startup is now gated for turnkey install/setup:
+Startup is guarded for turnkey install/setup:
 
-- On launch, Sonic Scout runs a non-interactive preflight check before showing the main UI.
+- On launch, Sonic Scout runs a non-interactive preflight check.
 - If install/setup is incomplete, it opens the Setup wizard first.
-- The main window is shown only after setup is verified complete.
+- If the user closes the wizard before setup is complete, the main window remains open with a **SETUP REQUIRED** status so setup can be resumed later.
 
 ## Setup wizard routing flow
 
