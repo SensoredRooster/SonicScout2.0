@@ -7,31 +7,29 @@ if exist "%OUTPUT%" rmdir /S /Q "%OUTPUT%"
 
 dotnet publish "SonicScout.CSharp.csproj" --configuration Release --runtime win-x64 --self-contained false --output "%OUTPUT%"
 if errorlevel 1 (
-  echo Publish failed. Make sure the .NET 8 SDK is installed, then try again.
+  echo Publish failed.
+  pause
   exit /b 1
 )
 
-if not exist "%OUTPUT%\profiles" mkdir "%OUTPUT%\profiles"
-if exist "profiles\*.txt" copy /Y "profiles\*.txt" "%OUTPUT%\profiles\" >nul
-copy /Y "setup_audio_stack.ps1" "%OUTPUT%\setup_audio_stack.ps1" >nul
-copy /Y "run_audio_stack_setup.bat" "%OUTPUT%\run_audio_stack_setup.bat" >nul
-copy /Y "auto_setup_dependencies.bat" "%OUTPUT%\auto_setup_dependencies.bat" >nul
+REM The project file already copies runtime setup scripts, installer payloads,
+REM logo/targets, and SonicPass. Copy only entry-point files not included by MSBuild.
 copy /Y "Install-SonicScout.bat" "%OUTPUT%\Install-SonicScout.bat" >nul
-
-if exist "installers" (
-  xcopy /E /I /Y "installers" "%OUTPUT%\installers" >nul
-) else (
-  mkdir "%OUTPUT%\installers"
+if errorlevel 1 (
+  echo Failed to copy Install-SonicScout.bat into the published folder.
+  pause
+  exit /b 1
 )
 
-if not exist "%OUTPUT%\SonicScout.exe" (
-  echo Publish completed without SonicScout.exe.
-  exit /b 1
+if exist "profiles\*.txt" (
+  if not exist "%OUTPUT%\profiles" mkdir "%OUTPUT%\profiles"
+  copy /Y "profiles\*.txt" "%OUTPUT%\profiles\" >nul
 )
 
 echo Published to:
 echo %OUTPUT%
 echo.
 echo On the destination PC, run Install-SonicScout.bat from the published SonicScout folder.
+pause
 endlocal
 exit /b 0
