@@ -44,7 +44,8 @@ jobs:
           $sourceExe = Test-Path 'tools\SonicScoutCSharp\SonicScout.exe'
           Add-Result 'raw checkout starts unbuilt' 'no prebuilt SonicScout.exe required' "prebuilt=$sourceExe" (-not $sourceExe)
 
-          $p = Start-Process -FilePath 'cmd.exe' -ArgumentList '/d','/c',"$installBat < NUL" -PassThru -Wait -NoNewWindow -RedirectStandardOutput (Join-Path $logDir 'source-install.stdout.log') -RedirectStandardError (Join-Path $logDir 'source-install.stderr.log')
+          $sourceCommand = '(echo N)| call "' + $installBat + '"'
+          $p = Start-Process -FilePath 'cmd.exe' -ArgumentList '/d','/c',$sourceCommand -PassThru -Wait -NoNewWindow -RedirectStandardOutput (Join-Path $logDir 'source-install.stdout.log') -RedirectStandardError (Join-Path $logDir 'source-install.stderr.log')
           Add-Result 'README recommended Install-SonicScout.bat recovers from source checkout' 'exit 0 via source launcher/build path' "exit $($p.ExitCode)" ($p.ExitCode -eq 0)
 
           $publishBat = 'tools\SonicScoutCSharp\publish_sonic_scout.bat'
