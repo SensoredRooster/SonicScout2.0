@@ -29,11 +29,18 @@ Check out [www.github.com/sensoredrooster](https://www.github.com/sensoredrooste
 
 ## Install (recommended: turnkey app wizard)
 
-Use the guided app flow first:
+Use the guided app flow first.
 
-1. Run `tools/SonicScoutCSharp/Install-SonicScout.bat` as Administrator (bootstrap/dependencies).
-2. Launch `tools/SonicScoutCSharp/run_sonic_scout_csharp.bat`.
-3. Follow the setup wizard.
+**If you downloaded/cloned the source repository:**
+
+1. Install the **.NET 8 SDK** if it is not already installed.
+2. Run `tools/SonicScoutCSharp/publish_sonic_scout.bat`. This builds a complete distributable folder at `%USERPROFILE%\Desktop\SonicScout`.
+3. Open that published folder and run `Install-SonicScout.bat` as Administrator.
+4. Follow the setup wizard.
+
+**If you already have a published SonicScout folder:** run its `Install-SonicScout.bat` as Administrator directly.
+
+`tools/SonicScoutCSharp/Install-SonicScout.bat` inside a raw source checkout is not a build command; it expects `SonicScout.exe` to already be beside it. Developers who only want to launch from source can use `tools/SonicScoutCSharp/run_sonic_scout_csharp.bat`, which builds the WPF project when needed.
 
 The app is startup-gated: it runs setup checks first, and **main live controls do not appear until installation/setup passes**.
 
