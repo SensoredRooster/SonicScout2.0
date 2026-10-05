@@ -42,14 +42,47 @@ jobs:
 
           $installBat = 'tools\SonicScoutCSharp\Install-SonicScout.bat'
           $sourceExe = Test-Path 'tools\SonicScoutCSharp\SonicScout.exe'
-          Add-Result 'README recommended source install has executable' 'SonicScout.exe available or installer builds/publishes it' "exists=$sourceExe" $sourceExe 'README currently tells a repo user to run Install-SonicScout.bat first.'
+          Add-Result 'raw checkout starts unbuilt' 'no prebuilt SonicScout.exe required' "prebuilt=$sourceExe" (-not $sourceExe)
 
           $p = Start-Process -FilePath 'cmd.exe' -ArgumentList '/d','/c',"$installBat < NUL" -PassThru -Wait -NoNewWindow -RedirectStandardOutput (Join-Path $logDir 'source-install.stdout.log') -RedirectStandardError (Join-Path $logDir 'source-install.stderr.log')
-          Add-Result 'README recommended Install-SonicScout.bat exits successfully from checkout' 'exit 0' "exit $($p.ExitCode)" ($p.ExitCode -eq 0)
+          Add-Result 'README recommended Install-SonicScout.bat recovers from source checkout' 'exit 0 via source launcher/build path' "exit $($p.ExitCode)" ($p.ExitCode -eq 0)
 
           $publishBat = 'tools\SonicScoutCSharp\publish_sonic_scout.bat'
           $pub = Start-Process -FilePath 'cmd.exe' -ArgumentList '/d','/c',"$publishBat < NUL" -PassThru -Wait -NoNewWindow -RedirectStandardOutput (Join-Path $logDir 'publish-bat.stdout.log') -RedirectStandardError (Join-Path $logDir 'publish-bat.stderr.log')
           Add-Result 'publish_sonic_scout.bat' 'exit 0 and create distributable' "exit $($pub.ExitCode)" ($pub.ExitCode -eq 0)
+
+          $publishedOut = Join-Path $env:USERPROFILE 'Desktop\SonicScout'
+          foreach($name in @('SonicScout.exe','Install-SonicScout.bat','setup_audio_stack.ps1','run_audio_stack_setup.bat','auto_setup_dependencies.bat','SonicScout.SonicPass.exe')){
+            $ok = Test-Path (Join-Path $publishedOut $name)
+            Add-Result "publish batch payload: $name" 'present' "present=$ok" $ok
+          }
+
+          # Simulate what a tester gets after downloading and unpacking a package.
+          $packageZip = Join-Path $env:RUNNER_TEMP 'SonicScout-package.zip'
+          if(Test-Path $packageZip){Remove-Item $packageZip -Force}
+          Compress-Archive -Path (Join-Path $publishedOut '*') -DestinationPath $packageZip -Force
+          $freshRoot = Join-Path $env:RUNNER_TEMP 'Fresh User Extract\SonicScout'
+          if(Test-Path $freshRoot){Remove-Item $freshRoot -Recurse -Force}
+          New-Item -ItemType Directory -Force -Path $freshRoot | Out-Null
+          Expand-Archive -Path $packageZip -DestinationPath $freshRoot -Force
+          $freshExe = Test-Path (Join-Path $freshRoot 'SonicScout.exe')
+          Add-Result 'unpacked package contains app' 'SonicScout.exe present after ZIP round-trip' "present=$freshExe" $freshExe
+
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $freshRoot 'setup_audio_stack.ps1') -Mode Preflight -Quiet *> (Join-Path $logDir 'package-preflight.log')
+          $packagePreflight=$LASTEXITCODE
+          Add-Result 'unpacked package preflight' 'exit 2 on clean machine, without crash' "exit $packagePreflight" ($packagePreflight -eq 2)
+
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $freshRoot 'setup_audio_stack.ps1') -Mode Install -DryRun -NonInteractive -OwnershipAccepted *> (Join-Path $logDir 'package-dryrun.log')
+          $packageDry=$LASTEXITCODE
+          Add-Result 'unpacked package guided setup dry-run' 'exit 0' "exit $packageDry" ($packageDry -eq 0)
+
+          # WPF smoke: a first launch should stay alive rather than crash immediately.
+          $appProc = Start-Process -FilePath (Join-Path $freshRoot 'SonicScout.exe') -PassThru
+          Start-Sleep -Seconds 20
+          $stillRunning = -not $appProc.HasExited
+          $appActual = if($stillRunning){'running after 20s'}else{"exited $($appProc.ExitCode)"}
+          Add-Result 'unpacked package first-launch smoke' 'process remains alive through preflight/setup opening' $appActual $stillRunning
+          if($stillRunning){Stop-Process -Id $appProc.Id -Force -ErrorAction SilentlyContinue}
 
           $directOut = Join-Path $env:RUNNER_TEMP 'SonicScoutPublished'
           dotnet publish tools\SonicScoutCSharp\SonicScout.CSharp.csproj -c Release -r win-x64 --self-contained false -o $directOut *> (Join-Path $logDir 'direct-publish.log')
