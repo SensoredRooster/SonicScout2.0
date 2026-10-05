@@ -31,6 +31,20 @@
     <!-- Download-Installer's last-resort fallback shells to this .bat; setup_audio_stack.ps1:263
          returns $false without it. -->
     <None Include="auto_setup_dependencies.bat" Condition="Exists('auto_setup_dependencies.bat')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+
+    <!-- A published first-user package must be able to complete the same APO/library
+         configuration as a source checkout. Keep the main installer and tune library
+         beside the app so setup_audio_stack.ps1 can finish even when no GitHub Release
+         asset is available. -->
+    <None Include="..\..\powershell\Install-SonicScout2.0.ps1"
+          Link="Install-SonicScout2.0.ps1"
+          Condition="Exists('..\..\powershell\Install-SonicScout2.0.ps1')"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="Always" />
+    <None Include="..\..\library\**\*"
+          Link="library\%(RecursiveDir)%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="Always" />
   </ItemGroup>
 
   <!-- Builds ScoutPass with the app so setup never reports "SonicPass is not built".
