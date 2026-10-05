@@ -28,12 +28,12 @@ A .NET 8 SDK is required to build from source. The published folder can run with
 
 ## Bridge architecture (UI <-> script engine)
 
-The project now includes a dedicated bridge layer in [Bridge/](</c:/Users/brand/OneDrive/Documents/ItsHapa's Project/CSharp/Bridge>) for isolating the UI from script execution:
+The project now includes a dedicated bridge layer in `Bridge/` for isolating the UI from script execution:
 
-- [IScriptEngineBridge](</c:/Users/brand/OneDrive/Documents/ItsHapa's Project/CSharp/Bridge/IScriptEngineBridge.cs>): async contract for script discovery, queueing, completion, cancellation, and event streaming.
-- [IScoutAudioController](</c:/Users/brand/OneDrive/Documents/ItsHapa's Project/CSharp/Bridge/IScoutAudioController.cs>): audio pipeline contract for hot reload and bypass fallback.
-- [ScriptOrchestrator](</c:/Users/brand/OneDrive/Documents/ItsHapa's Project/CSharp/Bridge/ScriptOrchestrator.cs>): process orchestrator that writes JSON payload contracts, runs scripts off the UI thread, forwards logs/state events, and triggers audio hot reload or bypass on completion.
-- [QueuedScoutAudioController](</c:/Users/brand/OneDrive/Documents/ItsHapa's Project/CSharp/Bridge/QueuedScoutAudioController.cs>): single-queue hardware mutation controller to avoid race conditions in WASAPI/NAudio re-init paths.
+- `Bridge/IScriptEngineBridge.cs`: async contract for script discovery, queueing, completion, cancellation, and event streaming.
+- `Bridge/IScoutAudioController.cs`: audio pipeline contract for hot reload and bypass fallback.
+- `Bridge/ScriptOrchestrator.cs`: process orchestrator that writes JSON payload contracts, runs scripts off the UI thread, forwards logs/state events, and triggers audio hot reload or bypass on completion.
+- `Bridge/QueuedScoutAudioController.cs`: single-queue hardware mutation controller to avoid race conditions in WASAPI/NAudio re-init paths.
 
 Script payloads are serialized to `%LOCALAPPDATA%\SonicScout\bridge\requests\` and exposed to workers through:
 
@@ -76,7 +76,7 @@ Use `run_audio_stack_setup.bat` to run the staged install flow with consent prom
 Build or run it with:
 
 ```text
-CSharp\run_scoutpass.bat
+run_scoutpass.bat
 ```
 
 SonicPass still needs a virtual audio driver such as VB-Cable because a normal WPF application cannot create a Windows audio endpoint by itself. Use the `SCOUTPASS` panel in the main window after running `SETUP`; it selects the virtual input and physical output, applies input/output boost, sets the buffer, and starts or stops the pass. EQ processing and device-loss recovery remain separate follow-up layers.
@@ -98,7 +98,7 @@ SonicPass still needs a virtual audio driver such as VB-Cable because a normal W
 
 ### SonicPass assets and logs
 
-Place installer files in `CSharp\installers\` before running the setup script.
+Place installer files in `installers\` before running the setup script.
 
 Logs are written to:
 
@@ -127,9 +127,9 @@ Select a profile in Sonic Scout after changing the active profile. No administra
 ## Build a distributable folder
 
 ```powershell
-dotnet publish CSharp\SonicScout.CSharp.csproj --configuration Release --runtime win-x64 --self-contained false --output "$env:USERPROFILE\Desktop\SonicScout"
+dotnet publish .\SonicScout.CSharp.csproj --configuration Release --runtime win-x64 --self-contained false --output "$env:USERPROFILE\Desktop\SonicScout"
 
-Copy-Item profiles\*.txt "$env:USERPROFILE\Desktop\SonicScout\profiles" -Force
+Copy-Item .\profiles\*.txt "$env:USERPROFILE\Desktop\SonicScout\profiles" -Force
 ```
 
 Copy the complete `%USERPROFILE%\Desktop\SonicScout` folder to another Windows machine with the .NET 8 Desktop Runtime installed.
