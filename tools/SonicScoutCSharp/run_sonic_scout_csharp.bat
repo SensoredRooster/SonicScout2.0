@@ -61,6 +61,11 @@ if errorlevel 1 goto fail
 :finish_sync
 if exist "%PROJECT_DIR%profiles" if not exist "%APP_DIR%profiles" mkdir "%APP_DIR%profiles"
 if exist "%PROJECT_DIR%profiles\*.txt" copy /Y "%PROJECT_DIR%profiles\*.txt" "%APP_DIR%profiles\" >nul
+if /I "%SONICSCOUT_NO_LAUNCH%"=="1" (
+  echo [%date% %time%] SonicScout launcher build-only check completed>>"%SONIC_LAUNCH_LOG%"
+  endlocal
+  exit /b 0
+)
 start "" "%APP%"
 echo [%date% %time%] SonicScout launcher completed>>"%SONIC_LAUNCH_LOG%"
 endlocal
