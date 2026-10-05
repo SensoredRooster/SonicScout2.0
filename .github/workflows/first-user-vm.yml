@@ -1,0 +1,117 @@
+name: First User Windows VM Acceptance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/first-user-vm.yml"
+      - "tools/SonicScoutCSharp/**"
+      - "powershell/**"
+      - "README.md"
+  workflow_dispatch:
+
+jobs:
+  first-user:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Run clean-machine first-user acceptance matrix
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $results = New-Object System.Collections.Generic.List[object]
+          $logDir = Join-Path $env:RUNNER_TEMP 'sonicscout-first-user'
+          New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+
+          function Add-Result([string]$Name,[string]$Expected,[string]$Actual,[bool]$Pass,[string]$Notes='') {
+            $results.Add([pscustomobject]@{Name=$Name;Expected=$Expected;Actual=$Actual;Pass=$Pass;Notes=$Notes})
+            $mark = if($Pass){'PASS'}else{'FAIL'}
+            Write-Host "[$mark] $Name :: $Actual"
+          }
+
+          Write-Host "=== Machine baseline ==="
+          systeminfo | Select-Object -First 40
+          powershell.exe -NoProfile -Command '$PSVersionTable | Format-List'
+          pwsh.exe -NoProfile -Command '$PSVersionTable | Format-List'
+          dotnet --info
+
+          $installBat = 'tools\SonicScoutCSharp\Install-SonicScout.bat'
+          $sourceExe = Test-Path 'tools\SonicScoutCSharp\SonicScout.exe'
+          Add-Result 'README recommended source install has executable' 'SonicScout.exe available or installer builds/publishes it' "exists=$sourceExe" $sourceExe 'README currently tells a repo user to run Install-SonicScout.bat first.'
+
+          $p = Start-Process -FilePath 'cmd.exe' -ArgumentList '/d','/c',"$installBat < NUL" -PassThru -Wait -NoNewWindow -RedirectStandardOutput (Join-Path $logDir 'source-install.stdout.log') -RedirectStandardError (Join-Path $logDir 'source-install.stderr.log')
+          Add-Result 'README recommended Install-SonicScout.bat exits successfully from checkout' 'exit 0' "exit $($p.ExitCode)" ($p.ExitCode -eq 0)
+
+          $publishBat = 'tools\SonicScoutCSharp\publish_sonic_scout.bat'
+          $pub = Start-Process -FilePath 'cmd.exe' -ArgumentList '/d','/c',"$publishBat < NUL" -PassThru -Wait -NoNewWindow -RedirectStandardOutput (Join-Path $logDir 'publish-bat.stdout.log') -RedirectStandardError (Join-Path $logDir 'publish-bat.stderr.log')
+          Add-Result 'publish_sonic_scout.bat' 'exit 0 and create distributable' "exit $($pub.ExitCode)" ($pub.ExitCode -eq 0)
+
+          $directOut = Join-Path $env:RUNNER_TEMP 'SonicScoutPublished'
+          dotnet publish tools\SonicScoutCSharp\SonicScout.CSharp.csproj -c Release -r win-x64 --self-contained false -o $directOut *> (Join-Path $logDir 'direct-publish.log')
+          $directCode = $LASTEXITCODE
+          Add-Result 'direct dotnet publish' 'exit 0' "exit $directCode" ($directCode -eq 0)
+
+          $required = @('SonicScout.exe','setup_audio_stack.ps1','run_audio_stack_setup.bat','auto_setup_dependencies.bat','SonicScout.SonicPass.exe')
+          foreach($name in $required){
+            $ok = Test-Path (Join-Path $directOut $name)
+            Add-Result "published payload: $name" 'present' "present=$ok" $ok
+          }
+          $installerCount = @(Get-ChildItem (Join-Path $directOut 'installers') -Recurse -File -ErrorAction SilentlyContinue).Count
+          Add-Result 'published payload: third-party installers' 'one or more installer files' "count=$installerCount" ($installerCount -gt 0)
+
+          $parseErrors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'tools\SonicScoutCSharp\setup_audio_stack.ps1'),[ref]$null,[ref]$parseErrors)
+          Add-Result 'setup_audio_stack.ps1 parses in Windows PowerShell' '0 parser errors' "errors=$($parseErrors.Count)" ($parseErrors.Count -eq 0)
+
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\SonicScoutCSharp\setup_audio_stack.ps1 -Mode Preflight -Quiet *> (Join-Path $logDir 'preflight.log')
+          $preflightCode = $LASTEXITCODE
+          Add-Result 'fresh-machine preflight' 'exit 2 (setup incomplete)' "exit $preflightCode" ($preflightCode -eq 2)
+
+          $variants = @(
+            @{Name='auto'; Args=@()},
+            @{Name='wave-yes'; Args=@('-WaveLinkRouting','Yes')},
+            @{Name='wave-no'; Args=@('-WaveLinkRouting','No')},
+            @{Name='vm-yes'; Args=@('-VoicemeeterFallback','Yes')},
+            @{Name='vm-no'; Args=@('-VoicemeeterFallback','No')}
+          )
+          foreach($v in $variants){
+            $args = @('-NoProfile','-ExecutionPolicy','Bypass','-File','tools\SonicScoutCSharp\setup_audio_stack.ps1','-Mode','Install','-DryRun','-NonInteractive','-OwnershipAccepted') + $v.Args
+            & powershell.exe @args *> (Join-Path $logDir ("setup-dryrun-" + $v.Name + ".log"))
+            $code=$LASTEXITCODE
+            Add-Result "guided setup dry-run: $($v.Name)" 'exit 0' "exit $code" ($code -eq 0)
+          }
+
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File powershell\Install-SonicScout2.0.ps1 -DryRun *> (Join-Path $logDir 'manual-installer-ps51-dryrun.log')
+          $manual51=$LASTEXITCODE
+          Add-Result 'manual installer Windows PowerShell 5.1 dry-run' 'exit 0' "exit $manual51" ($manual51 -eq 0)
+
+          $pwshOut = Join-Path $logDir 'manual-installer-pwsh.log'
+          $proc = Start-Process -FilePath 'pwsh.exe' -ArgumentList '-NoProfile','-File','powershell\Install-SonicScout2.0.ps1' -PassThru -NoNewWindow -RedirectStandardOutput $pwshOut -RedirectStandardError (Join-Path $logDir 'manual-installer-pwsh.err.log')
+          if(-not $proc.WaitForExit(15000)){ $proc.Kill(); $proc.WaitForExit(); $pwshCode=124 } else { $pwshCode=$proc.ExitCode }
+          $pwshText = if(Test-Path $pwshOut){Get-Content $pwshOut -Raw}else{''}
+          $pwshRefused = $pwshText -match 'requires Windows PowerShell 5\.1'
+          Add-Result 'PowerShell 7 refusal' 'explicit Windows PowerShell 5.1 refusal, exit nonzero' "exit=$pwshCode message=$pwshRefused" ($pwshRefused -and $pwshCode -ne 0)
+
+          $csharpReadme = Get-Content tools\SonicScoutCSharp\README_CSHARP.md -Raw
+          $staleCSharp = $csharpReadme -match '(?m)(^|\\|\s)CSharp\\'
+          Add-Result 'C# README has no stale CSharp\\ source paths' 'no stale CSharp\\ paths' "stale=$staleCSharp" (-not $staleCSharp)
+
+          $results | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $logDir 'summary.json') -Encoding UTF8
+          $results | Format-Table -AutoSize | Out-String | Set-Content (Join-Path $logDir 'summary.txt')
+          Get-Content (Join-Path $logDir 'summary.txt')
+          $fails = @($results | Where-Object { -not $_.Pass })
+          "Failures: $($fails.Count)" | Add-Content (Join-Path $logDir 'summary.txt')
+          if($fails.Count -gt 0){ exit 1 }
+
+      - name: Upload first-user VM evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonicscout-first-user-vm-evidence
+          path: ${{ runner.temp }}\sonicscout-first-user
+          if-no-files-found: error
