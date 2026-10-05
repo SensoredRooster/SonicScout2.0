@@ -5,7 +5,15 @@ cd /d "%~dp0"
 echo Sonic Scout setup package: 2026.08.21.4
 
 if not exist "%~dp0SonicScout.exe" (
-  echo SonicScout.exe was not found. Run publish_sonic_scout.bat again and use the published SonicScout folder.
+  if exist "%~dp0SonicScout.CSharp.csproj" (
+    echo Source checkout detected. Starting the source launcher, which will build Sonic Scout if needed.
+    call "%~dp0run_sonic_scout_csharp.bat"
+    set "RESULT=%ERRORLEVEL%"
+    endlocal
+    exit /b %RESULT%
+  )
+  echo SonicScout.exe was not found and this does not look like a source checkout.
+  echo Re-extract the published SonicScout folder or download a complete release package.
   pause
   exit /b 1
 )
