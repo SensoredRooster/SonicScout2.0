@@ -18,6 +18,23 @@ if not exist "%~dp0SonicScout.exe" (
   exit /b 1
 )
 
+where dotnet >nul 2>&1
+if errorlevel 1 (
+  echo Sonic Scout requires the Microsoft .NET 8 Desktop Runtime before audio setup can begin.
+  echo Download it from: https://dotnet.microsoft.com/download/dotnet/8.0
+  pause
+  exit /b 3
+)
+
+dotnet --list-runtimes 2>nul | findstr /C:"Microsoft.WindowsDesktop.App 8." >nul
+if errorlevel 1 (
+  echo Sonic Scout requires the Microsoft .NET 8 Desktop Runtime before audio setup can begin.
+  echo Download the Windows Desktop Runtime 8.x from:
+  echo https://dotnet.microsoft.com/download/dotnet/8.0
+  pause
+  exit /b 3
+)
+
 call "%~dp0run_audio_stack_setup.bat"
 set "RESULT=%ERRORLEVEL%"
 if not "%RESULT%"=="0" (
