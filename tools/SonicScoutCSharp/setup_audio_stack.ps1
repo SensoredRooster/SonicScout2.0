@@ -615,7 +615,14 @@ $finalState = Get-SystemState
 $equalizerApoWouldBeInstalled = $finalState.EqualizerApoInstalled -or (
     $DryRun -and $script:DryRunPlannedInstalls.ContainsKey('Equalizer APO')
 )
-$readyForTesting = $equalizerApoWouldBeInstalled -and ($finalState.VirtualRouteAvailable -or $waveLinkRouteAccepted -or $finalState.SoundBlasterAvailable -or $finalState.VoicemeeterInstalled -or $finalState.VoicemeeterEndpointDetected)
+$virtualRouteWouldBeAvailable = $finalState.VirtualRouteAvailable -or (
+    $DryRun -and (
+        $script:DryRunPlannedInstalls.ContainsKey('VB-Cable Base') -or
+        $script:DryRunPlannedInstalls.ContainsKey('VB-Cable Hi-Fi Route') -or
+        $script:DryRunPlannedInstalls.ContainsKey('Voicemeeter Fallback')
+    )
+)
+$readyForTesting = $equalizerApoWouldBeInstalled -and ($virtualRouteWouldBeAvailable -or $waveLinkRouteAccepted -or $finalState.SoundBlasterAvailable -or $finalState.VoicemeeterInstalled -or $finalState.VoicemeeterEndpointDetected)
 
 if ($DryRun -and $script:DryRunPlannedInstalls.ContainsKey('Equalizer APO') -and -not $finalState.EqualizerApoFilesReady) {
     Write-DryRunTrace -Name 'Equalizer APO verification' -Action 'verify' -Detail 'Would verify Equalizer APO config.txt and runtime files after the planned installation; the dry run cannot verify files that were not installed.'
