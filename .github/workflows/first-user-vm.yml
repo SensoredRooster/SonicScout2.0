@@ -68,6 +68,10 @@ jobs:
           Expand-Archive -Path $packageZip -DestinationPath $freshRoot -Force
           $freshExe = Test-Path (Join-Path $freshRoot 'SonicScout.exe')
           Add-Result 'unpacked package contains app' 'SonicScout.exe present after ZIP round-trip' "present=$freshExe" $freshExe
+          $freshMainInstaller = Test-Path (Join-Path $freshRoot 'Install-SonicScout2.0.ps1')
+          Add-Result 'unpacked package contains main installer' 'Install-SonicScout2.0.ps1 present' "present=$freshMainInstaller" $freshMainInstaller
+          $freshLibrary = (Test-Path (Join-Path $freshRoot 'library\version.txt')) -and (Test-Path (Join-Path $freshRoot 'library\BO7'))
+          Add-Result 'unpacked package contains local tune library fallback' 'version + game library present' "present=$freshLibrary" $freshLibrary
 
           & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $freshRoot 'setup_audio_stack.ps1') -Mode Preflight -Quiet *> (Join-Path $logDir 'package-preflight.log')
           $packagePreflight=$LASTEXITCODE
@@ -98,7 +102,7 @@ jobs:
           $directCode = $LASTEXITCODE
           Add-Result 'direct dotnet publish' 'exit 0' "exit $directCode" ($directCode -eq 0)
 
-          $required = @('SonicScout.exe','setup_audio_stack.ps1','run_audio_stack_setup.bat','auto_setup_dependencies.bat','SonicScout.SonicPass.exe')
+          $required = @('SonicScout.exe','setup_audio_stack.ps1','run_audio_stack_setup.bat','auto_setup_dependencies.bat','SonicScout.SonicPass.exe','Install-SonicScout2.0.ps1','library\version.txt','library\BF6','library\BO6','library\BO7')
           foreach($name in $required){
             $ok = Test-Path (Join-Path $directOut $name)
             Add-Result "published payload: $name" 'present' "present=$ok" $ok
