@@ -64,7 +64,7 @@ set "SS_INSTALLERS=%INSTALLERS%"
 
 if "%DOWNLOAD_VBCABLE%"=="1" (
 echo [1/3] Downloading VB-Cable...
-powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack45.zip', (Join-Path $env:SS_INSTALLERS 'VBCABLE_Driver.zip'))"
+powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -TimeoutSec 120 -Uri 'https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack45.zip' -OutFile (Join-Path $env:SS_INSTALLERS 'VBCABLE_Driver.zip')"
 if exist "%INSTALLERS%\VBCABLE_Driver.zip" (
   powershell -NoProfile -Command "Expand-Archive -Path (Join-Path $env:SS_INSTALLERS 'VBCABLE_Driver.zip') -DestinationPath (Join-Path $env:SS_INSTALLERS 'VBCABLE') -Force"
   copy /Y "%INSTALLERS%\VBCABLE\VBCABLE_Setup_x64.exe" "%INSTALLERS%\VBCABLE_Setup_x64.exe" >nul 2>&1
@@ -98,9 +98,15 @@ echo.
 
 if "%DOWNLOAD_REAPLUGS%"=="1" (
 echo [3/3] Downloading ReaPlugs...
-powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('https://www.reaper.fm/reaplugs/reaplugs236_x64-install.exe', (Join-Path $env:SS_INSTALLERS 'reaplugs_x64.exe'))"
+powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -TimeoutSec 120 -Uri 'https://www.reaper.fm/reaplugs/reaplugs236_x64-install.exe' -OutFile (Join-Path $env:SS_INSTALLERS 'reaplugs_x64.exe')"
 if exist "%INSTALLERS%\reaplugs_x64.exe" (
-  echo [OK] ReaPlugs downloaded
+  powershell -NoProfile -Command "$bytes=[IO.File]::ReadAllBytes((Join-Path $env:SS_INSTALLERS 'reaplugs_x64.exe')); if($bytes.Length -lt 1048576 -or $bytes[0] -ne 77 -or $bytes[1] -ne 90){exit 1}"
+  if errorlevel 1 (
+    del /q "%INSTALLERS%\reaplugs_x64.exe" >nul 2>&1
+    echo [FAIL] ReaPlugs download was not a valid Windows installer
+  ) else (
+    echo [OK] ReaPlugs downloaded
+  )
 ) else (
   echo [FAIL] ReaPlugs download failed
 )
@@ -109,7 +115,7 @@ echo.
 
 if "%DOWNLOAD_HIFI%"=="1" (
 echo [3/3] Downloading VB-Cable Hi-Fi...
-powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('https://download.vb-audio.com/Download_CABLE/HiFiCableAsioBridgeSetup_v1007.zip', (Join-Path $env:SS_INSTALLERS 'VBHIFI_Driver.zip'))"
+powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -TimeoutSec 120 -Uri 'https://download.vb-audio.com/Download_CABLE/HiFiCableAsioBridgeSetup_v1007.zip' -OutFile (Join-Path $env:SS_INSTALLERS 'VBHIFI_Driver.zip')"
 if exist "%INSTALLERS%\VBHIFI_Driver.zip" (
   powershell -NoProfile -Command "Expand-Archive -Path (Join-Path $env:SS_INSTALLERS 'VBHIFI_Driver.zip') -DestinationPath (Join-Path $env:SS_INSTALLERS 'VBHIFI') -Force"
   powershell -NoProfile -Command "$installer = Get-ChildItem -Path (Join-Path $env:SS_INSTALLERS 'VBHIFI') -Recurse -File -Filter '*Setup*.exe' | Select-Object -First 1; if ($null -eq $installer) { exit 1 }; Copy-Item -Path $installer.FullName -Destination (Join-Path $env:SS_INSTALLERS 'HIFI_CABLE_Setup_x64.exe') -Force"
@@ -125,9 +131,15 @@ if exist "%INSTALLERS%\VBHIFI_Driver.zip" (
 echo.
 
 echo [4/4] Downloading HeSuVi...
-powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('https://sourceforge.net/projects/hesuvi/files/HeSuVi_2.0.0.1.exe/download', (Join-Path $env:SS_INSTALLERS 'HeSuVi.exe'))"
+powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -MaximumRedirection 10 -TimeoutSec 120 -Uri 'https://sourceforge.net/projects/hesuvi/files/HeSuVi_2.0.0.1.exe/download' -OutFile (Join-Path $env:SS_INSTALLERS 'HeSuVi.exe')"
 if exist "%INSTALLERS%\HeSuVi.exe" (
-  echo [OK] HeSuVi downloaded
+  powershell -NoProfile -Command "$bytes=[IO.File]::ReadAllBytes((Join-Path $env:SS_INSTALLERS 'HeSuVi.exe')); if($bytes.Length -lt 1048576 -or $bytes[0] -ne 77 -or $bytes[1] -ne 90){exit 1}"
+  if errorlevel 1 (
+    del /q "%INSTALLERS%\HeSuVi.exe" >nul 2>&1
+    echo [FAIL] HeSuVi download was not a valid Windows installer
+  ) else (
+    echo [OK] HeSuVi downloaded
+  )
 ) else (
   echo [FAIL] HeSuVi download failed
 )
@@ -138,6 +150,7 @@ if "%DOWNLOAD_ONLY%"=="1" (
   if "%DOWNLOAD_VBCABLE%"=="1" if not exist "%INSTALLERS%\VBCABLE_Setup_x64.exe" exit /b 1
   if "%DOWNLOAD_REAPLUGS%"=="1" if not exist "%INSTALLERS%\reaplugs_x64.exe" exit /b 1
   if "%DOWNLOAD_HIFI%"=="1" if not exist "%INSTALLERS%\HIFI_CABLE_Setup_x64.exe" exit /b 1
+  if not exist "%INSTALLERS%\HeSuVi.exe" exit /b 1
   echo Audio dependency downloads completed.
   endlocal
   exit /b 0
