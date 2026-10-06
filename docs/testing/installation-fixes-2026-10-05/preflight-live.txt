@@ -1,0 +1,1 @@
+PASS: live unprivileged preflight returned 0 and preserved installed file hashes/timestamps and logs.

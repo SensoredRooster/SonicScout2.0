@@ -7,6 +7,7 @@ $tokens=$null; $parseErrors=$null
 $ast=[Management.Automation.Language.Parser]::ParseInput($source,[ref]$tokens,[ref]$parseErrors)
 if ($parseErrors) { throw 'Installer syntax errors.' }
 $replacements=@{
+    'Test-EqualizerApoEndpointBinding'='function Test-EqualizerApoEndpointBinding { $true }'
     'Get-SystemState'='function Get-SystemState { [pscustomobject]@{ EqualizerApoInstalled=$true; EqualizerApoFilesReady=$true; VirtualRouteAvailable=$true; HiFiCableDetected=$true; WaveLinkAvailable=$false; SoundBlasterAvailable=$false; VoicemeeterInstalled=$false; VoicemeeterEndpointDetected=$false; AudioServiceRunning=$true; EndpointNames=@("SonicScout2.0") } }'
     'Get-EndpointDetail'='function Get-EndpointDetail { "Simulated healthy endpoint" }'
     'Test-Administrator'='function Test-Administrator { $true }'
@@ -22,7 +23,7 @@ Set-Content $scriptPath $source -Encoding UTF8
 $fakeProgramFiles=Join-Path $testRoot 'ProgramFiles'
 $fakeLogs=Join-Path $testRoot 'LocalAppData'
 $fakeProgramData=Join-Path $testRoot 'ProgramData'
-$files=@('VSTPlugins\ReaPlugs\reajs.dll','VSTPlugins\ReaPlugs\reaeq.dll','VSTPlugins\ReaPlugs\reacomp.dll','VSTPlugins\ReaPlugs\reagate.dll','VSTPlugins\ReaPlugs\readelay.dll','VSTPlugins\ReaPlugs\JS\Effects\SonicScout2.0\ss_spatial_engine.jsfx','VSTPlugins\SonicScout2.0\ss_spatial_engine_bravo_v2_0_0.dll','EqualizerAPO\config\HeSuVi\hesuvi.txt','EqualizerAPO\config\HeSuVi\hrir\EAC_Default.wav','EqualizerAPO\config\SonicScout2.0\library\version.txt','EqualizerAPO\config\config.txt')
+$files=@('VSTPlugins\ReaPlugs\reajs.dll','VSTPlugins\ReaPlugs\reaeq.dll','VSTPlugins\ReaPlugs\reacomp.dll','VSTPlugins\ReaPlugs\reagate.dll','VSTPlugins\ReaPlugs\readelay.dll','VSTPlugins\ReaPlugs\JS\Effects\SonicScout2.0\ss_spatial_engine.jsfx','VSTPlugins\SonicScout2.0\ss_spatial_engine_bravo_v2_0_0.dll','EqualizerAPO\config\HeSuVi\hesuvi.txt','EqualizerAPO\config\HeSuVi\conv.txt','EqualizerAPO\config\HeSuVi\hrir\EAC_Default.wav','EqualizerAPO\config\SonicScout2.0\library\version.txt','EqualizerAPO\config\config.txt')
 foreach ($file in $files) {
     $path=Join-Path $fakeProgramFiles $file
     New-Item (Split-Path $path -Parent) -ItemType Directory -Force | Out-Null
@@ -47,6 +48,38 @@ try {
     if (Test-Path $fakeLogs) { throw 'Preflight wrote setup history.' }
     if (Test-Path $importMarker) { throw 'Preflight imported configuration helpers.' }
     Write-Host 'PASS: healthy preflight is read-only and does not import/mutate configuration.'
+    Set-Content $scriptPath ($source.Replace('function Test-EqualizerApoEndpointBinding { $true }','function Test-EqualizerApoEndpointBinding { $false }')) -Encoding UTF8
+    Invoke-FakeInstall Preflight
+    if ($LASTEXITCODE -ne 2) { throw 'Installed files with no endpoint APO registration must not pass.' }
+    if (Test-Path $fakeLogs) { throw 'Unbound endpoint preflight wrote setup history.' }
+    Set-Content $scriptPath $source -Encoding UTF8
+    Write-Host 'PASS: installed files without endpoint APO registration do not return success.'
+    $bindingDefinition=($functions | Where-Object Name -eq 'Test-EqualizerApoEndpointBinding').Extent.Text
+    $registryMocks=@'
+$script:bind16=$false
+function Get-ChildItem { param($Path,$ErrorAction) @([pscustomobject]@{PSPath='C:\fake\r8'},[pscustomobject]@{PSPath='C:\fake\r16'}) }
+function Get-ItemProperty { param($Path,$ErrorAction)
+    if ($Path -match 'Properties$' -and $Path -notmatch 'FxProperties$') {
+        $name=if($Path -match 'r16'){'SonicScout2.0 +'}else{'SonicScout2.0'}
+        return [pscustomobject]@{'{a45c254e-df1c-4efd-8020-67d146a850e0},2'=$name}
+    }
+    if($Path -match 'FxProperties$') {
+        if($Path -notmatch 'r16' -or $script:bind16){return [pscustomobject]@{Effect='{11111111-1111-1111-1111-111111111111}'}}
+        return [pscustomobject]@{}
+    }
+    return [pscustomobject]@{DeviceState=1}
+}
+function Get-Item { param($Path,$ErrorAction)
+    $server=[pscustomobject]@{}
+    Add-Member -InputObject $server -MemberType ScriptMethod -Name GetValue -Value {param($name) 'C:\Program Files\EqualizerAPO\EqualizerAPO.dll'}
+    return $server
+}
+'@
+    $bindingModule=New-Module -ScriptBlock ([scriptblock]::Create($registryMocks+"`r`n"+$bindingDefinition+"`r`nExport-ModuleMember -Function Test-EqualizerApoEndpointBinding"))
+    if (& $bindingModule { Test-EqualizerApoEndpointBinding }) { throw 'A single bound endpoint must not mask the unbound second playback endpoint.' }
+    if (-not (& $bindingModule { $script:bind16=$true; Test-EqualizerApoEndpointBinding })) { throw 'Both registered endpoints should pass binding verification.' }
+    Write-Host 'PASS: APO verification requires registration on both virtual playback endpoints.'
+    Remove-Module $bindingModule
     Remove-Item -LiteralPath $fakeMain
     $marker=Join-Path $fakeProgramData 'SonicScout\installation-restart.txt'
     New-Item (Split-Path $marker -Parent) -ItemType Directory -Force | Out-Null
@@ -62,7 +95,7 @@ try {
     Write-Host 'PASS: failed configuration does not return success.'
     # Function-only import must return without displaying a menu or requesting elevation.
     $main=Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'powershell\Install-SonicScout2.0.ps1'
-    $module=New-Module -ArgumentList $main -ScriptBlock { param($path) . $path }
+    $module=New-Module -ArgumentList $main -ScriptBlock { param($path) . $path; Export-ModuleMember -Function @() }
     $bundle=& $module { Get-BundledLibraryPath }
     if (-not (Test-Path (Join-Path $bundle 'version.txt'))) { throw 'Imported helpers cannot resolve bundled library.' }
     Write-Host 'PASS: legacy helper import returns without executing its menu.'
@@ -74,8 +107,8 @@ $Mode='Install'; $DryRun=$false; $Quiet=$true; $NonInteractive=$true; $Ownership
 $WaveLinkRouting='Yes'; $VoicemeeterFallback='No'
 $script:ScriptPath='C:\Test folder\setup_audio_stack.ps1'
 function Test-Administrator { $false }
-function Start-Process { param($FilePath,$ArgumentList,$Verb,[switch]$Wait,[switch]$PassThru)
-    Set-Content '__ARGUMENT_LOG__' $ArgumentList
+function Start-Process { param($FilePath,$ArgumentList,$Verb,$WindowStyle,[switch]$Wait,[switch]$PassThru)
+    Set-Content '__ARGUMENT_LOG__' ($ArgumentList+"`r`nWindowStyle=$WindowStyle")
     [pscustomobject]@{ ExitCode=23 }
 }
 '@
@@ -83,14 +116,27 @@ function Start-Process { param($FilePath,$ArgumentList,$Verb,[switch]$Wait,[swit
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $elevationTest
     if ($LASTEXITCODE -ne 23) { throw 'Elevation lost child exit code.' }
     $arguments=Get-Content $argumentLog -Raw
-    foreach ($expected in @('-File "C:\Test folder\setup_audio_stack.ps1"','-Quiet','-NonInteractive','-OwnershipAccepted','-WaveLinkRouting Yes','-VoicemeeterFallback No')) {
+    foreach ($expected in @('-File "C:\Test folder\setup_audio_stack.ps1"','-Quiet','-NonInteractive','-OwnershipAccepted','-WaveLinkRouting Yes','-VoicemeeterFallback No','WindowStyle=Hidden')) {
         if (-not $arguments.Contains($expected)) { throw "Elevation lost $expected" }
     }
     Write-Host 'PASS: elevation preserves script path, choices, consent and child exit status.'
+    $downloadRoot=Join-Path $testRoot 'download-test'
+    New-Item (Join-Path $downloadRoot 'installers') -ItemType Directory -Force | Out-Null
+    Copy-Item (Join-Path $PSScriptRoot 'download_dependencies.ps1') $downloadRoot
+    $existing=Join-Path $downloadRoot 'installers\reaplugs_x64.exe'
+    Set-Content $existing 'existing installer'
+    $downloadTest=Join-Path $downloadRoot 'invalid-response.ps1'
+    $mockDownload=@'
+function Invoke-WebRequest { param($Uri,$OutFile,$TimeoutSec,[switch]$UseBasicParsing) Set-Content $OutFile '<html>Download failed</html>' }
+& (Join-Path $PSScriptRoot 'download_dependencies.ps1') -Component reaplugs
+exit $LASTEXITCODE
+'@
+    Set-Content $downloadTest $mockDownload
+    $ErrorActionPreference='Continue'
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $downloadTest 2>$null
+    $downloadExit=$LASTEXITCODE
+    $ErrorActionPreference='Stop'
+    if ($downloadExit -eq 0 -or (Get-Content $existing -Raw).Trim() -ne 'existing installer') { throw 'Invalid download was accepted or replaced an existing installer.' }
+    Write-Host 'PASS: HTML download fails and preserves the existing installer.'
 } finally { $env:ProgramFiles=$oldProgramFiles; $env:LOCALAPPDATA=$oldLocalAppData }
 Write-Host "Regression artifacts: $testRoot"
-
-
-
-
-

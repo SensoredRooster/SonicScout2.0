@@ -1,0 +1,63 @@
+﻿{
+    "mode":  "Install",
+    "createdAt":  "2026-10-06T17:35:35.5970119-05:00",
+    "installersDirectory":  "C:\\QA\\fixed-published\\installers",
+    "machineName":  "SONICSCOUT-QA",
+    "userName":  "scouttester",
+    "stages":  [
+                   {
+                       "timestamp":  "2026-10-06T17:34:48.4743252-05:00",
+                       "name":  "Ownership confirmation",
+                       "state":  "READY",
+                       "detail":  "Ownership/apply authorization accepted."
+                   },
+                   {
+                       "timestamp":  "2026-10-06T17:34:52.8954054-05:00",
+                       "name":  "Baseline scan",
+                       "state":  "READY",
+                       "detail":  "Detected endpoints: 7. SonicScout2.0 Unified Output (VB-Audio Virtual Cable) [OK]; Microphone (High Definition Audio Device) [OK]; SonicScout2.0 (VB-Audio Virtual Cable) [OK]; Speakers (High Definition Audio Device) [OK]; SonicScout2.0 + (VB-Audio Virtual Cable) [OK]"
+                   },
+                   {
+                       "timestamp":  "2026-10-06T17:34:53.3477843-05:00",
+                       "name":  "Equalizer APO",
+                       "state":  "READY",
+                       "detail":  "Equalizer APO already detected."
+                   },
+                   {
+                       "timestamp":  "2026-10-06T17:34:54.9972427-05:00",
+                       "name":  "HeSuVi",
+                       "state":  "READY",
+                       "detail":  "HeSuVi already detected."
+                   },
+                   {
+                       "timestamp":  "2026-10-06T17:34:55.5603064-05:00",
+                       "name":  "Equalizer APO verification",
+                       "state":  "READY",
+                       "detail":  "Equalizer APO config.txt and runtime files are present."
+                   },
+                   {
+                       "timestamp":  "2026-10-06T17:34:55.5743202-05:00",
+                       "name":  "Windows audio service",
+                       "state":  "READY",
+                       "detail":  "Windows Audio service is running."
+                   },
+                   {
+                       "timestamp":  "2026-10-06T17:35:06.9774370-05:00",
+                       "name":  "APO Configuration",
+                       "state":  "READY",
+                       "detail":  "Bundled library, plugins, HRIR and managed configuration verified."
+                   },
+                   {
+                       "timestamp":  "2026-10-06T17:35:35.3324253-05:00",
+                       "name":  "Equalizer APO device selection",
+                       "state":  "READY",
+                       "detail":  "Equalizer APO registration on the virtual playback endpoint was verified."
+                   },
+                   {
+                       "timestamp":  "2026-10-06T17:35:35.5856690-05:00",
+                       "name":  "Final verification",
+                       "state":  "READY",
+                       "detail":  "Installation verified. SonicScout can now start."
+                   }
+               ]
+}

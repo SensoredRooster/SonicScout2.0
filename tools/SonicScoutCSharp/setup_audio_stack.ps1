@@ -27,6 +27,32 @@ if (-not $Quiet) {
     Write-Host 'Sonic Scout audio setup package: 2026.08.21.4'
 }
 
+function Test-EqualizerApoEndpointBinding {
+    # Resolve registered APO classes by their DLL rather than hard-code one release's CLSIDs.
+    $render = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render'
+    $matchedCount = 0
+    foreach ($endpoint in @(Get-ChildItem $render -ErrorAction SilentlyContinue)) {
+        $device = Get-ItemProperty $endpoint.PSPath -ErrorAction SilentlyContinue
+        if ($device.DeviceState -ne 1) { continue }
+        $properties = Get-ItemProperty (Join-Path $endpoint.PSPath 'Properties') -ErrorAction SilentlyContinue
+        $name = [string]$properties.'{a45c254e-df1c-4efd-8020-67d146a850e0},2'
+        if ($name -notmatch '^SonicScout2\.0(?: \+)?$|^CABLE (?:Input|In 16ch)(?:\s|\(|$)|^Hi-Fi Cable Input(?:\s|\(|$)') { continue }
+        $matchedCount++
+        $bound = $false
+        $effects = Get-ItemProperty (Join-Path $endpoint.PSPath 'FxProperties') -ErrorAction SilentlyContinue
+        foreach ($effect in @($effects.PSObject.Properties | Where-Object Name -notmatch '^PS')) {
+            foreach ($value in @($effect.Value)) {
+                $clsid = [guid]::Empty
+                if (-not [guid]::TryParse([string]$value, [ref]$clsid)) { continue }
+                $server = Get-Item "HKLM:\SOFTWARE\Classes\CLSID\{$clsid}\InprocServer32" -ErrorAction SilentlyContinue
+                if ($server -and [IO.Path]::GetFileName(([string]$server.GetValue('')).Trim('"')) -ieq 'EqualizerAPO.dll') { $bound = $true }
+            }
+        }
+        if (-not $bound) { return $false }
+    }
+    return $matchedCount -gt 0
+}
+
 function Write-Stage {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
@@ -138,7 +164,8 @@ function Request-ElevationIfNeeded {
     if ($NonInteractive) { $arguments += ' -NonInteractive' }
     if ($OwnershipAccepted) { $arguments += ' -OwnershipAccepted' }
     try {
-        $child = Start-Process powershell.exe -ArgumentList $arguments -Verb RunAs -Wait -PassThru
+        $windowStyle = if ($Quiet) { 'Hidden' } else { 'Normal' }
+        $child = Start-Process powershell.exe -ArgumentList $arguments -Verb RunAs -WindowStyle $windowStyle -Wait -PassThru
         exit $child.ExitCode
     } catch {
         Write-Stage -Name 'Administrator access' -State 'BLOCKED' -Detail "Administrator access was cancelled or unavailable. Retry and accept the Windows prompt. $($_.Exception.Message)"
@@ -316,14 +343,17 @@ function Download-Installer {
         return $false
     }
 
-    if (-not (Test-Path $downloader)) {
+    $downloaderScript = Join-Path $script:ScriptRootPath 'download_dependencies.ps1'
+    if (-not (Test-Path $downloaderScript)) {
         return $false
     }
 
     Write-Stage -Name 'Dependency download' -State 'RUNNING' -Detail "Downloading required $Component installer."
-    $downloaderScript = Join-Path $script:ScriptRootPath 'download_dependencies.ps1'
     $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Component {1}' -f $downloaderScript, $Component.TrimStart('/')
-    $process = Start-Process powershell.exe -ArgumentList $arguments -Wait -PassThru
+    $downloadLog = Join-Path $script:LogDirectory ('download-' + $Component.TrimStart('/') + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+    Ensure-LogDirectory
+    $process = Start-Process powershell.exe -ArgumentList $arguments -WindowStyle Hidden -RedirectStandardOutput "$downloadLog.txt" -RedirectStandardError "$downloadLog-errors.txt" -Wait -PassThru
+    if ($process.ExitCode -ne 0) { Write-Stage -Name 'Dependency download' -State 'UPDATE' -Detail "Download failed for $Component. See $downloadLog-errors.txt, then retry installation." }
     return $process.ExitCode -eq 0
 }
 
@@ -394,8 +424,6 @@ function Invoke-InstallerStage {
         'equalizerapo'  = @('/S')
         'voicemeeter'   = @('/S')
         'reaplugs'      = @('/S')
-        'he suvi'       = @('/S')
-        'hesuvi'        = @('/S')
     }
 
     function Get-SilentInstallArguments {
@@ -452,9 +480,20 @@ function Invoke-InstallerStage {
     # VB-Audio is named explicitly because it is the one installer that must stay
     # interactive, and saying so here is what turns an unexplained pause into
     # step-by-step guidance.
+    if ($StageName -eq 'HeSuVi') {
+        Write-Stage -Name $StageName -State 'RUNNING' -Detail 'Choose Yes to unpack HeSuVi into the Equalizer APO config folder. Let extraction finish, then close HeSuVi and any browser it opens.'
+    } elseif ($StageName -eq 'ReaPlugs') {
+        Write-Stage -Name $StageName -State 'RUNNING' -Detail 'ReaPlugs may display an installation-complete message. Click OK to continue.'
+    }
     try {
         if ($installer.Extension -ieq '.msi') {
             $process = Start-Process -FilePath 'msiexec.exe' -ArgumentList "/i `"$($installer.FullName)`" /passive /norestart" -Wait -PassThru
+        }
+        elseif ($StageName -eq 'HeSuVi') {
+            # Start-Process -Wait also waits for the GUI/browser descendants.
+            # Wait for extraction itself; verify the actual installed files below.
+            $process = Start-Process -WorkingDirectory $installer.DirectoryName -FilePath $installer.FullName -PassThru
+            $process.WaitForExit()
         }
         elseif ($isVBAudio) {
             Write-Stage -Name $StageName -State 'RUNNING' -Detail @"
@@ -498,7 +537,21 @@ Other components may open their own dialogs. Complete each prompt and restart Wi
     return $false
 }
 
+trap {
+    Write-Stage -Name 'Installation' -State 'ERROR' -Detail ($_.Exception.Message + ' ' + $_.InvocationInfo.PositionMessage)
+    if ($Mode -eq 'Install' -and -not $DryRun) {
+        try { Save-SetupHistory } catch { Write-Warning "Could not save the installation report: $_" }
+    }
+    exit 1
+}
+
 Request-ElevationIfNeeded
+
+if ($Mode -eq 'Install' -and -not $DryRun) {
+    Ensure-LogDirectory
+    try { Start-Transcript -Path (Join-Path $script:LogDirectory ('installation-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.txt')) -Force | Out-Null }
+    catch { Write-Warning "Installation transcript is unavailable: $_" }
+}
 
 if ($Mode -eq 'Install') {
     if ($DryRun) {
@@ -509,7 +562,7 @@ if ($Mode -eq 'Install') {
             $ownershipAccepted = $OwnershipAccepted.IsPresent
         }
         else {
-            $ownershipAccepted = Read-YesNo -Prompt 'Do you authorize Sonic Scout setup to apply audio routing ownership/settings on this machine?' -DefaultYes $false
+            $ownershipAccepted = Read-YesNo -Prompt 'Allow SonicScout to install audio components and configure its virtual playback devices?' -DefaultYes $false
         }
         if (-not $ownershipAccepted) {
             $blockedDetail = if ($NonInteractive) { 'Ownership/apply authorization was not provided by the app request.' } else { 'User did not approve ownership/apply authorization.' }
@@ -517,7 +570,7 @@ if ($Mode -eq 'Install') {
             Save-SetupHistory
             exit 1
         }
-        Write-Stage -Name 'Ownership confirmation' -State 'READY' -Detail 'Ownership/apply authorization accepted.'
+        Write-Stage -Name 'Ownership confirmation' -State 'READY' -Detail 'Installation changes authorized.'
     }
 }
 
@@ -644,7 +697,7 @@ if (-not $((Get-ChildItem "${env:ProgramFiles}\VSTPlugins\ReaPlugs\*.dll" -Error
 }
 
 [void](Invoke-InstallerStage -StageName 'HeSuVi' `
-    -IsInstalled { Test-Path "${env:ProgramFiles}\EqualizerAPO\config\HeSuVi\hesuvi.txt" } `
+    -IsInstalled { (Test-Path "${env:ProgramFiles}\EqualizerAPO\config\HeSuVi\hesuvi.txt") -and (Test-Path "${env:ProgramFiles}\EqualizerAPO\config\HeSuVi\conv.txt") } `
     -InstallerPatterns @('HeSuVi*.exe') -MissingDetail 'HeSuVi is not installed.' -DownloadComponent '/hesuvi')
 
 $finalState = Get-SystemState
@@ -683,7 +736,7 @@ if ($readyForTesting -and $Mode -eq 'Install') {
             }
             if (-not (Test-Path $mainInstaller)) { throw 'Main installer is missing. Extract the complete package and retry.' }
             # Isolate legacy script globals and StrictMode from orchestration.
-            $helpers = New-Module -ArgumentList $mainInstaller -ScriptBlock { param($path) . $path }
+            $helpers = New-Module -ArgumentList $mainInstaller -ScriptBlock { param($path) . $path; Export-ModuleMember -Function @() }
             $configurationOk = & $helpers {
                 $bundle = Get-BundledLibraryPath
                 if (-not $bundle) { throw 'The bundled library is missing.' }
@@ -696,6 +749,10 @@ if ($readyForTesting -and $Mode -eq 'Install') {
                 if (-not (Install-JsfxPlugins)) { throw 'JSFX plugin installation failed.' }
                 if (-not (Install-VstPlugins)) { throw 'VST plugin installation failed.' }
                 if (-not (Install-SonicScout20HRIR)) { throw 'HRIR installation failed.' }
+                $companion = Join-Path $PSScriptRoot 'companion\LEQControlPanel.exe'
+                if (Test-Path -LiteralPath $companion) {
+                    if (-not (Install-SoundControl -SourcePath $companion)) { throw 'LEQ companion installation failed.' }
+                }
                 $endpoints = Set-SonicScout20Endpoints -IconBaseUrl '' -IncludeVoicemeeter $false
                 if (-not $endpoints.Verified -or -not $endpoints.Render8) { throw 'Endpoints could not be verified. Restart Windows and retry.' }
                 $config = Join-Path $env:ProgramFiles 'EqualizerAPO\config\config.txt'
@@ -714,11 +771,31 @@ if ($readyForTesting -and $Mode -eq 'Install') {
 }
 
 if (-not $DryRun) {
+    if (-not (Test-EqualizerApoEndpointBinding)) {
+        $selector = Join-Path $env:ProgramFiles 'EqualizerAPO\Configurator.exe'
+        $currentSelector = Join-Path $env:ProgramFiles 'EqualizerAPO\DeviceSelector.exe'
+        if (Test-Path -LiteralPath $currentSelector) { $selector = $currentSelector }
+        if ($Mode -eq 'Install' -and (Test-Path -LiteralPath $selector)) {
+            Write-Stage -Name 'Equalizer APO device selection' -State 'RUNNING' -Detail 'Select the SonicScout2.0 playback entries (including + when listed), or CABLE Input / CABLE In 16ch before renaming. Click OK and complete its prompts. Leave unrelated speakers and microphones unchanged.'
+            $selectorProcess = Start-Process -WorkingDirectory (Split-Path $selector -Parent) -FilePath $selector -Wait -PassThru
+            if ($selectorProcess.ExitCode -ne 0) { Write-Stage -Name 'Equalizer APO device selection' -State 'ERROR' -Detail "Device Selector exited with code $($selectorProcess.ExitCode). Repair Equalizer APO and retry installation." }
+            if (Test-EqualizerApoEndpointBinding) { $script:RestartRequired = $true }
+        }
+        if (-not (Test-EqualizerApoEndpointBinding)) {
+            Write-Stage -Name 'Equalizer APO device selection' -State 'UPDATE' -Detail 'Equalizer APO is not attached to the virtual playback endpoint. Run installation again and select CABLE Input / SonicScout2.0 in Device Selector.'
+            $readyForTesting = $false
+        } else {
+            Write-Stage -Name 'Equalizer APO device selection' -State 'READY' -Detail 'Equalizer APO registration on the virtual playback endpoint was verified. Restart Windows before testing audio.'
+        }
+    } else {
+        Write-Stage -Name 'Equalizer APO device selection' -State 'READY' -Detail 'Equalizer APO registration on the virtual playback endpoint was verified.'
+    }
     $requiredFiles = @(
         "${env:ProgramFiles}\VSTPlugins\ReaPlugs\reajs.dll",
         "${env:ProgramFiles}\VSTPlugins\ReaPlugs\JS\Effects\SonicScout2.0\ss_spatial_engine.jsfx",
         "${env:ProgramFiles}\VSTPlugins\SonicScout2.0\ss_spatial_engine_bravo_v2_0_0.dll",
         "${env:ProgramFiles}\EqualizerAPO\config\HeSuVi\hesuvi.txt",
+        "${env:ProgramFiles}\EqualizerAPO\config\HeSuVi\conv.txt",
         "${env:ProgramFiles}\EqualizerAPO\config\HeSuVi\hrir\EAC_Default.wav",
         "${env:ProgramFiles}\EqualizerAPO\config\SonicScout2.0\library\version.txt"
     )
@@ -756,11 +833,12 @@ if ($readyForTesting) {
         Write-DryRunTrace -Name 'Final verification' -Action 'verify' -Detail 'Would run final audio-stack checks after the planned installs; no installation was performed or verified.'
     }
     else {
-        Write-Stage -Name 'Final verification' -State 'READY' -Detail 'Audio stack order checks passed. System is ready for Sonic Scout tester flow.'
+        Write-Stage -Name 'Final verification' -State 'READY' -Detail 'Installation verified. SonicScout can now start.'
     }
 }
 else {
-    Write-Stage -Name 'Final verification' -State 'UPDATE' -Detail 'Setup did not detect a complete tuned-channel route. Install missing dependencies and rerun setup_audio_stack.ps1.'
+    $detail = if (-not $DryRun -and $pendingRestart) { 'Installation changes are complete. Restart Windows and rerun Install-SonicScout.bat to finish verification.' } else { 'Installation is incomplete. Review the reported items, correct them and retry installation.' }
+    Write-Stage -Name 'Final verification' -State 'UPDATE' -Detail $detail
 }
 
 if ($DryRun) {

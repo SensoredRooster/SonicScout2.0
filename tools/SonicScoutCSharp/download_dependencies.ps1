@@ -20,6 +20,20 @@ try {
         Write-Host "Downloading $name..."
         Invoke-WebRequest -UseBasicParsing -Uri $spec[0] -OutFile $part -TimeoutSec 120
         $bytes=[IO.File]::ReadAllBytes($part)
+        # SourceForge can return its download page before redirecting to the file.
+        # Follow the page's official file link once; never save HTML as an installer.
+        if ($spec[0] -match '^https://sourceforge\.net/projects/([^/]+)/files/(.+)/download$' -and ($bytes.Length -lt 2 -or $bytes[0] -ne 77 -or $bytes[1] -ne 90)) {
+            $expectedPath = '/project/' + $Matches[1] + '/' + $Matches[2]
+            $html=[IO.File]::ReadAllText($part)
+            $link=[regex]::Match($html,'https://downloads\.sourceforge\.net/project/[^"<>\s]+').Value
+            if ($link) {
+                $uri=[uri][Net.WebUtility]::HtmlDecode($link)
+                if ($uri.Scheme -eq 'https' -and $uri.Host -eq 'downloads.sourceforge.net' -and $uri.AbsolutePath -eq $expectedPath) {
+                    Invoke-WebRequest -UseBasicParsing -Uri $uri.AbsoluteUri -OutFile $part -TimeoutSec 120
+                    $bytes=[IO.File]::ReadAllBytes($part)
+                }
+            }
+        }
         $magic=if ($spec[2]) { @(80,75) } else { @(77,90) }
         if ($bytes.Length -lt 1024 -or $bytes[0] -ne $magic[0] -or $bytes[1] -ne $magic[1]) { throw "$name download is not a Windows installer/package." }
         Move-Item -LiteralPath $part -Destination $path -Force

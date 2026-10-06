@@ -32,7 +32,7 @@ Check out [www.github.com/sensoredrooster](https://www.github.com/sensoredrooste
 
 1. Run `tools\SonicScoutCSharp\publish_sonic_scout.bat`. It creates a complete Windows x64 package in `Desktop\SonicScout`. An existing package is preserved until publishing succeeds, then kept as a dated backup.
 2. Open that published folder and run `Install-SonicScout.bat`. Accept the Windows administrator prompt and confirm that you want the audio components installed.
-3. Complete any vendor installer dialogs. For Equalizer APO Device Selector, select the SonicScout2.0 / CABLE Input playback endpoint. Leave unrelated microphones and speakers unchecked.
+3. Complete any vendor installer dialogs. For Equalizer APO Device Selector, select SonicScout2.0 and SonicScout2.0 + when listed (CABLE Input / CABLE In 16ch before renaming). Leave unrelated microphones and speakers unchecked.
 4. If installation asks for a restart, restart Windows and run `Install-SonicScout.bat` again. The app starts only after installation verification succeeds.
 
 `tools\SonicScoutCSharp\Install-SonicScout.bat` also publishes first when run from source. Developers can use `run_sonic_scout_csharp.bat` to build and launch the app; that path requires the SDK.
@@ -66,7 +66,7 @@ The main menu offers:
 | `[b] SonicScout2.0` | Opens the page for the automated, auto-updating app |
 | `[Q] Quit` | Exit |
 
-The script writes the Equalizer APO starter chain and `[5] Setup Profile` activates real library files. LEQ installation, and the LFX/GFX enablement E-APO's Device Selector would otherwise be used for, are both handled automatically -- see [What is automated](#what-is-automated).
+The script writes the Equalizer APO starter chain and `[5] Setup Profile` activates real library files. Complete Equalizer APO's Device Selector if it opens during installation, selecting SonicScout2.0 and SonicScout2.0 + when listed (CABLE Input / CABLE In 16ch before renaming).
 
 ## What is automated
 
@@ -77,7 +77,7 @@ Most of the chain needs no manual steps. These are all handled for you:
 | Output device selection | Physical endpoints are detected and ranked (headphone/headset > DAC > amp > USB > speaker). Virtual cables are excluded, so a cable never gets auto-selected as "the device you hear" |
 | Third-party mixer detection | Voicemeeter, Elgato Wave Link and Sound Blaster are detected from your endpoints and ticked for you |
 | Driver installs | Known silent switches are used where supported. VB-Audio, Hi-Fi Cable and Equalizer APO may open dialogs; follow the component instructions and restart when requested |
-| LFX / GFX | E-APO's Device Selector is never needed. Sonic Scout snapshots the device's FX slots before installing LEQ, restores them afterwards, and verifies both |
+| Equalizer APO device selection | If Device Selector opens, select both SonicScout2.0 playback entries when listed (CABLE Input / CABLE In 16ch before renaming). Installing files alone does not establish that the audio effects are attached to the playback endpoint |
 | SonicPass | Built and shipped with the app. There is no separate "run the bat once" step |
 | Dependencies | Available installers ship with the app. Missing required components are downloaded from vendor sites, with a bounded timeout and validation |
 
@@ -109,7 +109,7 @@ Behavior:
 
 ### What is automated
 
-See [What is automated](#what-is-automated) and [What you still have to do](#what-you-still-have-to-do) above. In short: output selection, mixer detection, silent driver installs, LFX/GFX, and SonicPass are all handled. The four remaining steps are printed as a numbered checklist when setup finishes.
+See [What is automated](#what-is-automated) and [What you still have to do](#what-you-still-have-to-do) above. Setup checks components and installs the bundled assets. Complete any vendor dialogs, restart when requested, and rerun installation to verify completion. The wizard also lists the Windows settings to check.
 
 ## What the installer does
 
@@ -455,4 +455,3 @@ SonicScout2.0 includes a native WPF support center and two isolated Cloudflare s
 Tester access is browse/download plus tester-folder uploads. Admin access also controls releases, **Latest**, deletes, and archived content.
 
 See [docs/SUPPORT.md](docs/SUPPORT.md) and [docs/TESTER_SHARE.md](docs/TESTER_SHARE.md).
-

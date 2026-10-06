@@ -1499,7 +1499,9 @@ public partial class MainWindow : Window
             WorkingDirectory: Path.GetDirectoryName(setupScriptPath)!,
             Payload: payload,
             AdditionalArguments: scriptArguments,
-            Timeout: TimeSpan.FromMinutes(8));
+            // Installation waits for human confirmation in vendor dialogs. A timer
+            // must not interrupt an audio-driver installer while it is applying changes.
+            Timeout: null);
 
         string executionId = await scriptBridge.QueueExecutionAsync(executionRequest, cancellationToken);
         return await scriptBridge.WaitForCompletionAsync(executionId, cancellationToken);
@@ -1964,11 +1966,12 @@ public partial class MainWindow : Window
                 throw new InvalidOperationException("Setup requires all ownership and apply confirmations before Sonic Scout can configure routing.");
             }
 
-            Report("Script bridge", "RUNNING", "Running setup automation through ScriptOrchestrator...");
+            Report("Script bridge", "RUNNING", "Installing and verifying audio components. Complete the Windows permission prompt and any vendor dialogs.");
             ScriptExecutionResult? setupAutomationResult = await RunSetupAutomationScriptAsync(request, CancellationToken.None);
             if (setupAutomationResult is null)
             {
                 Report("Script bridge", "UPDATE", "setup_audio_stack.ps1 was not found beside the app. Copy it into the app folder to enable turnkey setup automation.");
+                return results;
             }
             else if (setupAutomationResult.State == ScriptExecutionState.Succeeded)
             {
@@ -1977,7 +1980,8 @@ public partial class MainWindow : Window
             else
             {
                 string failure = setupAutomationResult.ErrorMessage ?? "Setup automation script failed.";
-                Report("Script bridge", "UPDATE", $"{failure} Safe bypass mode has been applied.");
+                Report("Script bridge", "UPDATE", $"Installation needs attention. {failure} Review the installation report in %LOCALAPPDATA%\\SonicScout\\logs. If a restart was requested, restart Windows and retry installation.");
+                return results;
             }
 
             Report("Profiles", "RUNNING", "Checking the profile folder and saved EQ assets...");

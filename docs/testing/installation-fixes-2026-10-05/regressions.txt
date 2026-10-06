@@ -4,7 +4,8 @@ Sonic Scout audio setup package: 2026.08.21.4
 [READY] HeSuVi - HeSuVi already detected.
 [READY] Equalizer APO verification - Equalizer APO config.txt and runtime files are present.
 [READY] Windows audio service - Windows Audio service is running.
-[READY] Final verification - Audio stack order checks passed. System is ready for Sonic Scout tester flow.
+[READY] Equalizer APO device selection - Equalizer APO registration on the virtual playback endpoint was verified.
+[READY] Final verification - Installation verified. SonicScout can now start.
 PASS: healthy preflight is read-only and does not import/mutate configuration.
 Sonic Scout audio setup package: 2026.08.21.4
 [READY] Baseline scan - Detected endpoints: 1. Simulated healthy endpoint
@@ -12,15 +13,27 @@ Sonic Scout audio setup package: 2026.08.21.4
 [READY] HeSuVi - HeSuVi already detected.
 [READY] Equalizer APO verification - Equalizer APO config.txt and runtime files are present.
 [READY] Windows audio service - Windows Audio service is running.
-[UPDATE] Restart Windows - Drivers were installed. Restart Windows, then run Install-SonicScout.bat again to verify and finish.
-[UPDATE] Final verification - Setup did not detect a complete tuned-channel route. Install missing dependencies and rerun setup_audio_stack.ps1.
+[UPDATE] Equalizer APO device selection - Equalizer APO is not attached to the virtual playback endpoint. Run installation again and select CABLE Input / SonicScout2.0 in Device Selector.
+[UPDATE] Final verification - Installation is incomplete. Review the reported items, correct them and retry installation.
+PASS: installed files without endpoint APO registration do not return success.
+PASS: APO verification requires registration on both virtual playback endpoints.
 Sonic Scout audio setup package: 2026.08.21.4
 [READY] Baseline scan - Detected endpoints: 1. Simulated healthy endpoint
 [READY] Equalizer APO - Equalizer APO already detected.
 [READY] HeSuVi - HeSuVi already detected.
 [READY] Equalizer APO verification - Equalizer APO config.txt and runtime files are present.
 [READY] Windows audio service - Windows Audio service is running.
-[READY] Final verification - Audio stack order checks passed. System is ready for Sonic Scout tester flow.
+[READY] Equalizer APO device selection - Equalizer APO registration on the virtual playback endpoint was verified.
+[UPDATE] Restart Windows - Drivers were installed. Restart Windows, then run Install-SonicScout.bat again to verify and finish.
+[UPDATE] Final verification - Installation changes are complete. Restart Windows and rerun Install-SonicScout.bat to finish verification.
+Sonic Scout audio setup package: 2026.08.21.4
+[READY] Baseline scan - Detected endpoints: 1. Simulated healthy endpoint
+[READY] Equalizer APO - Equalizer APO already detected.
+[READY] HeSuVi - HeSuVi already detected.
+[READY] Equalizer APO verification - Equalizer APO config.txt and runtime files are present.
+[READY] Windows audio service - Windows Audio service is running.
+[READY] Equalizer APO device selection - Equalizer APO registration on the virtual playback endpoint was verified.
+[READY] Final verification - Installation verified. SonicScout can now start.
 PASS: restart is required until boot changes; preflight does not delete the marker.
 Sonic Scout audio setup package: 2026.08.21.4
 [READY] Ownership confirmation - Ownership/apply authorization accepted.
@@ -30,9 +43,12 @@ Sonic Scout audio setup package: 2026.08.21.4
 [READY] Equalizer APO verification - Equalizer APO config.txt and runtime files are present.
 [READY] Windows audio service - Windows Audio service is running.
 [ERROR] APO Configuration - Main installer is missing. Extract the complete package and retry.
-[UPDATE] Final verification - Setup did not detect a complete tuned-channel route. Install missing dependencies and rerun setup_audio_stack.ps1.
-Saved setup report: C:\Users\brand\AppData\Local\Temp\SonicScout-install-tests-4cdfe443115a4566824e9f7a060ec32d\LocalAppData\SonicScout\logs\audio-setup-report-20261005-223530.json
+[READY] Equalizer APO device selection - Equalizer APO registration on the virtual playback endpoint was verified.
+[UPDATE] Final verification - Installation is incomplete. Review the reported items, correct them and retry installation.
+Saved setup report: C:\Users\brand\AppData\Local\Temp\SonicScout-install-tests-60e1c6167cd14f639f049b215e6f1354\LocalAppData\SonicScout\logs\audio-setup-report-20261006-173404.json
 PASS: failed configuration does not return success.
 PASS: legacy helper import returns without executing its menu.
 PASS: elevation preserves script path, choices, consent and child exit status.
-Regression artifacts: C:\Users\brand\AppData\Local\Temp\SonicScout-install-tests-4cdfe443115a4566824e9f7a060ec32d
+Downloading reaplugs...
+PASS: HTML download fails and preserves the existing installer.
+Regression artifacts: C:\Users\brand\AppData\Local\Temp\SonicScout-install-tests-60e1c6167cd14f639f049b215e6f1354

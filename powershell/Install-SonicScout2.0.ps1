@@ -4330,7 +4330,7 @@ function Install-HeSuVi {
     Write-Host "$($script:BoxMargin)Installing HeSuVi..." -ForegroundColor Cyan
 
     $hesuviDir = Join-Path $env:ProgramFiles "EqualizerAPO\config\HeSuVi"
-    if (Test-Path $hesuviDir) {
+    if ((Test-Path (Join-Path $hesuviDir 'hesuvi.txt')) -and (Test-Path (Join-Path $hesuviDir 'conv.txt'))) {
         Write-Host "$($script:BoxMargin)HeSuVi already installed." -ForegroundColor Green
         return $true
     }
@@ -4338,8 +4338,8 @@ function Install-HeSuVi {
     # HeSuVi is a 7z SFX -- no silent flag works. Retry loop lets the user
     # re-launch the installer if they accidentally cancel the extraction dialog.
     while ($true) {
-        # Clean up any partial directory from a previous cancelled extraction
-        Remove-Item $hesuviDir -Recurse -Force -ErrorAction SilentlyContinue
+        # A directory alone may contain only bundled HRIRs from a previous attempt.
+        # Keep existing assets and user presets while retrying the vendor extraction.
 
         Unblock-File -LiteralPath $InstallerPath -ErrorAction SilentlyContinue
 

@@ -1,0 +1,2 @@
+PUBLISH_STUB: -NoProfile -ExecutionPolicy Bypass -File C:\Users\brand\Documents\SonicScout-QA-2026-10-05\source-entry-fix-test\publish_sonic_scout.ps1
+PASS: source entry point invokes publishing without an existing executable and propagates its failure exit code 17.

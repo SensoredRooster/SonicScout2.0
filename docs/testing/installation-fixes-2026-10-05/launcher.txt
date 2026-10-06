@@ -1,0 +1,5 @@
+Sonic Scout detected missing or incomplete audio dependencies.
+DOTNET_STUB_REACHED
+Sonic Scout could not be built. Install the .NET 8 SDK and try again.
+Press any key to continue . . . 
+PASS: missing-prerequisite exit 2 reaches the guided setup branch; choosing No continues to a stub build.

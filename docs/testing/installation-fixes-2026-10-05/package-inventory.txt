@@ -1,0 +1,53 @@
+PASS package: SonicScout.exe (151552 bytes)
+PASS package: SonicScout.SonicPass.exe (152064 bytes)
+PASS package: hostfxr.dll (366376 bytes)
+PASS package: coreclr.dll (4995880 bytes)
+PASS package: README.md (1451 bytes)
+PASS package: Install-SonicScout.bat (682 bytes)
+PASS package: Install-SonicScout2.0.ps1 (352685 bytes)
+PASS package: setup_audio_stack.ps1 (40191 bytes)
+PASS package: download_dependencies.ps1 (3204 bytes)
+PASS package: library/version.txt (16 bytes)
+PASS package: hrir/EAC_Default.wav (179384 bytes)
+PASS package: companion/LEQControlPanel.exe (209420067 bytes)
+PASS package: installers/VBCABLE/VBCABLE_Setup_x64.exe (937728 bytes)
+PASS package: adjacent VB-Cable INF/SYS files present
+{
+  "runtimeOptions": {
+    "tfm": "net8.0",
+    "includedFrameworks": [
+      {
+        "name": "Microsoft.NETCore.App",
+        "version": "8.0.31"
+      },
+      {
+        "name": "Microsoft.WindowsDesktop.App",
+        "version": "8.0.31"
+      }
+    ],
+    "configProperties": {
+      "System.Reflection.Metadata.MetadataUpdater.IsSupported": false,
+      "CSWINRT_USE_WINDOWS_UI_XAML_PROJECTIONS": false
+    }
+  }
+}
+{
+  "runtimeOptions": {
+    "tfm": "net8.0",
+    "includedFrameworks": [
+      {
+        "name": "Microsoft.NETCore.App",
+        "version": "8.0.31"
+      },
+      {
+        "name": "Microsoft.WindowsDesktop.App",
+        "version": "8.0.31"
+      }
+    ],
+    "configProperties": {
+      "System.Reflection.Metadata.MetadataUpdater.IsSupported": false,
+      "System.Runtime.Serialization.EnableUnsafeBinaryFormatterSerialization": false,
+      "CSWINRT_USE_WINDOWS_UI_XAML_PROJECTIONS": false
+    }
+  }
+}

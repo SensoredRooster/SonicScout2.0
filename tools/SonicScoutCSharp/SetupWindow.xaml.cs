@@ -598,6 +598,10 @@ OwnershipConsentCheckBox.IsChecked == true,
         }
 
         string key = result.Name.ToLowerInvariant();
+        if (result.State == "RUNNING" && key.Contains("script"))
+        {
+            return "Allow the Windows permission prompt, then complete the vendor dialogs. For VB-Cable, click Install Driver. In Equalizer APO Device Selector, select both SonicScout2.0 playback entries when listed (CABLE Input / CABLE In 16ch before renaming). Restart when requested and rerun installation.";
+        }
         return key switch
         {
             var name when name.Contains("ownership") => "Tick the authorisation checkbox to allow routing/install actions from this wizard.",

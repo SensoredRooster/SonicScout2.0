@@ -5,6 +5,8 @@ Project: C:\Users\brand\OneDrive\Documents\SonicScout2.0\SonicScout-main
 Scope: acquiring the app, prerequisites, packaging, starting installation, error handling and installation completion. Profile setup, routing performance and listening tests belong to round two.
 Status: Installation review pass completed with blockers. A successful fresh-machine installation was not achieved.
 
+Follow-up: installation fixes and their current verification status are tracked in [FIXES.md](../installation-fixes-2026-10-05/FIXES.md). This original report describes the pre-fix test results.
+
 ## Findings
 
 A first-time user following the README's recommended instructions cannot complete the first step from this checkout. The application itself publishes successfully, but the documented packaging and installation entry points do not agree. Passing builds and dry runs do not establish that a fresh machine can install it.
