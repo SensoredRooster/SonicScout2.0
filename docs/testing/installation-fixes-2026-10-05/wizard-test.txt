@@ -1,0 +1,6 @@
+  [PASS] Blocked installation must not say AUDIO STACK READY -- STEP 3 OF 4  |  REVIEW ITEMS NEEDING ATTENTION
+  [PASS] Blocked installation must not show DONE -- CLOSE AND REVIEW
+  rendered blocked-install.png
+
+================ SUMMARY ================
+PASS 2   FAIL 0   TOTAL 2

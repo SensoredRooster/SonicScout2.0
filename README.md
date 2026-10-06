@@ -22,41 +22,36 @@ Check out [www.github.com/sensoredrooster](https://www.github.com/sensoredrooste
 
 ## Requirements
 
-- Windows 10 or 11 (x64 only -- ARM64 not supported)
-- **Windows PowerShell 5.1.** PowerShell 7 is not supported and the installer will refuse to run under it. Setup needs BITS, AppX and PnP components that PowerShell 7 cannot load. Open "Windows PowerShell", not "PowerShell 7" or "Terminal" set to pwsh
-- Administrator privileges (required for audio driver and registry operations)
-- Internet connection (the installer downloads the audio tools and the tune library)
+- Windows 10 or 11, x64. ARM64 is not supported.
+- Windows PowerShell 5.1 (`powershell.exe`), included with Windows. Use it for the installer, rather than PowerShell 7.
+- Administrator access for audio drivers and configuration. The installer requests it through Windows UAC.
+- Internet access for audio components not already included in the package. The tune library, plugins and Default HRIR files are bundled.
+- **Source checkout only:** install the .NET 8 SDK before building. Published packages include the .NET runtime; destination PCs do not need an SDK or separate runtime.
 
-## Install (recommended: turnkey app wizard)
+## Install from this source checkout
 
-Use the guided app flow first.
+1. Run `tools\SonicScoutCSharp\publish_sonic_scout.bat`. It creates a complete Windows x64 package in `Desktop\SonicScout`. An existing package is preserved until publishing succeeds, then kept as a dated backup.
+2. Open that published folder and run `Install-SonicScout.bat`. Accept the Windows administrator prompt and confirm that you want the audio components installed.
+3. Complete any vendor installer dialogs. For Equalizer APO Device Selector, select the SonicScout2.0 / CABLE Input playback endpoint. Leave unrelated microphones and speakers unchecked.
+4. If installation asks for a restart, restart Windows and run `Install-SonicScout.bat` again. The app starts only after installation verification succeeds.
 
-**If you downloaded/cloned the source repository:**
+`tools\SonicScoutCSharp\Install-SonicScout.bat` also publishes first when run from source. Developers can use `run_sonic_scout_csharp.bat` to build and launch the app; that path requires the SDK.
 
-1. Install the **.NET 8 SDK** if it is not already installed.
-2. Run `tools/SonicScoutCSharp/publish_sonic_scout.bat`. This builds a complete distributable folder at `%USERPROFILE%\Desktop\SonicScout`.
-3. Open that published folder and run `Install-SonicScout.bat` as Administrator.
-4. Follow the setup wizard.
+## Install a published package
 
-**If you already have a published SonicScout folder:** run its `Install-SonicScout.bat` as Administrator directly.
+Extract the **entire** SonicScout package into a writable folder. Keep its library, scripts and installer folders together. Run `Install-SonicScout.bat` there and follow steps 2–4 above. Do not launch an executable from inside a ZIP. No separate .NET installation is needed.
 
-`tools/SonicScoutCSharp/Install-SonicScout.bat` inside a raw source checkout is not a build command; it expects `SonicScout.exe` to already be beside it. Developers who only want to launch from source can use `tools/SonicScoutCSharp/run_sonic_scout_csharp.bat`, which builds the WPF project when needed.
+The first-run wizard performs read-only checks and opens when installation is incomplete. Installation failures and cancelled prompts remain incomplete; review the result rows, expand installation choices and retry. Logs from installation are saved under `%LOCALAPPDATA%\SonicScout\logs`.
 
-The app is startup-gated: it runs setup checks first, and **main live controls do not appear until installation/setup passes**.
+## Install with the legacy PowerShell menu
 
-## Install (PowerShell script path)
-
-Open an **elevated** (Run as Administrator) **Windows PowerShell** window and run:
-
-```powershell
-irm https://raw.githubusercontent.com/sensoredrooster/SonicScout2.0/main/powershell/Install-SonicScout2.0.ps1 | iex
-```
-
-Or run locally:
+Use a complete source checkout so bundled assets are available. Open an elevated **Windows PowerShell** window at the repository root and run:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File Install-SonicScout2.0.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\powershell\Install-SonicScout2.0.ps1
 ```
+
+The download-and-execute (`irm | iex`) route is not recommended: it has no bundled library or companion app and requires hosted release assets that may be unavailable.
 
 The main menu offers:
 
@@ -81,10 +76,10 @@ Most of the chain needs no manual steps. These are all handled for you:
 |------|-----|
 | Output device selection | Physical endpoints are detected and ranked (headphone/headset > DAC > amp > USB > speaker). Virtual cables are excluded, so a cable never gets auto-selected as "the device you hear" |
 | Third-party mixer detection | Voicemeeter, Elgato Wave Link and Sound Blaster are detected from your endpoints and ticked for you |
-| Driver installs | Equalizer APO, Voicemeeter, ReaPlugs and HeSuVi install silently. VB-Audio needs one confirmation click, and the wizard shows you exactly what to click while it waits |
+| Driver installs | Known silent switches are used where supported. VB-Audio, Hi-Fi Cable and Equalizer APO may open dialogs; follow the component instructions and restart when requested |
 | LFX / GFX | E-APO's Device Selector is never needed. Sonic Scout snapshots the device's FX slots before installing LEQ, restores them afterwards, and verifies both |
 | SonicPass | Built and shipped with the app. There is no separate "run the bat once" step |
-| Dependencies | Installers ship with the app; nothing needs downloading or placing by hand |
+| Dependencies | Available installers ship with the app. Missing required components are downloaded from vendor sites, with a bounded timeout and validation |
 
 ## What you still have to do
 
@@ -106,10 +101,10 @@ Primary entry points:
 
 Behavior:
 
-- Startup is gated: first-run checks execute before normal app controls are shown. The check is a **read-only preflight** -- it reports what is missing without installing anything or prompting for elevation.
+- Startup is gated: first-run checks execute before the app completes startup. The check is a **read-only preflight** -- it reports what is missing without installing anything or prompting for elevation.
 - If setup is incomplete, the setup wizard opens first and guides install/routing.
 - The wizard is four steps: confirm output and authorise, run install/checks, audio stack ready, verify Windows settings.
-- Setup actions run non-interactively in the backend script bridge using the user's wizard choices. One authorisation checkbox covers driver installation, routing changes, and dependency fallback.
+- Setup actions run through the backend script bridge and request administrator access when needed using the user's wizard choices. One authorisation checkbox covers driver installation, routing changes, and dependency fallback.
 - When setup passes, the main app UI opens for profile/live use.
 
 ### What is automated
@@ -148,7 +143,7 @@ When setup installs Voicemeeter Standard, its two endpoints are renamed as well 
 
 ### The tune library
 
-The library is downloaded and extracted for you during step 5, and `[3] Redownload Library` refreshes it later. There is no manual download-and-drag step.
+The bundled library is installed for you during step 5, and `[3] Redownload Library` refreshes it later. There is no manual download-and-drag step.
 
 Releases are also published on the [Releases](https://github.com/sensoredrooster/SonicScout2.0/releases) page if you want to inspect one. The release zip has its payload at the zip root -- the game folders, `jsfx/`, `vst/` and `version.txt` sit directly inside it, with no wrapping `library/` folder.
 
@@ -460,3 +455,4 @@ SonicScout2.0 includes a native WPF support center and two isolated Cloudflare s
 Tester access is browse/download plus tester-folder uploads. Admin access also controls releases, **Latest**, deletes, and archived content.
 
 See [docs/SUPPORT.md](docs/SUPPORT.md) and [docs/TESTER_SHARE.md](docs/TESTER_SHARE.md).
+

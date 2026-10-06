@@ -26,6 +26,7 @@ public partial class SetupWindow : Window
     private const string SonicScoutDirectRouteStyle = "Sonic Scout Direct Route";
     private const string SonicScoutCompatibilityRouteStyle = "Sonic Scout Compatibility Route";
 
+    private bool installationAttempted;
     private readonly Func<Task<IReadOnlyList<AudioEndpointOption>>> discoverOutputs;
     private readonly Func<IProgress<SetupCheckResult>, SetupInstallRequest, Task<IReadOnlyList<SetupCheckResult>>> runChecks;
     private readonly Func<Window, Task> openPostInstallVerification;
@@ -38,6 +39,8 @@ public partial class SetupWindow : Window
         Func<Window, Task> openPostInstallVerification)
     {
         InitializeComponent();
+        MaxHeight = SystemParameters.WorkArea.Height;
+        MaxWidth = SystemParameters.WorkArea.Width;
         this.discoverOutputs = discoverOutputs;
         this.runChecks = runChecks;
         this.openPostInstallVerification = openPostInstallVerification;
@@ -422,7 +425,7 @@ OwnershipConsentCheckBox.IsChecked == true,
     {
         BeginSetupButton.IsEnabled = setupInputsEnabled && discoveredOutputs.Count > 0;
         SetWrappedButtonText(BeginSetupButton, HasRequiredConsents()
-            ? "RUN INSTALL SETUP"
+            ? (installationAttempted ? "RETRY INSTALLATION" : "RUN INSTALL SETUP")
             : "TICK THE AUTHORISATION BOX ABOVE");
     }
 
@@ -485,7 +488,7 @@ OwnershipConsentCheckBox.IsChecked == true,
         try
         {
             IReadOnlyList<SetupCheckResult> results = await runChecks(progress, request);
-            int problems = results.Count(result => result.State is "UPDATE" or "ERROR");
+            int problems = results.Count(result => result.State is "UPDATE" or "ERROR" or "BLOCKED");
             SummaryText.Text = BuildCompletionSummary(results);
             ActionHintText.Text = problems == 0
                 ? "Great. Click VERIFY SETTINGS, then DONE."
@@ -536,7 +539,10 @@ OwnershipConsentCheckBox.IsChecked == true,
             ProgressBar.IsIndeterminate = false;
             ProgressBar.Value = 1;
             DoneButton.IsEnabled = true;
-            SetWrappedButtonText(BeginSetupButton, "RUN INSTALL SETUP");
+            installationAttempted = true;
+            InstallationChoices.IsExpanded = false;
+            InstallationChoices.Header = "Installation choices — expand to retry";
+            SetWrappedButtonText(BeginSetupButton, "RETRY INSTALLATION");
             SetInstallerInputEnabled(discoveredOutputs.Count > 0);
         }
     }
@@ -594,7 +600,7 @@ OwnershipConsentCheckBox.IsChecked == true,
         string key = result.Name.ToLowerInvariant();
         return key switch
         {
-            var name when name.Contains("ownership") => "Check all 3 consent boxes to allow routing/install actions from this wizard.",
+            var name when name.Contains("ownership") => "Tick the authorisation checkbox to allow routing/install actions from this wizard.",
             var name when name.Contains("equalizer apo") => "Install Equalizer APO, then rerun setup. This is required for filter apply.",
             var name when name.Contains("voicemeeter") => "Enable Voicemeeter fallback (or install virtual cable route), then rerun setup.",
             var name when name.Contains("windows audio service") => "Restart Windows Audio service (Audiosrv) or reboot, then rerun setup.",
@@ -624,3 +630,4 @@ OwnershipConsentCheckBox.IsChecked == true,
         }
     }
 }
+

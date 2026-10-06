@@ -1,0 +1,3 @@
+Persistent tested source, published output, harnesses and disposable VM password: C:/Users/brand/Documents/SonicScout-QA-2026-10-05
+Windows ISOs: C:/Users/brand/Downloads/Windows11-Enterprise-Eval-x64-SonicScout.iso and Windows11-LTSC-Eval-x64-SonicScout.iso
+VM disks/configuration: C:/Users/brand/VirtualBox VMs/SonicScout-Install-QA-20261005

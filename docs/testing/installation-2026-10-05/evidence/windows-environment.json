@@ -1,0 +1,12 @@
+{
+  "DownloadedFrom": "https://go.microsoft.com/fwlink/?LinkId=2382600&clcid=0x409&country=us&culture=en-us",
+  "Path": "C:\\Users\\brand\\Downloads\\Windows11-Enterprise-Eval-x64-SonicScout.iso",
+  "Bytes": 8225329152,
+  "SHA256": "BC3F24086EBADC94489066B5AD78089E2CF5C3491E90E790BB81A2B199C10E38",
+  "Architecture": "x64",
+  "Edition": "Windows 11 Enterprise Evaluation",
+  "Build": "10.0.26300.9457",
+  "Vm": "SonicScout-Install-QA-20261005",
+  "Account": "scouttester",
+  "PasswordFile": "C:/Users/brand/AppData/Local/Temp/SonicScout-install-review-20261005/vm-password.txt"
+}

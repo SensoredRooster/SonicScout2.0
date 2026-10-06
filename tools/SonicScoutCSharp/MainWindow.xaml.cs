@@ -1458,8 +1458,7 @@ public partial class MainWindow : Window
             return null;
         }
 
-        bool elevated = IsCurrentProcessElevated();
-        string mode = elevated ? "Install" : "Preflight";
+        string mode = "Install";
         UiAudioProfileSnapshot snapshot = BuildUiProfileSnapshot();
         Dictionary<string, string> metadata = new(StringComparer.OrdinalIgnoreCase);
         if (snapshot.Metadata is not null)
@@ -1973,15 +1972,7 @@ public partial class MainWindow : Window
             }
             else if (setupAutomationResult.State == ScriptExecutionState.Succeeded)
             {
-                bool elevated = IsCurrentProcessElevated();
-                if (elevated)
-                {
-                    Report("Script bridge", "READY", "Setup automation script completed in Install mode.");
-                }
-                else
-                {
-                    Report("Script bridge", "UPDATE", "Setup automation script completed in Preflight mode. Restart Sonic Scout as Administrator to run dependency installs from the UI.");
-                }
+                Report("Script bridge", "READY", "Installation completed and required assets were verified.");
             }
             else
             {
@@ -2981,3 +2972,5 @@ public partial class MainWindow : Window
         }
     }
 }
+
+

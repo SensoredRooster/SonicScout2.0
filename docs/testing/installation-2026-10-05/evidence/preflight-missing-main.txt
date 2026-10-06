@@ -1,0 +1,10 @@
+Sonic Scout audio setup package: 2026.08.21.4
+[READY] Baseline scan - Detected endpoints: 1. Simulated installed stack
+[READY] Equalizer APO - Equalizer APO already detected.
+[READY] ReaPlugs - ReaPlugs VST effects are required for Sonic Scout.
+[READY] Equalizer APO verification - Equalizer APO config.txt and runtime files are present.
+[READY] Windows audio service - Windows Audio service is running.
+[RUNNING] APO Configuration - Invoking main installer endpoint configuration to bind APO to correct Hi-Fi tunnel device.
+[UPDATE] APO Configuration - Main installer (Install-SonicScout2.0.ps1) not found. Run it manually to complete APO endpoint configuration.
+[READY] Final verification - Audio stack order checks passed. System is ready for Sonic Scout tester flow.
+HARNESS: setup history write invoked

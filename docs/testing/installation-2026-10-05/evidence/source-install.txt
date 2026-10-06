@@ -1,0 +1,3 @@
+Sonic Scout setup package: 2026.08.21.4
+SonicScout.exe was not found. Run publish_sonic_scout.bat again and use the published SonicScout folder.
+Press any key to continue . . . 

@@ -1,0 +1,9 @@
+ForEach-Object : The term 'Get-FileHash' is not recognized as the name of a cmdlet, function, script file, or operable 
+program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At C:\Users\brand\OneDrive\Documents\SonicScout2.0\SonicScout-main\tools\SonicScoutCSharp\test_installation.ps1:38 
+char:62
++ ... rse -File | ForEach-Object { "$($_.FullName):$($_.LastWriteTimeUtc.Ti ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (Get-FileHash:String) [ForEach-Object], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException,Microsoft.PowerShell.Commands.ForEachObjectCommand
+ 

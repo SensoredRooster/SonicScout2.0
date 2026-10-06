@@ -1,0 +1,4 @@
+MSBUILD : error MSB1009: Project file does not exist.
+Switch: CSharp\SonicScout.CSharp.csproj
+Publish failed.
+Press any key to continue . . . 

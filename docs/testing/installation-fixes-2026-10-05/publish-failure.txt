@@ -1,0 +1,10 @@
+C:\Users\brand\OneDrive\Documents\SonicScout2.0\SonicScout-main\tools\SonicScoutCSharp\publish_sonic_scout.ps1 : 
+Publish failed (exit 17). Existing output has been preserved.
+At C:\Users\brand\OneDrive\Documents\SonicScout2.0\SonicScout-main\tools\SonicScoutCSharp\publish_sonic_scout.ps1:29 
+char:11
++ } catch { Write-Error $_; exit 1 }
++           ~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [Write-Error], WriteErrorException
+    + FullyQualifiedErrorId : Microsoft.PowerShell.Commands.WriteErrorException,publish_sonic_scout.ps1
+ 
+PASS: failed publish preserved the existing exported build.

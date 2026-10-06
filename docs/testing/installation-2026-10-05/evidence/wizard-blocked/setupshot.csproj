@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <StartupObject>Program</StartupObject>
+    <!-- Match the real project so x:Class="SonicScout.SetupWindow" resolves. -->
+    <AssemblyName>SonicScout</AssemblyName>
+    <RootNamespace>SonicScout</RootNamespace>
+    <EnableDefaultPageItems>false</EnableDefaultPageItems>
+    <NoWarn>$(NoWarn);CS0169;CS0649;CS8321</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Link the REAL product XAML + code-behind. Nothing is modified. -->
+    <Page Include="$(SrcDir)\SetupWindow.xaml" Link="SetupWindow.xaml" />
+    <Compile Include="$(SrcDir)\SetupWindow.xaml.cs" Link="SetupWindow.xaml.cs" />
+  </ItemGroup>
+
+</Project>

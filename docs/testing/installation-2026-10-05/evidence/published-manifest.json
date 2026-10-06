@@ -1,0 +1,254 @@
+[
+  {
+    "Path": "auto_setup_dependencies.bat",
+    "Length": 6216
+  },
+  {
+    "Path": "logo.png",
+    "Length": 262094
+  },
+  {
+    "Path": "NAudio.Asio.dll",
+    "Length": 34304
+  },
+  {
+    "Path": "NAudio.Core.dll",
+    "Length": 187904
+  },
+  {
+    "Path": "NAudio.dll",
+    "Length": 7680
+  },
+  {
+    "Path": "NAudio.Midi.dll",
+    "Length": 46592
+  },
+  {
+    "Path": "NAudio.Wasapi.dll",
+    "Length": 179200
+  },
+  {
+    "Path": "NAudio.WinForms.dll",
+    "Length": 34304
+  },
+  {
+    "Path": "NAudio.WinMM.dll",
+    "Length": 57344
+  },
+  {
+    "Path": "run_audio_stack_setup.bat",
+    "Length": 794
+  },
+  {
+    "Path": "setup_audio_stack.ps1",
+    "Length": 30523
+  },
+  {
+    "Path": "SonicScout.deps.json",
+    "Length": 5585
+  },
+  {
+    "Path": "SonicScout.dll",
+    "Length": 285184
+  },
+  {
+    "Path": "SonicScout.exe",
+    "Length": 151552
+  },
+  {
+    "Path": "SonicScout.pdb",
+    "Length": 93832
+  },
+  {
+    "Path": "SonicScout.runtimeconfig.json",
+    "Length": 429
+  },
+  {
+    "Path": "SonicScout.SonicPass.deps.json",
+    "Length": 4790
+  },
+  {
+    "Path": "SonicScout.SonicPass.dll",
+    "Length": 18432
+  },
+  {
+    "Path": "SonicScout.SonicPass.exe",
+    "Length": 152064
+  },
+  {
+    "Path": "SonicScout.SonicPass.pdb",
+    "Length": 16812
+  },
+  {
+    "Path": "SonicScout.SonicPass.runtimeconfig.json",
+    "Length": 516
+  },
+  {
+    "Path": "installers\\EqualizerAPO_Setup.exe",
+    "Length": 11980366
+  },
+  {
+    "Path": "installers\\HIFI_CABLE_Setup_x64.exe",
+    "Length": 4770080
+  },
+  {
+    "Path": "installers\\VBCABLE_Driver.zip",
+    "Length": 1318877
+  },
+  {
+    "Path": "installers\\VBCABLE_Setup_x64.exe",
+    "Length": 937728
+  },
+  {
+    "Path": "installers\\VBHIFI_Driver.zip",
+    "Length": 4006986
+  },
+  {
+    "Path": "installers\\VBCABLE\\pin_in.ico",
+    "Length": 7358
+  },
+  {
+    "Path": "installers\\VBCABLE\\pin_out.ico",
+    "Length": 7358
+  },
+  {
+    "Path": "installers\\VBCABLE\\readme.txt",
+    "Length": 3846
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbaudio_cable_2003.cat",
+    "Length": 8868
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbaudio_cable_2003.sys",
+    "Length": 34024
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbaudio_cable_vista.cat",
+    "Length": 8872
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbaudio_cable_vista.sys",
+    "Length": 34024
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbaudio_cable_win7.cat",
+    "Length": 8868
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbaudio_cable_win7.sys",
+    "Length": 34024
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbaudio_cable_xp.cat",
+    "Length": 8860
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbaudio_cable_xp.sys",
+    "Length": 34024
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbaudio_cable64_2003.cat",
+    "Length": 8876
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbaudio_cable64_2003.sys",
+    "Length": 41192
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbaudio_cable64_vista.cat",
+    "Length": 8880
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbaudio_cable64_vista.sys",
+    "Length": 41192
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbaudio_cable64_win10.cat",
+    "Length": 12862
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbaudio_cable64_win10.sys",
+    "Length": 140760
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbaudio_cable64_win7.cat",
+    "Length": 8876
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbaudio_cable64_win7.sys",
+    "Length": 41192
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbaudio_cable64arm_win10.sys",
+    "Length": 149976
+  },
+  {
+    "Path": "installers\\VBCABLE\\VBCABLE_ControlPanel.exe",
+    "Length": 930048
+  },
+  {
+    "Path": "installers\\VBCABLE\\VBCABLE_Setup.exe",
+    "Length": 914176
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbMmeCable_2003.inf",
+    "Length": 4586
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbMmeCable_vista.inf",
+    "Length": 4142
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbMmeCable_win7.inf",
+    "Length": 4138
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbMmeCable_xp.inf",
+    "Length": 4576
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbMmeCable64_2003.inf",
+    "Length": 4596
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbMmeCable64_vista.inf",
+    "Length": 4150
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbMmeCable64_win10.inf",
+    "Length": 11361
+  },
+  {
+    "Path": "installers\\VBCABLE\\vbMmeCable64_win7.inf",
+    "Length": 4146
+  },
+  {
+    "Path": "targets\\BF6_Target_V1.txt",
+    "Length": 18273
+  },
+  {
+    "Path": "targets\\BO6_Target_V6.txt",
+    "Length": 18456
+  },
+  {
+    "Path": "targets\\BO7_Target_V0.txt",
+    "Length": 18456
+  },
+  {
+    "Path": "targets\\BO7_Target_V3.txt",
+    "Length": 14496
+  },
+  {
+    "Path": "targets\\BO7_Target_V4.txt",
+    "Length": 139624
+  },
+  {
+    "Path": "targets\\BO7_Target_V5.txt",
+    "Length": 18456
+  },
+  {
+    "Path": "targets\\PS5-BO6_Target_V6.txt",
+    "Length": 18456
+  }
+]

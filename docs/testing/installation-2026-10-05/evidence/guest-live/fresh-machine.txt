@@ -1,0 +1,48 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261005220810
+Username: SONICSCOUT-QA\scouttester
+RunAs User: SONICSCOUT-QA\scouttester
+Configuration Name: 
+Machine: SONICSCOUT-QA (Microsoft Windows NT 10.0.26300.0)
+Host Application: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand UgBlAG4AYQBtAGUALQBJAHQAZQBtACAAQwA6AFwAUQBBAFwAcwBvAHUAcgBjAGUALQBjAG8AcAB5ACAAcwBvAHUAcgBjAGUAOwAgACYAIABDADoAXABRAEEAXABmAHIAZQBzAGgALQBtAGEAYwBoAGkAbgBlAC4AcABzADEA
+Process ID: 3444
+PSVersion: 5.1.26100.9444
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9444
+BuildVersion: 10.0.26100.9444
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Transcript started, output file is C:\QA\evidence\fresh-machine.txt
+
+
+
+
+Caption                                    Version    OSArchitecture
+-------                                    -------    --------------
+Microsoft Windows 11 Enterprise Evaluation 10.0.26300 64-bit
+Source installer exit: 1
+
+Fresh preflight exit: 2
+
+Source launcher exit: 1
+
+
+
+
+
+
+
+
+
+
+
+
+
+**********************
+Windows PowerShell transcript end
+End time: 20261005220931
+**********************

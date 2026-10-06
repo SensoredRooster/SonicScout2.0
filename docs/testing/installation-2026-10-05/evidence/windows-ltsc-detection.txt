@@ -1,0 +1,9 @@
+VBoxManage.exe: info: Detected 'C:\Users\brand\Downloads\Windows11-LTSC-Eval-x64-SonicScout.iso' to be:
+    OS TypeId    = Windows11_64
+    OS Version   = 10.0.26100.1742
+    OS Flavor    = EnterpriseSEval
+    OS Languages = en-US
+    OS Hints     = 
+    Image #1     = Windows 11 Enterprise LTSC Evaluation (10.0.26100.1742 / x64 / en-US)
+    Image #2     = Windows 11 Enterprise N LTSC Evaluation (10.0.26100.1742 / x64 / en-US)
+    Unattended installation supported = yes

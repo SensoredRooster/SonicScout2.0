@@ -1,0 +1,63 @@
+﻿{
+    "mode":  "Preflight",
+    "createdAt":  "2026-10-05T22:08:56.5326989-05:00",
+    "installersDirectory":  "C:\\QA\\source\\tools\\SonicScoutCSharp\\installers",
+    "machineName":  "SONICSCOUT-QA",
+    "userName":  "scouttester",
+    "stages":  [
+                   {
+                       "timestamp":  "2026-10-05T22:08:47.5687387-05:00",
+                       "name":  "Baseline scan",
+                       "state":  "READY",
+                       "detail":  "Detected endpoints: 3. Microphone (High Definition Audio Device) [OK]; Speakers (High Definition Audio Device) [OK]"
+                   },
+                   {
+                       "timestamp":  "2026-10-05T22:08:48.9384034-05:00",
+                       "name":  "VB-Cable Base",
+                       "state":  "READY",
+                       "detail":  "VB-Cable is required for Sonic Scout routing."
+                   },
+                   {
+                       "timestamp":  "2026-10-05T22:08:51.5003010-05:00",
+                       "name":  "Equalizer APO",
+                       "state":  "READY",
+                       "detail":  "Equalizer APO is required for Sonic Scout filter apply."
+                   },
+                   {
+                       "timestamp":  "2026-10-05T22:08:54.3123239-05:00",
+                       "name":  "VB-Cable Hi-Fi Route",
+                       "state":  "READY",
+                       "detail":  "Hi-Fi Cable endpoint is not detected. Tuned channel quality may be reduced without it."
+                   },
+                   {
+                       "timestamp":  "2026-10-05T22:08:55.2203621-05:00",
+                       "name":  "Voicemeeter Fallback",
+                       "state":  "UPDATE",
+                       "detail":  "Skipped Voicemeeter install. Tuned channel may remain unavailable on systems without virtual routes."
+                   },
+                   {
+                       "timestamp":  "2026-10-05T22:08:55.3765975-05:00",
+                       "name":  "ReaPlugs",
+                       "state":  "READY",
+                       "detail":  "ReaPlugs VST effects are required for Sonic Scout."
+                   },
+                   {
+                       "timestamp":  "2026-10-05T22:08:56.3547339-05:00",
+                       "name":  "Equalizer APO verification",
+                       "state":  "UPDATE",
+                       "detail":  "Equalizer APO was not verified by its config.txt and runtime files."
+                   },
+                   {
+                       "timestamp":  "2026-10-05T22:08:56.4123305-05:00",
+                       "name":  "Windows audio service",
+                       "state":  "READY",
+                       "detail":  "Windows Audio service is running."
+                   },
+                   {
+                       "timestamp":  "2026-10-05T22:08:56.4490436-05:00",
+                       "name":  "Final verification",
+                       "state":  "UPDATE",
+                       "detail":  "Setup did not detect a complete tuned-channel route. Install missing dependencies and rerun setup_audio_stack.ps1."
+                   }
+               ]
+}

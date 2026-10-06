@@ -1,0 +1,4 @@
+Summary: Installation was blocked.
+Step: STEP 3 OF 4  |  REVIEW ITEMS NEEDING ATTENTION
+Hint: Review the row detail, apply that fix, then run setup again.
+Done: CLOSE AND REVIEW

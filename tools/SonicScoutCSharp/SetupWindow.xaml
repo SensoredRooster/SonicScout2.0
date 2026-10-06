@@ -4,7 +4,7 @@
         Width="720" Height="700"
         WindowStartupLocation="CenterOwner"
         WindowStyle="None"
-        ResizeMode="NoResize"
+        ResizeMode="CanResizeWithGrip"
         AllowsTransparency="True"
         Background="Transparent">
     <Border Margin="2" Background="{DynamicResource PopupBrush}" BorderBrush="{DynamicResource PopupBorderBrush}" BorderThickness="1" CornerRadius="16" Padding="20">
@@ -35,11 +35,14 @@
                     Padding="12">
                 <StackPanel>
                     <TextBlock x:Name="StepText" Text="STEP 1 OF 4  |  CHOOSE YOUR OUTPUT" Foreground="{DynamicResource CyanBrush}" FontSize="11" FontWeight="Bold" Margin="0,0,0,8" />
+                    <Expander x:Name="InstallationChoices" Header="Installation choices" IsExpanded="True" Foreground="{DynamicResource PopupTextBrush}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="360">
+                    <StackPanel>
                     <TextBlock Text="INSTALLATION ROUTING"
                                Foreground="{DynamicResource PopupTextBrush}"
                                FontSize="12"
                                FontWeight="Bold" />
-                    <TextBlock Text="Choose your default physical output and compatibility profile before provisioning Sonic Scout."
+                    <TextBlock Text="Choose the headphones or speakers you listen through. The recommended direct route installs a virtual cable and audio effects; existing mixers can use compatibility mode."
                                Foreground="{DynamicResource PopupTextBrush}"
                                Opacity="0.9"
                                FontSize="11"
@@ -50,7 +53,7 @@
                             <ColumnDefinition Width="180" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Default Audio Output"
+                        <TextBlock Text="Headphones or speakers"
                                    Grid.Column="0"
                                    VerticalAlignment="Center"
                                    FontSize="11"
@@ -118,7 +121,7 @@
                                       Margin="0,0,0,5"
                                       Checked="ConsentCheckBox_Changed"
                                       Unchecked="ConsentCheckBox_Changed">
-                                <TextBlock TextWrapping="Wrap">I confirm this is my own system, and I authorise Sonic Scout to install audio drivers, change routing ownership, activate the Sonic Scout tuned channel with safe fallback to my physical output, and add VB-Cable / Voicemeeter if no compatible route is available."</TextBlock>
+                                <TextBlock TextWrapping="Wrap">I confirm this is my own system, and I authorise Sonic Scout to install audio drivers, configure the audio route, activate the Sonic Scout tuned channel with safe fallback to my physical output, and add VB-Cable / Voicemeeter if no compatible route is available."</TextBlock>
                             </CheckBox>
                         </StackPanel>
                     </Border>
@@ -137,6 +140,9 @@
                             Click="BeginSetupButton_Click">
                         <TextBlock Text="RUN INSTALL SETUP" TextWrapping="Wrap" TextAlignment="Center" />
                     </Button>
+                    </StackPanel>
+                    </ScrollViewer>
+                    </Expander>
                 </StackPanel>
             </Border>
 
@@ -189,3 +195,4 @@
         </Grid>
     </Border>
 </Window>
+

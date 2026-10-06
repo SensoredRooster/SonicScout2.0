@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal EnableDelayedExpansion
 
 set "SONIC_LOG_DIR=%LOCALAPPDATA%\SonicScout\logs"
 if not exist "%SONIC_LOG_DIR%" mkdir "%SONIC_LOG_DIR%" >nul 2>&1
@@ -20,14 +20,14 @@ if not exist "%PROJECT_DIR%SonicScout.CSharp.csproj" (
 set "SETUP_SCRIPT=%PROJECT_DIR%setup_audio_stack.ps1"
 if exist "%SETUP_SCRIPT%" (
   powershell -NoProfile -ExecutionPolicy Bypass -File "%SETUP_SCRIPT%" -Mode Preflight -Quiet >nul 2>>"%SONIC_LAUNCH_LOG%"
-  set "PRECHECK=%ERRORLEVEL%"
-  if "%PRECHECK%"=="2" (
+  set "PRECHECK=!ERRORLEVEL!"
+  if "!PRECHECK!"=="2" (
     echo Sonic Scout detected missing or incomplete audio dependencies.
     choice /C YN /N /M "Run guided audio stack setup now? [Y/N]: "
     if errorlevel 2 goto continue_launch
     call "%PROJECT_DIR%run_audio_stack_setup.bat"
-    set "SETUP_RESULT=%ERRORLEVEL%"
-    if not "%SETUP_RESULT%"=="0" (
+    set "SETUP_RESULT=!ERRORLEVEL!"
+    if not "!SETUP_RESULT!"=="0" (
       echo Guided setup reported pending issues.
       choice /C YN /N /M "Continue launching Sonic Scout anyway? [Y/N]: "
       if errorlevel 2 exit /b 1
@@ -37,7 +37,7 @@ if exist "%SETUP_SCRIPT%" (
 
 :continue_launch
 set "PROJECT=%PROJECT_DIR%SonicScout.CSharp.csproj"
-set "APP_DIR=%PROJECT_DIR%bin\Release\net8.0-windows\"
+set "APP_DIR=%PROJECT_DIR%bin\Release\net8.0-windows\win-x64\"
 set "APP=%APP_DIR%SonicScout.exe"
 if not exist "%APP%" goto build
 for %%F in ("%PROJECT_DIR%*.xaml" "%PROJECT_DIR%*.cs" "%PROJECT_DIR%*.csproj") do if "%%~tF" GTR "%APP%" goto build
@@ -49,7 +49,7 @@ dotnet build "%PROJECT%" --configuration Release --no-restore --verbosity minima
 if errorlevel 1 goto fail
 :sync
 set "SCOUTPASS_PROJECT=%PROJECT_DIR%ScoutPass\SonicScout.ScoutPass.csproj"
-set "SCOUTPASS_APP=%PROJECT_DIR%ScoutPass\bin\Release\net8.0-windows\SonicScout.SonicPass.exe"
+set "SCOUTPASS_APP=%PROJECT_DIR%ScoutPass\bin\Release\net8.0-windows\win-x64\SonicScout.SonicPass.exe"
 if not exist "%SCOUTPASS_APP%" goto build_scoutpass
 for %%F in ("%PROJECT_DIR%ScoutPass\*.cs" "%PROJECT_DIR%ScoutPass\*.csproj") do if "%%~tF" GTR "%SCOUTPASS_APP%" goto build_scoutpass
 goto finish_sync
@@ -74,3 +74,5 @@ exit /b 0
 echo Sonic Scout could not be built. Install the .NET 8 SDK and try again.
 pause
 exit /b 1
+
+

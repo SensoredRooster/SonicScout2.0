@@ -1,0 +1,4 @@
+Summary: Installation was blocked.
+Step: STEP 3 OF 4  |  AUDIO STACK READY - VERIFY WINDOWS SETTINGS
+Hint: Review the row detail, apply that fix, then run setup again.
+Done: DONE

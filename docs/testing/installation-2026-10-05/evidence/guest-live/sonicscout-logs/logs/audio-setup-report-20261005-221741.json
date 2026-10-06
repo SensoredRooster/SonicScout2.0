@@ -1,0 +1,105 @@
+﻿{
+    "mode":  "Install",
+    "createdAt":  "2026-10-05T22:17:41.3963246-05:00",
+    "installersDirectory":  "C:\\QA\\published\\installers",
+    "machineName":  "SONICSCOUT-QA",
+    "userName":  "scouttester",
+    "stages":  [
+                   {
+                       "timestamp":  "2026-10-05T22:14:39.9211276-05:00",
+                       "name":  "Ownership confirmation",
+                       "state":  "READY",
+                       "detail":  "Ownership/apply authorization accepted."
+                   },
+                   {
+                       "timestamp":  "2026-10-05T22:14:43.3009314-05:00",
+                       "name":  "Baseline scan",
+                       "state":  "READY",
+                       "detail":  "Detected endpoints: 3. Microphone (High Definition Audio Device) [OK]; Speakers (High Definition Audio Device) [OK]"
+                   },
+                   {
+                       "timestamp":  "2026-10-05T22:14:44.0342570-05:00",
+                       "name":  "VB-Cable Base",
+                       "state":  "RUNNING",
+                       "detail":  "Launching installer: VBCABLE_Setup_x64.exe"
+                   },
+                   {
+                       "timestamp":  "2026-10-05T22:14:44.0854730-05:00",
+                       "name":  "VB-Cable Base",
+                       "state":  "RUNNING",
+                       "detail":  "VB-Audio driver pack needs one confirmation from you.\n  1. A \u0027VBCABLE driver setup\u0027 window will appear. Read the notice.\n  2. Click \u0027Install Driver\u0027.\n  3. If Windows asks to allow changes, choose Yes.\n  4. Wait for \u0027Installation complete\u0027, then close the window.\nNothing else is required - this is the only manual click in the whole install."
+                   },
+                   {
+                       "timestamp":  "2026-10-05T22:14:54.1060636-05:00",
+                       "name":  "VB-Cable Base",
+                       "state":  "ERROR",
+                       "detail":  "Installer exited with code -1."
+                   },
+                   {
+                       "timestamp":  "2026-10-05T22:14:55.6923725-05:00",
+                       "name":  "Equalizer APO",
+                       "state":  "RUNNING",
+                       "detail":  "Launching installer: EqualizerAPO_Setup.exe"
+                   },
+                   {
+                       "timestamp":  "2026-10-05T22:14:55.7615193-05:00",
+                       "name":  "Equalizer APO",
+                       "state":  "RUNNING",
+                       "detail":  "Launching installer: EqualizerAPO_Setup.exe /S"
+                   },
+                   {
+                       "timestamp":  "2026-10-05T22:16:37.8540675-05:00",
+                       "name":  "Equalizer APO",
+                       "state":  "FIXED",
+                       "detail":  "Equalizer APO detected after install."
+                   },
+                   {
+                       "timestamp":  "2026-10-05T22:16:41.0729306-05:00",
+                       "name":  "VB-Cable Hi-Fi Route",
+                       "state":  "RUNNING",
+                       "detail":  "Launching installer: HIFI_CABLE_Setup_x64.exe"
+                   },
+                   {
+                       "timestamp":  "2026-10-05T22:17:20.3381188-05:00",
+                       "name":  "VB-Cable Hi-Fi Route",
+                       "state":  "UPDATE",
+                       "detail":  "VB-Cable Hi-Fi Route installer completed, but dependency is still not detected."
+                   },
+                   {
+                       "timestamp":  "2026-10-05T22:17:22.6723109-05:00",
+                       "name":  "Voicemeeter Fallback",
+                       "state":  "UPDATE",
+                       "detail":  "Voicemeeter fallback not detected. Place the installer in C:\\QA\\published\\installers."
+                   },
+                   {
+                       "timestamp":  "2026-10-05T22:17:22.8559096-05:00",
+                       "name":  "Dependency download",
+                       "state":  "RUNNING",
+                       "detail":  "Downloading required /reaplugs installer."
+                   },
+                   {
+                       "timestamp":  "2026-10-05T22:17:40.8443631-05:00",
+                       "name":  "ReaPlugs",
+                       "state":  "UPDATE",
+                       "detail":  "ReaPlugs VST effects are required for Sonic Scout. Place the installer in C:\\QA\\published\\installers."
+                   },
+                   {
+                       "timestamp":  "2026-10-05T22:17:41.3107885-05:00",
+                       "name":  "Equalizer APO verification",
+                       "state":  "READY",
+                       "detail":  "Equalizer APO config.txt and runtime files are present."
+                   },
+                   {
+                       "timestamp":  "2026-10-05T22:17:41.3352863-05:00",
+                       "name":  "Windows audio service",
+                       "state":  "READY",
+                       "detail":  "Windows Audio service is running."
+                   },
+                   {
+                       "timestamp":  "2026-10-05T22:17:41.3622479-05:00",
+                       "name":  "Final verification",
+                       "state":  "UPDATE",
+                       "detail":  "Setup did not detect a complete tuned-channel route. Install missing dependencies and rerun setup_audio_stack.ps1."
+                   }
+               ]
+}

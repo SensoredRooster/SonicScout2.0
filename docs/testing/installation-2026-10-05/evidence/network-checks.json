@@ -1,0 +1,27 @@
+[
+  {
+    "Url": "https://raw.githubusercontent.com/sensoredrooster/SonicScout2.0/main/powershell/Install-SonicScout2.0.ps1",
+    "Status": 200,
+    "Bytes": 369435
+  },
+  {
+    "Url": "https://api.github.com/repos/sensoredrooster/SonicScout2.0/releases/latest",
+    "Status": 404,
+    "Error": "Response status code does not indicate success: 404 (Not Found)."
+  },
+  {
+    "Url": "https://raw.githubusercontent.com/sensoredrooster/SonicScout2.0/main/hrir/EAC_Refined.wav",
+    "Status": 404,
+    "Error": "Response status code does not indicate success: 404 (Not Found)."
+  },
+  {
+    "Url": "https://raw.githubusercontent.com/sensoredrooster/SonicScout2.0/main/hrir/44/EAC_Refined.wav",
+    "Status": 404,
+    "Error": "Response status code does not indicate success: 404 (Not Found)."
+  },
+  {
+    "Url": "https://api.github.com/repos/sensoredrooster/LEQControlPanel/releases/latest",
+    "Status": 404,
+    "Error": "Response status code does not indicate success: 404 (Not Found)."
+  }
+]

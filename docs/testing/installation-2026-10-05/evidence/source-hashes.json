@@ -1,0 +1,17 @@
+[
+  {
+    "Algorithm": "SHA256",
+    "Hash": "56232466FE80AB0E2F5B1AEA12F2C91B7D9B8C9D9B629AE3910E4C2A96217CDE",
+    "Path": "C:\\Users\\brand\\OneDrive\\Documents\\SonicScout2.0\\SonicScout-main\\tools\\SonicScoutCSharp\\Install-SonicScout.bat"
+  },
+  {
+    "Algorithm": "SHA256",
+    "Hash": "E73365CB7D5EE2B43E3CA3BBF1CDB456D073D6B03DB2DF8097D431ACE3A578E0",
+    "Path": "C:\\Users\\brand\\OneDrive\\Documents\\SonicScout2.0\\SonicScout-main\\tools\\SonicScoutCSharp\\setup_audio_stack.ps1"
+  },
+  {
+    "Algorithm": "SHA256",
+    "Hash": "EE7F06F8FA4B5F47CB64480F0F3A219AE532FDAEB9D7E736A14448D0A717D992",
+    "Path": "C:\\Users\\brand\\OneDrive\\Documents\\SonicScout2.0\\SonicScout-main\\powershell\\Install-SonicScout2.0.ps1"
+  }
+]

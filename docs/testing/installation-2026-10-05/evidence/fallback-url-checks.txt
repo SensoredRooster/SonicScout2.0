@@ -1,0 +1,2 @@
+2026-10-05: HTTP 404 https://github.com/sensoredrooster/SonicScout2.0/releases/latest/download/SonicScout2.0-2026.07.1-Overhaul.zip
+2026-10-05: HTTP 404 https://github.com/sensoredrooster/LEQControlPanel/releases/latest/download/LEQControlPanel.exe

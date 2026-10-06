@@ -1,0 +1,8 @@
+  [FAIL] Blocked installation must not say AUDIO STACK READY -- STEP 3 OF 4  |  AUDIO STACK READY - VERIFY WINDOWS SETTINGS
+  [FAIL] Blocked installation must not show DONE -- DONE
+  rendered blocked-install.png
+
+================ SUMMARY ================
+PASS 0   FAIL 2   TOTAL 2
+  FAILED: Blocked installation must not say AUDIO STACK READY -- STEP 3 OF 4  |  AUDIO STACK READY - VERIFY WINDOWS SETTINGS
+  FAILED: Blocked installation must not show DONE -- DONE

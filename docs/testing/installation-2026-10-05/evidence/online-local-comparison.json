@@ -1,0 +1,6 @@
+{
+  "LocalSHA256": "EE7F06F8FA4B5F47CB64480F0F3A219AE532FDAEB9D7E736A14448D0A717D992",
+  "RemoteSHA256": "CEC484C8BD23CABA38E2D32BEAAF8E90FE6C4ACE9E823A469CB8325B3E553711",
+  "Same": false,
+  "Note": "Both retrieved on 2026-10-05. Hash difference alone is not proof of behavioral differences; line endings may differ."
+}
