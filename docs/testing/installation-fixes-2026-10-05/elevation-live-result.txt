@@ -1,0 +1,1 @@
+Parent exit: 23. Expected 23 while Notepad remains open.

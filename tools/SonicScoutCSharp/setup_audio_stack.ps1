@@ -165,7 +165,10 @@ function Request-ElevationIfNeeded {
     if ($OwnershipAccepted) { $arguments += ' -OwnershipAccepted' }
     try {
         $windowStyle = if ($Quiet) { 'Hidden' } else { 'Normal' }
-        $child = Start-Process powershell.exe -ArgumentList $arguments -Verb RunAs -WindowStyle $windowStyle -Wait -PassThru
+        # Wait for the elevated installer, not vendor GUI/browser descendants
+        # that may remain open after installation and verification are complete.
+        $child = Start-Process powershell.exe -ArgumentList $arguments -Verb RunAs -WindowStyle $windowStyle -PassThru
+        $child.WaitForExit()
         exit $child.ExitCode
     } catch {
         Write-Stage -Name 'Administrator access' -State 'BLOCKED' -Detail "Administrator access was cancelled or unavailable. Retry and accept the Windows prompt. $($_.Exception.Message)"

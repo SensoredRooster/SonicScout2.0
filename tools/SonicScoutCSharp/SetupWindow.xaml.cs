@@ -492,9 +492,11 @@ OwnershipConsentCheckBox.IsChecked == true,
             SummaryText.Text = BuildCompletionSummary(results);
             ActionHintText.Text = problems == 0
                 ? "Great. Click VERIFY SETTINGS, then DONE."
-                : "Review the yellow/red rows. Apply the recommended fixes, then rerun setup.";
+                : results.Any(result => result.Name == "Restart Windows" && result.State == "UPDATE")
+                ? "Restart Windows, then run Install-SonicScout.bat again to finish installation verification."
+                : "Review the yellow/red rows, then expand Installation choices to retry. If you declined Windows permission, retry and choose Yes.";
             DoneButton.Content = problems == 0 ? "DONE" : "CLOSE AND REVIEW";
-            VerifySettingsButton.IsEnabled = true;
+            VerifySettingsButton.IsEnabled = problems == 0;
             StepText.Text = problems == 0
                 ? "STEP 3 OF 4  |  AUDIO STACK READY - VERIFY WINDOWS SETTINGS"
                 : "STEP 3 OF 4  |  REVIEW ITEMS NEEDING ATTENTION";
@@ -504,7 +506,10 @@ OwnershipConsentCheckBox.IsChecked == true,
             // user guessing -- and these are the only actions left that no code path
             // can perform. Each line names WHERE to click and WHAT to check, not just
             // what needs doing.
-            AppendRemainingManualSteps(problems == 0);
+            if (problems == 0)
+            {
+                AppendRemainingManualSteps(true);
+            }
         }
         catch (InvalidOperationException exception)
         {
@@ -554,7 +559,7 @@ OwnershipConsentCheckBox.IsChecked == true,
         rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
         rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         Ellipse indicator = new() { Width = 9, Height = 9, Fill = ResolveBrush(GetStateBrush(result.State), System.Windows.Media.Colors.Gray), VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 5, 0, 0) };
-        TextBlock heading = new() { Text = $"{result.State}  {result.Name}", Foreground = ResolveBrush(GetStateBrush(result.State), System.Windows.Media.Colors.LightGray), FontSize = 12, FontWeight = FontWeights.Bold };
+        TextBlock heading = new() { Text = $"{result.State}  {result.Name}", Foreground = ResolveBrush(GetStateBrush(result.State), System.Windows.Media.Colors.LightGray), FontSize = 12, FontWeight = FontWeights.Bold, TextWrapping = TextWrapping.Wrap };
         TextBlock detail = new() { Text = result.Detail, Foreground = ResolveBrush("PopupTextBrush", System.Windows.Media.Color.FromRgb(0xE0, 0xE0, 0xE0)), Opacity = 0.82, FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 0) };
         StackPanel text = new();
         text.Children.Add(heading);
@@ -572,7 +577,7 @@ OwnershipConsentCheckBox.IsChecked == true,
         "READY" or "FIXED" => "SetupReadyBrush",
         "RUNNING" => "SetupRunningBrush",
         "UPDATE" => "SetupUpdateBrush",
-        "ERROR" => "SetupErrorBrush",
+        "ERROR" or "BLOCKED" => "SetupErrorBrush",
         _ => "PopupTextBrush"
     };
 

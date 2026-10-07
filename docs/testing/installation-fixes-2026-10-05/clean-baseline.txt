@@ -1,0 +1,12 @@
+Baseline verified: 2026-10-06T23:09:48.3240565-05:00
+C:\Program Files\EqualizerAPO : False
+C:\Program Files\VSTPlugins\ReaPlugs : False
+C:\Program Files\VSTPlugins\SonicScout2.0 : False
+C:\Program Files\dotnet\shared\Microsoft.NETCore.App : False
+C:\Program Files\dotnet\shared\Microsoft.WindowsDesktop.App : False
+C:\Users\scouttester\AppData\Local\SonicScout : False
+C:\Users\scouttester\AppData\Local\Programs\LEQControlPanel : False
+Endpoint Speakers : State 1
+Endpoint Headphones : State 4
+C:\QA\clean-published\setup_audio_stack.ps1: D34BC57E8460C4E8C6A67546B00340297ECD8C8C145D072FC6E78E43489F58D1
+C:\QA\clean-published\SonicScout.dll: 0231CF6ED4818ED3141F6DF896E303D40CAC85BE14A74686BDB8C492030E5D5B

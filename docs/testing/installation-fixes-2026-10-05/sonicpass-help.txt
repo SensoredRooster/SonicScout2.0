@@ -1,0 +1,8 @@
+Sonic Scout SonicPass
+  --input-id <id>       Virtual render endpoint ID
+  --input-name <name>   Virtual render endpoint name fragment
+  --output-id <id>      Physical render endpoint ID
+  --output-name <name>  Physical render endpoint name fragment
+  --buffer-ms <20..500> Shared-mode buffer target
+  --input-gain-db <-12..12> Input boost/cut
+  --output-gain-db <-12..12> Output boost/cut

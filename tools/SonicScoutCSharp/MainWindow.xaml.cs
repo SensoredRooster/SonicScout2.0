@@ -1946,6 +1946,37 @@ public partial class MainWindow : Window
         }
     }
 
+    private static IReadOnlyList<SetupCheckResult> ReadInstallationIssues(DateTimeOffset startedAt)
+    {
+        try
+        {
+            string logs = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SonicScout", "logs");
+            if (!Directory.Exists(logs)) { return Array.Empty<SetupCheckResult>(); }
+            FileInfo? report = new DirectoryInfo(logs).GetFiles("audio-setup-report-*.json")
+                .Where(file => file.LastWriteTimeUtc >= startedAt.UtcDateTime.AddSeconds(-2))
+                .OrderByDescending(file => file.LastWriteTimeUtc).FirstOrDefault();
+            if (report is null) { return Array.Empty<SetupCheckResult>(); }
+            using System.Text.Json.JsonDocument document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(report.FullName));
+            if (!document.RootElement.TryGetProperty("stages", out var stages) || stages.ValueKind != System.Text.Json.JsonValueKind.Array)
+            {
+                return Array.Empty<SetupCheckResult>();
+            }
+            List<SetupCheckResult> issues = new();
+            foreach (var stage in stages.EnumerateArray())
+            {
+                if (!stage.TryGetProperty("state", out var state) || state.ValueKind != System.Text.Json.JsonValueKind.String) { continue; }
+                if (state.GetString() is not ("UPDATE" or "ERROR" or "BLOCKED")) { continue; }
+                if (!stage.TryGetProperty("name", out var name) || name.ValueKind != System.Text.Json.JsonValueKind.String ||
+                    !stage.TryGetProperty("detail", out var detail) || detail.ValueKind != System.Text.Json.JsonValueKind.String) { continue; }
+                issues.Add(new SetupCheckResult(name.GetString()!, state.GetString()!, detail.GetString()!));
+            }
+            return issues;
+        }
+        catch (IOException) { return Array.Empty<SetupCheckResult>(); }
+        catch (UnauthorizedAccessException) { return Array.Empty<SetupCheckResult>(); }
+        catch (System.Text.Json.JsonException) { return Array.Empty<SetupCheckResult>(); }
+    }
+
     private async Task<IReadOnlyList<SetupCheckResult>> RunSetupChecks(
         IProgress<SetupCheckResult> progress,
         SetupInstallRequest request)
@@ -1981,6 +2012,10 @@ public partial class MainWindow : Window
             {
                 string failure = setupAutomationResult.ErrorMessage ?? "Setup automation script failed.";
                 Report("Script bridge", "UPDATE", $"Installation needs attention. {failure} Review the installation report in %LOCALAPPDATA%\\SonicScout\\logs. If a restart was requested, restart Windows and retry installation.");
+                foreach (SetupCheckResult issue in ReadInstallationIssues(setupAutomationResult.StartedAtUtc))
+                {
+                    Report(issue.Name, issue.State, issue.Detail);
+                }
                 return results;
             }
 

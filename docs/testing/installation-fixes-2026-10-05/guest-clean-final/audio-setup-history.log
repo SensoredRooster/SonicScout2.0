@@ -1,0 +1,63 @@
+
+===== Sonic Scout audio setup run 10/6/2026 11:10:57 PM (Install) =====
+[BLOCKED] Administrator access - Administrator access was cancelled or unavailable. Retry and accept the Windows prompt. This command cannot be run due to the error: The operation was canceled by the user.
+
+===== Sonic Scout audio setup run 10/6/2026 11:13:32 PM (Install) =====
+[BLOCKED] Administrator access - Administrator access was cancelled or unavailable. Retry and accept the Windows prompt. This command cannot be run due to the error: The operation was canceled by the user.
+
+===== Sonic Scout audio setup run 10/6/2026 11:19:32 PM (Install) =====
+[READY] Ownership confirmation - Installation changes authorized.
+[READY] Baseline scan - Detected endpoints: 3. Microphone (High Definition Audio Device) [OK]; Speakers (High Definition Audio Device) [OK]
+[RUNNING] VB-Cable Base - Launching installer: VBCABLE_Setup_x64.exe
+[RUNNING] VB-Cable Base - VB-Audio driver pack needs one confirmation from you.
+  1. A 'VBCABLE driver setup' window will appear. Read the notice.
+  2. Click 'Install Driver'.
+  3. If Windows asks to allow changes, choose Yes.
+  4. Wait for 'Installation complete', then close the window.
+Other components may open their own dialogs. Complete each prompt and restart Windows after driver installation.
+[FIXED] VB-Cable Base - VB-Cable Base detected after install.
+[RUNNING] Equalizer APO - Launching installer: EqualizerAPO_Setup.exe
+[RUNNING] Equalizer APO - If Device Selector opens, select SonicScout2.0 / CABLE Input playback. Leave unrelated microphones and speakers unchecked. Complete the dialogs, then restart Windows.
+[RUNNING] Equalizer APO - Launching installer: EqualizerAPO_Setup.exe /S
+[FIXED] Equalizer APO - Equalizer APO detected after install.
+[RUNNING] Dependency download - Downloading required /reaplugs installer.
+[RUNNING] ReaPlugs - Launching installer: reaplugs_x64.exe
+[RUNNING] ReaPlugs - ReaPlugs may display an installation-complete message. Click OK to continue.
+[RUNNING] ReaPlugs - Launching installer: reaplugs_x64.exe /S
+[FIXED] ReaPlugs - ReaPlugs detected after install.
+[RUNNING] Dependency download - Downloading required /hesuvi installer.
+[RUNNING] HeSuVi - Launching installer: HeSuVi.exe
+[RUNNING] HeSuVi - Choose Yes to unpack HeSuVi into the Equalizer APO config folder. Let extraction finish, then close HeSuVi and any browser it opens.
+[FIXED] HeSuVi - HeSuVi detected after install.
+[READY] Equalizer APO verification - Equalizer APO config.txt and runtime files are present.
+[READY] Windows audio service - Windows Audio service is running.
+[READY] APO Configuration - Bundled library, plugins, HRIR and managed configuration verified.
+[READY] Equalizer APO device selection - Equalizer APO registration on the virtual playback endpoint was verified.
+[UPDATE] Restart Windows - Drivers were installed. Restart Windows, then run Install-SonicScout.bat again to verify and finish.
+[UPDATE] Final verification - Installation changes are complete. Restart Windows and rerun Install-SonicScout.bat to finish verification.
+
+===== Sonic Scout audio setup run 10/6/2026 11:24:53 PM (Install) =====
+[BLOCKED] Administrator access - Administrator access was cancelled or unavailable. Retry and accept the Windows prompt. This command cannot be run due to the error: The operation was canceled by the user.
+
+===== Sonic Scout audio setup run 10/6/2026 11:25:44 PM (Install) =====
+[READY] Ownership confirmation - Installation changes authorized.
+[READY] Baseline scan - Detected endpoints: 7. CABLE In 16 Ch (VB-Audio Virtual Cable) [OK]; Microphone (High Definition Audio Device) [OK]; Speakers (High Definition Audio Device) [OK]; CABLE Output (VB-Audio Virtual Cable) [OK]; Speakers (VB-Audio Virtual Cable) [OK]
+[READY] Equalizer APO - Equalizer APO already detected.
+[READY] HeSuVi - HeSuVi already detected.
+[READY] Equalizer APO verification - Equalizer APO config.txt and runtime files are present.
+[READY] Windows audio service - Windows Audio service is running.
+[READY] APO Configuration - Bundled library, plugins, HRIR and managed configuration verified.
+[READY] Equalizer APO device selection - Equalizer APO registration on the virtual playback endpoint was verified.
+[UPDATE] Restart Windows - Drivers were installed. Restart Windows, then run Install-SonicScout.bat again to verify and finish.
+[UPDATE] Final verification - Installation changes are complete. Restart Windows and rerun Install-SonicScout.bat to finish verification.
+
+===== Sonic Scout audio setup run 10/6/2026 11:32:13 PM (Install) =====
+[READY] Ownership confirmation - Installation changes authorized.
+[READY] Baseline scan - Detected endpoints: 7. SonicScout2.0 + (VB-Audio Virtual Cable) [OK]; Microphone (High Definition Audio Device) [OK]; Speakers (High Definition Audio Device) [OK]; SonicScout2.0 Unified Output (VB-Audio Virtual Cable) [OK]; SonicScout2.0 (VB-Audio Virtual Cable) [OK]
+[READY] Equalizer APO - Equalizer APO already detected.
+[READY] HeSuVi - HeSuVi already detected.
+[READY] Equalizer APO verification - Equalizer APO config.txt and runtime files are present.
+[READY] Windows audio service - Windows Audio service is running.
+[READY] APO Configuration - Bundled library, plugins, HRIR and managed configuration verified.
+[READY] Equalizer APO device selection - Equalizer APO registration on the virtual playback endpoint was verified.
+[READY] Final verification - Installation verified. SonicScout can now start.

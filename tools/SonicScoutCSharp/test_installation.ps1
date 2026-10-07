@@ -108,15 +108,18 @@ $WaveLinkRouting='Yes'; $VoicemeeterFallback='No'
 $script:ScriptPath='C:\Test folder\setup_audio_stack.ps1'
 function Test-Administrator { $false }
 function Start-Process { param($FilePath,$ArgumentList,$Verb,$WindowStyle,[switch]$Wait,[switch]$PassThru)
+    if ($Wait) { throw 'Elevation must not wait for vendor GUI descendants.' }
     Set-Content '__ARGUMENT_LOG__' ($ArgumentList+"`r`nWindowStyle=$WindowStyle")
-    [pscustomobject]@{ ExitCode=23 }
+    $process = [pscustomobject]@{ ExitCode=23 }
+    $process | Add-Member -MemberType ScriptMethod -Name WaitForExit -Value { Add-Content '__ARGUMENT_LOG__' 'WaitForExit=called' }
+    $process
 }
 '@
     Set-Content $elevationTest ($mock.Replace('__ARGUMENT_LOG__',$argumentLog)+"`r`n"+$elevation+"`r`nRequest-ElevationIfNeeded")
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $elevationTest
     if ($LASTEXITCODE -ne 23) { throw 'Elevation lost child exit code.' }
     $arguments=Get-Content $argumentLog -Raw
-    foreach ($expected in @('-File "C:\Test folder\setup_audio_stack.ps1"','-Quiet','-NonInteractive','-OwnershipAccepted','-WaveLinkRouting Yes','-VoicemeeterFallback No','WindowStyle=Hidden')) {
+    foreach ($expected in @('-File "C:\Test folder\setup_audio_stack.ps1"','-Quiet','-NonInteractive','-OwnershipAccepted','-WaveLinkRouting Yes','-VoicemeeterFallback No','WindowStyle=Hidden','WaitForExit=called')) {
         if (-not $arguments.Contains($expected)) { throw "Elevation lost $expected" }
     }
     Write-Host 'PASS: elevation preserves script path, choices, consent and child exit status.'

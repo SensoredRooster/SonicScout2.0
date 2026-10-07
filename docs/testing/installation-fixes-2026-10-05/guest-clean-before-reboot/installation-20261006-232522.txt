@@ -1,0 +1,38 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261006232522
+Username: SONICSCOUT-QA\scouttester
+RunAs User: SONICSCOUT-QA\scouttester
+Configuration Name: 
+Machine: SONICSCOUT-QA (Microsoft Windows NT 10.0.26300.0)
+Host Application: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\QA\clean-published\setup_audio_stack.ps1 -Mode Install -WaveLinkRouting No -VoicemeeterFallback No -Quiet -NonInteractive -OwnershipAccepted
+Process ID: 5876
+PSVersion: 5.1.26100.9444
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9444
+BuildVersion: 10.0.26100.9444
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+                        JSFX plugins already installed.
+                        SonicScout2.0 VST already installed.
+                        SonicScout2.0 HRIR already installed.
+                        Installing LEQ Control Panel...
+                        LEQ Control Panel installed.
+Detecting VB-CABLE endpoints...
+  Render 8ch  : {e5699cdd-556c-411c-a474-a946e6941ea7}
+  Render 16ch : {b84ab539-f224-4277-96e1-244cc33c3a99}
+  Capture     : {330271fc-3e0a-4638-8ec9-d2324a683ec4}
+Applying endpoint names and icons...
+
+                        Restarting audio services...
+                        | Waiting for Audiosrv [====>               ]
+                        ✓ Waiting for Audiosrv [====================]
+                        Audio services restarted.
+  Endpoints configured and verified (names + 7.1); no icons applied.
+**********************
+Windows PowerShell transcript end
+End time: 20261006232544
+**********************

@@ -1,0 +1,31 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261006174103
+Username: SONICSCOUT-QA\scouttester
+RunAs User: SONICSCOUT-QA\scouttester
+Configuration Name: 
+Machine: SONICSCOUT-QA (Microsoft Windows NT 10.0.26300.0)
+Host Application: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\QA\dependency-reset.ps1
+Process ID: 8032
+PSVersion: 5.1.26100.9444
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9444
+BuildVersion: 10.0.26100.9444
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Equalizer APO uninstall exit: 0
+VB-Cable uninstall exit: 0
+Desktop runtime uninstall exit: 0
+Preserved C:\Program Files\EqualizerAPO in C:\QA\previous-install-20261006-174103
+Preserved C:\Program Files\VSTPlugins\ReaPlugs in C:\QA\previous-install-20261006-174103
+Preserved C:\Program Files\VSTPlugins\SonicScout2.0 in C:\QA\previous-install-20261006-174103
+Preserved C:\Users\scouttester\AppData\Local\SonicScout in C:\QA\previous-install-20261006-174103
+Preserved C:\Users\scouttester\AppData\Local\Programs\LEQControlPanel in C:\QA\previous-install-20261006-174103
+Reset files preserved at C:\QA\previous-install-20261006-174103. Restart before the clean installation test.
+**********************
+Windows PowerShell transcript end
+End time: 20261006174301
+**********************

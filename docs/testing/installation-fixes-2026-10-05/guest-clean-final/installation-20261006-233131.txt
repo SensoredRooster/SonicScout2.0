@@ -1,0 +1,48 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261006233131
+Username: SONICSCOUT-QA\scouttester
+RunAs User: SONICSCOUT-QA\scouttester
+Configuration Name: 
+Machine: SONICSCOUT-QA (Microsoft Windows NT 10.0.26300.0)
+Host Application: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\QA\clean-published\setup_audio_stack.ps1 -Mode Install -WaveLinkRouting Auto -VoicemeeterFallback Auto
+Process ID: 2676
+PSVersion: 5.1.26100.9444
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9444
+BuildVersion: 10.0.26100.9444
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+[READY] Ownership confirmation - Installation changes authorized.
+[READY] Baseline scan - Detected endpoints: 7. SonicScout2.0 + (VB-Audio Virtual Cable) [OK]; Microphone (High Definition Audio Device) [OK]; Speakers (High Definition Audio Device) [OK]; SonicScout2.0 Unified Output (VB-Audio Virtual Cable) [OK]; SonicScout2.0 (VB-Audio Virtual Cable) [OK]
+[READY] Equalizer APO - Equalizer APO already detected.
+[READY] HeSuVi - HeSuVi already detected.
+[READY] Equalizer APO verification - Equalizer APO config.txt and runtime files are present.
+[READY] Windows audio service - Windows Audio service is running.
+                        JSFX plugins already installed.
+                        SonicScout2.0 VST already installed.
+                        SonicScout2.0 HRIR already installed.
+                        Installing LEQ Control Panel...
+                        LEQ Control Panel installed.
+Detecting VB-CABLE endpoints...
+  Render 8ch  : {e5699cdd-556c-411c-a474-a946e6941ea7}
+  Render 16ch : {b84ab539-f224-4277-96e1-244cc33c3a99}
+  Capture     : {330271fc-3e0a-4638-8ec9-d2324a683ec4}
+Applying endpoint names and icons...
+
+                        Restarting audio services...
+                        | Waiting for Audiosrv [====>               ]
+                        ✓ Waiting for Audiosrv [====================]
+                        Audio services restarted.
+  Endpoints configured and verified (names + 7.1); no icons applied.
+[READY] APO Configuration - Bundled library, plugins, HRIR and managed configuration verified.
+[READY] Equalizer APO device selection - Equalizer APO registration on the virtual playback endpoint was verified.
+[READY] Final verification - Installation verified. SonicScout can now start.
+Saved setup report: C:\Users\scouttester\AppData\Local\SonicScout\logs\audio-setup-report-20261006-233213.json
+**********************
+Windows PowerShell transcript end
+End time: 20261006233213
+**********************

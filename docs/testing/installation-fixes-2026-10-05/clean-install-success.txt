@@ -1,0 +1,6 @@
+Install-SonicScout.bat exit: 0
+System .NET Core runtime installed: False
+System Windows Desktop runtime installed: False
+Restart marker present: False
+Private runtime: C:\QA\clean-published\hostfxr.dll
+Private runtime: C:\QA\clean-published\coreclr.dll

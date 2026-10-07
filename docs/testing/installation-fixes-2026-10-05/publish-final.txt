@@ -1,0 +1,11 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  SonicScout.ScoutPass -> C:\Users\brand\OneDrive\Documents\SonicScout2.0\SonicScout-main\tools\SonicScoutCSharp\ScoutPass\bin\Release\net8.0-windows\win-x64\SonicScout.SonicPass.dll
+  SonicScout.CSharp -> C:\Users\brand\OneDrive\Documents\SonicScout2.0\SonicScout-main\tools\SonicScoutCSharp\bin\Release\net8.0-windows\win-x64\SonicScout.dll
+  SonicScout.CSharp -> C:\Users\brand\Documents\SonicScout-QA-2026-10-05\SonicScout-publish-a65764a4a8a24ad48efa9d84d73ee767\
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  LEQControlPanel -> C:\Users\brand\OneDrive\Documents\SonicScout2.0\SonicScout-main\tools\LEQControlPanel\src\LEQControlPanel\bin\Release\net8.0-windows\win-x64\LEQControlPanel.dll
+  LEQControlPanel -> C:\Users\brand\Documents\SonicScout-QA-2026-10-05\SonicScout-publish-a65764a4a8a24ad48efa9d84d73ee767\companion\
+Published to C:\Users\brand\Documents\SonicScout-QA-2026-10-05\clean-published. Run Install-SonicScout.bat there.
+Previous build preserved at C:\Users\brand\Documents\SonicScout-QA-2026-10-05\clean-published.previous-20261006-232229

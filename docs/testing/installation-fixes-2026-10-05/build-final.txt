@@ -1,0 +1,8 @@
+  SonicScout.ScoutPass -> C:\Users\brand\OneDrive\Documents\SonicScout2.0\SonicScout-main\tools\SonicScoutCSharp\ScoutPass\bin\Release\net8.0-windows\win-x64\SonicScout.SonicPass.dll
+  SonicScout.CSharp -> C:\Users\brand\OneDrive\Documents\SonicScout2.0\SonicScout-main\tools\SonicScoutCSharp\bin\Release\net8.0-windows\win-x64\SonicScout.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:00.76

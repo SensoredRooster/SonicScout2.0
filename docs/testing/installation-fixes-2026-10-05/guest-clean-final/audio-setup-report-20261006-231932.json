@@ -1,0 +1,153 @@
+﻿{
+    "mode":  "Install",
+    "createdAt":  "2026-10-06T23:19:32.2597023-05:00",
+    "installersDirectory":  "C:\\QA\\clean-published\\installers",
+    "machineName":  "SONICSCOUT-QA",
+    "userName":  "scouttester",
+    "stages":  [
+                   {
+                       "timestamp":  "2026-10-06T23:14:17.9991516-05:00",
+                       "name":  "Ownership confirmation",
+                       "state":  "READY",
+                       "detail":  "Installation changes authorized."
+                   },
+                   {
+                       "timestamp":  "2026-10-06T23:14:21.6368970-05:00",
+                       "name":  "Baseline scan",
+                       "state":  "READY",
+                       "detail":  "Detected endpoints: 3. Microphone (High Definition Audio Device) [OK]; Speakers (High Definition Audio Device) [OK]"
+                   },
+                   {
+                       "timestamp":  "2026-10-06T23:14:25.0069757-05:00",
+                       "name":  "VB-Cable Base",
+                       "state":  "RUNNING",
+                       "detail":  "Launching installer: VBCABLE_Setup_x64.exe"
+                   },
+                   {
+                       "timestamp":  "2026-10-06T23:14:25.0069757-05:00",
+                       "name":  "VB-Cable Base",
+                       "state":  "RUNNING",
+                       "detail":  "VB-Audio driver pack needs one confirmation from you.\n  1. A \u0027VBCABLE driver setup\u0027 window will appear. Read the notice.\n  2. Click \u0027Install Driver\u0027.\n  3. If Windows asks to allow changes, choose Yes.\n  4. Wait for \u0027Installation complete\u0027, then close the window.\nOther components may open their own dialogs. Complete each prompt and restart Windows after driver installation."
+                   },
+                   {
+                       "timestamp":  "2026-10-06T23:15:27.7537284-05:00",
+                       "name":  "VB-Cable Base",
+                       "state":  "FIXED",
+                       "detail":  "VB-Cable Base detected after install."
+                   },
+                   {
+                       "timestamp":  "2026-10-06T23:15:29.2460004-05:00",
+                       "name":  "Equalizer APO",
+                       "state":  "RUNNING",
+                       "detail":  "Launching installer: EqualizerAPO_Setup.exe"
+                   },
+                   {
+                       "timestamp":  "2026-10-06T23:15:29.2548850-05:00",
+                       "name":  "Equalizer APO",
+                       "state":  "RUNNING",
+                       "detail":  "If Device Selector opens, select SonicScout2.0 / CABLE Input playback. Leave unrelated microphones and speakers unchecked. Complete the dialogs, then restart Windows."
+                   },
+                   {
+                       "timestamp":  "2026-10-06T23:15:29.2584878-05:00",
+                       "name":  "Equalizer APO",
+                       "state":  "RUNNING",
+                       "detail":  "Launching installer: EqualizerAPO_Setup.exe /S"
+                   },
+                   {
+                       "timestamp":  "2026-10-06T23:16:47.2808899-05:00",
+                       "name":  "Equalizer APO",
+                       "state":  "FIXED",
+                       "detail":  "Equalizer APO detected after install."
+                   },
+                   {
+                       "timestamp":  "2026-10-06T23:16:48.1967566-05:00",
+                       "name":  "Dependency download",
+                       "state":  "RUNNING",
+                       "detail":  "Downloading required /reaplugs installer."
+                   },
+                   {
+                       "timestamp":  "2026-10-06T23:16:52.0352194-05:00",
+                       "name":  "ReaPlugs",
+                       "state":  "RUNNING",
+                       "detail":  "Launching installer: reaplugs_x64.exe"
+                   },
+                   {
+                       "timestamp":  "2026-10-06T23:16:52.0352194-05:00",
+                       "name":  "ReaPlugs",
+                       "state":  "RUNNING",
+                       "detail":  "ReaPlugs may display an installation-complete message. Click OK to continue."
+                   },
+                   {
+                       "timestamp":  "2026-10-06T23:16:52.0352194-05:00",
+                       "name":  "ReaPlugs",
+                       "state":  "RUNNING",
+                       "detail":  "Launching installer: reaplugs_x64.exe /S"
+                   },
+                   {
+                       "timestamp":  "2026-10-06T23:17:00.3298413-05:00",
+                       "name":  "ReaPlugs",
+                       "state":  "FIXED",
+                       "detail":  "ReaPlugs detected after install."
+                   },
+                   {
+                       "timestamp":  "2026-10-06T23:17:00.3380680-05:00",
+                       "name":  "Dependency download",
+                       "state":  "RUNNING",
+                       "detail":  "Downloading required /hesuvi installer."
+                   },
+                   {
+                       "timestamp":  "2026-10-06T23:17:05.6295308-05:00",
+                       "name":  "HeSuVi",
+                       "state":  "RUNNING",
+                       "detail":  "Launching installer: HeSuVi.exe"
+                   },
+                   {
+                       "timestamp":  "2026-10-06T23:17:05.6295308-05:00",
+                       "name":  "HeSuVi",
+                       "state":  "RUNNING",
+                       "detail":  "Choose Yes to unpack HeSuVi into the Equalizer APO config folder. Let extraction finish, then close HeSuVi and any browser it opens."
+                   },
+                   {
+                       "timestamp":  "2026-10-06T23:18:19.4548394-05:00",
+                       "name":  "HeSuVi",
+                       "state":  "FIXED",
+                       "detail":  "HeSuVi detected after install."
+                   },
+                   {
+                       "timestamp":  "2026-10-06T23:18:23.7392516-05:00",
+                       "name":  "Equalizer APO verification",
+                       "state":  "READY",
+                       "detail":  "Equalizer APO config.txt and runtime files are present."
+                   },
+                   {
+                       "timestamp":  "2026-10-06T23:18:23.7551478-05:00",
+                       "name":  "Windows audio service",
+                       "state":  "READY",
+                       "detail":  "Windows Audio service is running."
+                   },
+                   {
+                       "timestamp":  "2026-10-06T23:18:53.1279677-05:00",
+                       "name":  "APO Configuration",
+                       "state":  "READY",
+                       "detail":  "Bundled library, plugins, HRIR and managed configuration verified."
+                   },
+                   {
+                       "timestamp":  "2026-10-06T23:19:31.8938711-05:00",
+                       "name":  "Equalizer APO device selection",
+                       "state":  "READY",
+                       "detail":  "Equalizer APO registration on the virtual playback endpoint was verified."
+                   },
+                   {
+                       "timestamp":  "2026-10-06T23:19:32.2552033-05:00",
+                       "name":  "Restart Windows",
+                       "state":  "UPDATE",
+                       "detail":  "Drivers were installed. Restart Windows, then run Install-SonicScout.bat again to verify and finish."
+                   },
+                   {
+                       "timestamp":  "2026-10-06T23:19:32.2561192-05:00",
+                       "name":  "Final verification",
+                       "state":  "UPDATE",
+                       "detail":  "Installation changes are complete. Restart Windows and rerun Install-SonicScout.bat to finish verification."
+                   }
+               ]
+}
