@@ -1,0 +1,3 @@
+8-channel impulse on front-left: stereo left=0.25, right=0
+8-channel impulse on front-right: stereo left=0.25, right=0
+REPRODUCED: front-left and front-right both feed the left output and lose 12 dB amplitude in the existing grouped-average adapter. This is not a successful audio test.
