@@ -84,3 +84,5 @@ No installation blocker remains in the tested standard Windows x64 package route
 Round two should test profile onboarding, routing selection, SonicPass streaming, actual audible APO effects, Windows LEQ, restart persistence of user settings and fallback behavior. The empty profile list and disconnected tuning indicator at application launch are not functional-test passes. No profile, game routing or listening test has been performed in this round.
 
 On October 6, VirtualBox became unresponsive after a long idle period. Its live snapshot failed with `VERR_VM_UNEXPECTED_UNSTABLE_STATE`; power-off also failed because the internal snapshot state was inconsistent. The identified QA VM process was stopped and restarted using its existing disk. Diagnostic logs were preserved. This is a test-environment interruption, not evidence of a SonicScout installation failure.
+
+October 12 follow-up: a physical-PC report exposed an optional Wave Link choice incorrectly blocking completion. Fixed and covered by a new regression; see [the follow-up report](../installation-fixes-2026-10-12/REPORT.md). Physical-PC retry is pending.

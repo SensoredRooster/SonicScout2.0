@@ -48,6 +48,12 @@ try {
     if (Test-Path $fakeLogs) { throw 'Preflight wrote setup history.' }
     if (Test-Path $importMarker) { throw 'Preflight imported configuration helpers.' }
     Write-Host 'PASS: healthy preflight is read-only and does not import/mutate configuration.'
+    Set-Content $scriptPath ($source.Replace('WaveLinkAvailable=$false','WaveLinkAvailable=$true')) -Encoding UTF8
+    Invoke-FakeInstall Preflight
+    if ($LASTEXITCODE -ne 0) { throw 'An unselected optional Wave Link route must not block a healthy cable installation.' }
+    if (Test-Path $fakeLogs) { throw 'Optional mixer preflight wrote setup history.' }
+    Set-Content $scriptPath $source -Encoding UTF8
+    Write-Host 'PASS: detected but unselected Wave Link does not block a healthy cable installation.'
     Set-Content $scriptPath ($source.Replace('function Test-EqualizerApoEndpointBinding { $true }','function Test-EqualizerApoEndpointBinding { $false }')) -Encoding UTF8
     Invoke-FakeInstall Preflight
     if ($LASTEXITCODE -ne 2) { throw 'Installed files with no endpoint APO registration must not pass.' }

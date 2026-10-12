@@ -628,7 +628,9 @@ if ($state.WaveLinkAvailable) {
             $waveLinkRouteAccepted = Read-YesNo -Prompt 'Elgato Wave Link was detected. Use Wave Link routing for Sonic Scout?' -DefaultYes $true
         }
     }
-    $waveLinkState = if ($waveLinkRouteAccepted) { 'READY' } else { 'UPDATE' }
+    # Choosing another route is informational. Required route/assets/APO checks
+    # below still determine whether installation can finish.
+    $waveLinkState = if ($waveLinkRouteAccepted) { 'READY' } else { 'INFO' }
     $waveLinkDetail = if ($waveLinkRouteAccepted) { 'Elgato Wave Link routing selected before virtual-cable or Voicemeeter fallback.' } else { 'Wave Link was detected but not selected for Sonic Scout routing.' }
     Write-Stage -Name 'Elgato Wave Link' -State $waveLinkState -Detail $waveLinkDetail
 }
