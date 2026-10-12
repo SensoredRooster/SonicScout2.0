@@ -1,0 +1,6 @@
+PASS: 2 channels to native 16-bit extensible format: 19200 non-silent aligned bytes; exact output descriptor.
+PASS: 2 channels to native 24-bit extensible format: 28800 non-silent aligned bytes; exact output descriptor.
+PASS: 2 channels to native 32-bit extensible format: 38400 non-silent aligned bytes; exact output descriptor.
+PASS: 8 channels to native 16-bit extensible format: 76800 non-silent aligned bytes; exact output descriptor.
+PASS: 8 channels to native 24-bit extensible format: 115200 non-silent aligned bytes; exact output descriptor.
+PASS: 8 channels to native 32-bit extensible format: 153600 non-silent aligned bytes; exact output descriptor.

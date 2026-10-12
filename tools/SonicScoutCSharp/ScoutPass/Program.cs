@@ -37,7 +37,15 @@ internal static class Program
             scoutPass.Stop();
         };
 
-        scoutPass.Start();
+        try
+        {
+            scoutPass.Start();
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine($"SonicPass startup failed (HRESULT 0x{exception.HResult:X8}): {exception}");
+            return 1;
+        }
         Console.WriteLine($"SonicPass running: {input.FriendlyName} -> {output.FriendlyName}");
         Console.WriteLine($"Format: {scoutPass.Format.SampleRate} Hz, {scoutPass.Format.Channels} channel(s), {scoutPass.Format.BitsPerSample}-bit");
         Console.WriteLine("Press Ctrl+C to stop.");
@@ -199,6 +207,7 @@ internal sealed class SonicPassEngine : IDisposable
     private readonly object stateLock = new();
     private IWaveIn? capture;
     private WasapiOut? output;
+    private MediaFoundationResampler? outputFormatConverter;
     private BufferedWaveProvider? buffer;
     private long packetsReceived;
     private long bufferDrops;
@@ -252,6 +261,14 @@ internal sealed class SonicPassEngine : IDisposable
                 }
                 playbackProvider = sampleProvider.ToWaveProvider();
             }
+            // Sample conversion above emits float samples. Preserve the physical
+            // device's full native descriptor, including PCM depth/subformat/mask.
+            if (!HaveIdenticalFormatDescriptors(playbackProvider.WaveFormat, outputFormat))
+            {
+                outputFormatConverter = new MediaFoundationResampler(playbackProvider, outputFormat);
+                playbackProvider = outputFormatConverter;
+            }
+            Console.Error.WriteLine($"SonicPass playback initialization: capture={capture.WaveFormat}; native={outputFormat}; playback={playbackProvider.WaveFormat}; buffer={bufferMilliseconds}ms; shared/event mode.");
             output = new WasapiOut(outputDevice, AudioClientShareMode.Shared, true, bufferMilliseconds);
             output.Init(playbackProvider);
             capture.DataAvailable += CaptureOnDataAvailable;
@@ -305,6 +322,7 @@ internal sealed class SonicPassEngine : IDisposable
         Stop();
         capture?.Dispose();
         output?.Dispose();
+        outputFormatConverter?.Dispose();
         inputDevice.Dispose();
         outputDevice.Dispose();
     }
@@ -324,6 +342,18 @@ internal sealed class SonicPassEngine : IDisposable
             Interlocked.Increment(ref bufferDrops);
         }
         Interlocked.Increment(ref packetsReceived);
+    }
+
+    internal static bool HaveIdenticalFormatDescriptors(WaveFormat input, WaveFormat output)
+    {
+        static byte[] Descriptor(WaveFormat format)
+        {
+            using var stream = new MemoryStream();
+            using var writer = new BinaryWriter(stream);
+            format.Serialize(writer);
+            return stream.ToArray();
+        }
+        return Descriptor(input).SequenceEqual(Descriptor(output));
     }
 
     private static bool AreCompatibleFormats(WaveFormat input, WaveFormat output)

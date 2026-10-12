@@ -11,3 +11,11 @@ The routing configuration selects SonicScout2.0 (VB-Audio Virtual Cable) and Spe
 This establishes the failing boundary, not the exact rejected parameter. The bundle does not include capture/mix/playback formats or WASAPI initialization flags/timing. Possible format, event-mode or driver constraints must be distinguished before claiming a fix. NAudio 2.2.1 source reviewed: https://github.com/naudio/NAudio/blob/v2.2.1/NAudio.Wasapi/WasapiOut.cs. Its shared-mode event initialization uses the provided format and requested buffer duration with automatic conversion flags.
 
 The GC7 is on the user's physical PC, not the QA VM. Installation/preflight/build and binary --help successes do not verify this playback path. Preserve existing game audio on the working physical output until a routing fix has been verified.
+
+## Playback format correction under test
+
+The software channel/sample-rate adapter emits plain float output, but did not restore the physical device's full native descriptor before WasapiOut.Init. It also compared extensible formats without considering their serialized subformat/mask. The final playback provider now uses MediaFoundationResampler when its serialized descriptor differs from the endpoint mix format, preserving the native output descriptor and performing real sample conversion. Startup logs now include capture, native and playback formats plus buffer duration; initialization failures return 1 with a full exception and HRESULT instead of an unhandled termination.
+
+Six real Media Foundation conversion tests passed for 2/8 channels and 16/24/32-bit extensible native targets, checking non-silent aligned bytes and exact output descriptor equality. No hardware output or audio routing was opened by these tests. Full build: zero warnings/errors. Evidence: native-format-tests.txt and build-playback.txt.
+
+This corrects an identified format-handling gap. The attachment lacks the GC7's native format, so it does not prove that this gap caused its initialization error. A physical-PC retry is required before marking the audio failure resolved. If it still fails, the newly captured formats and HRESULT will support a specific compatibility investigation.
