@@ -1602,6 +1602,20 @@ public partial class MainWindow : Window
             startInfo.ArgumentList.Add(GetComboValue(SonicPassOutputGainComboBox, "0"));
 
             sonicPassProcess = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
+            sonicPassProcess.ErrorDataReceived += (_, error) =>
+            {
+                if (!string.IsNullOrWhiteSpace(error.Data))
+                {
+                    SupportService.Log("sonicpass_error", new { inputId, outputId, message = error.Data }, true);
+                }
+            };
+            sonicPassProcess.OutputDataReceived += (_, output) =>
+            {
+                if (output.Data?.StartsWith("SonicPass running:") == true || output.Data?.StartsWith("Format:") == true)
+                {
+                    SupportService.Log("sonicpass_started", new { inputId, outputId, message = output.Data });
+                }
+            };
             sonicPassProcess.Exited += SonicPassProcess_Exited;
             if (!sonicPassProcess.Start())
             {
@@ -1613,6 +1627,7 @@ public partial class MainWindow : Window
         }
         catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)
         {
+            SupportService.Log("sonicpass_start_failed", new { inputId, outputId, error = exception.ToString() }, true);
             sonicPassProcess?.Dispose();
             sonicPassProcess = null;
             return false;

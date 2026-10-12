@@ -1,0 +1,1 @@
+PASS: real SupportWindow XAML and code-behind construct and open with all seven support actions.
