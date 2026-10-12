@@ -1,0 +1,2 @@
+PASS: missing-theme fallback opens four checklist rows without falsely verifying or duplicating them.
+PASS: theme assigned after constructor opens four checklist rows without falsely verifying or duplicating them.

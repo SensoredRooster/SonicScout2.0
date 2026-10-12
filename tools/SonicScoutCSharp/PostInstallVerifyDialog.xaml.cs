@@ -11,6 +11,7 @@ using System.Windows.Media;
 using NAudio.CoreAudioApi;
 using WpfBrush = System.Windows.Media.Brush;
 using WpfCheckBox = System.Windows.Controls.CheckBox;
+using Color = System.Windows.Media.Color;
 
 namespace SonicScout;
 
@@ -106,9 +107,20 @@ public partial class PostInstallVerifyDialog : Window
     public PostInstallVerifyDialog()
     {
         InitializeComponent();
+        UpdateSummary();
+        Loaded += BuildChecklistWhenLoaded;
+    }
+
+    private void BuildChecklistWhenLoaded(object sender, RoutedEventArgs e)
+    {
+        // The caller assigns Owner and copies theme resources after construction.
+        Loaded -= BuildChecklistWhenLoaded;
         BuildChecklist();
         UpdateSummary();
     }
+
+    private WpfBrush ResolveBrush(string key, Color fallback) =>
+        TryFindResource(key) as WpfBrush ?? new SolidColorBrush(fallback);
 
     private void BuildChecklist()
     {
@@ -126,7 +138,7 @@ public partial class PostInstallVerifyDialog : Window
             {
                 Content = item.Question,
                 FontWeight = FontWeights.SemiBold,
-                Foreground = (WpfBrush)FindResource("PopupTextBrush"),
+                Foreground = ResolveBrush("PopupTextBrush", Colors.WhiteSmoke),
             };
             checkBox.Checked += (_, _) => UpdateSummary();
             checkBox.Unchecked += (_, _) => UpdateSummary();
@@ -134,7 +146,7 @@ public partial class PostInstallVerifyDialog : Window
             TextBlock guidance = new()
             {
                 Text = item.Guidance,
-                Foreground = (WpfBrush)FindResource("PopupTextBrush"),
+                Foreground = ResolveBrush("PopupTextBrush", Colors.WhiteSmoke),
                 Opacity = 0.75,
                 FontSize = 11,
                 TextWrapping = TextWrapping.Wrap,
@@ -149,8 +161,9 @@ public partial class PostInstallVerifyDialog : Window
                 TextBlock probeLine = new()
                 {
                     Text = $"Machine says: {probes[i].State} -- {probes[i].Detail}",
-                    Foreground = (WpfBrush)FindResource(
-                        probes[i].State == "READY" ? "SetupReadyBrush" : "SetupUpdateBrush"),
+                    Foreground = probes[i].State == "READY"
+                        ? ResolveBrush("SetupReadyBrush", Color.FromRgb(0x4C, 0xAF, 0x50))
+                        : ResolveBrush("SetupUpdateBrush", Color.FromRgb(0xFF, 0xC1, 0x07)),
                     FontSize = 10.5,
                     FontWeight = FontWeights.SemiBold,
                     Margin = new Thickness(20, 2, 0, 2),
@@ -234,7 +247,7 @@ public partial class PostInstallVerifyDialog : Window
     private void UpdateSummary()
     {
         int confirmed = itemCheckBoxes.Count(c => c.IsChecked == true);
-        AllConfirmed = confirmed == itemCheckBoxes.Count;
+        AllConfirmed = itemCheckBoxes.Count == Items.Length && confirmed == Items.Length;
         SummaryText.Text = $"{confirmed} of {itemCheckBoxes.Count} confirmed";
         DoneButton.Content = AllConfirmed ? "DONE - ALL VERIFIED" : "DONE FOR NOW";
     }
