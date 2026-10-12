@@ -1,6 +1,6 @@
 # Original installation reference walkthrough
 
-October 12, 2026. **In progress: original app installation and playback have not been tested yet.**
+October 12, 2026. **Application installation completed; audio setup and playback are pending licensed sign-in.**
 
 ## Environment and preserved evidence
 
@@ -27,3 +27,15 @@ The virtual machine has no physical GC7. It can establish installation screens, 
 3. Record installation screens, prompts, reboot handling, configuration files, device selection, APO effects registration/mode and completion checks.
 4. Trace profile activation and the actual playback path; compare each stage with SonicScout implementation.
 5. Turn verified differences into repairs and acceptance checks before a tester release. Existing SonicScout audio quality remains a failed user test.
+
+## ArtTuneKit 1.3.9 installation observed
+
+The user supplied the local ArtTuneKit-Setup-1.3.9.exe download, resolving the product identity. A copy is preserved outside the repository in the QA reference-source folder. Authenticode returned Valid; SHA256 is `38586286365AF37ECED2E29B00592901B2F8F2757294FF6037CD71774D149BCD`.
+
+After the baseline reboot, EqualizerAPO's installation directory was absent and PnP enumeration showed only the standard High Definition Audio speakers and microphone. The supplied EXE was run inside the reference VM.
+
+Observed flow: install scope (all users recommended, selected), UAC with verified publisher ArtIsWar, LLC, license agreement, information page, destination `C:\Program Files\ArtTuneKit` (647.2 MB minimum), desktop shortcut and elevated Windows startup options (both selected by default), installation summary, extraction, Visual C++ x64 redistributable stage, successful completion, and checked Launch ArtTuneKit option. No user-facing command prompt was needed for this application installation.
+
+First launch displayed a modal requiring sign-in with the purchase account or purchase. Audio setup could not be accessed at this stage. The user was asked to complete sign-in personally in the open reference VM; no credentials were requested in chat, and no license bypass or purchase was attempted. Application installation success does not establish audio stack setup success.
+
+Screenshots preserved locally: `02-installer-information.png`, `03-destination.png`, `04-shortcuts-startup.png`, `05-install-complete.png`, and `06-license-signin-required.png`. VirtualBox capture initially failed while the guest display was asleep; a harmless Shift key woke it and restored capture. This was a QA display issue, not an ArtTuneKit installer failure.
