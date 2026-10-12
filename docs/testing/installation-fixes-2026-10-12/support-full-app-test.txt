@@ -1,0 +1,1 @@
+PASS: full compiled SonicScout assembly opens Diagnostics with its real SupportService and seven buttons. No audio routing or uploads performed.
