@@ -1,58 +1,29 @@
 # Sonic Scout SonicPass
 
-`SonicScout.SonicPass.exe` is the Sonic Scout user-mode audio pass. It removes the need for Voicemeeter as a mixer by moving audio directly from a virtual render endpoint to a physical render endpoint.
+SonicScout.SonicPass.exe transports the virtual cable's processed stereo recording output to the selected physical playback device.
 
-```text
-Application or game
-    -> virtual audio render endpoint
-    -> SonicScout.SonicPass.exe
-    -> selected physical output
-```
+Game -> cable playback endpoint -> APO processing -> cable stereo recording endpoint -> SonicPass -> physical output.
 
-SonicPass still requires a virtual audio driver. The current setup can use VB-Cable or another compatible virtual endpoint. SonicPass itself does not create a Windows audio device; creating one requires a separate signed virtual audio driver.
+Games still select the cable's playback endpoint. The existing playback ID stored by SonicScout is paired to its recording output through the shared device-topology adapter identity. Missing or ambiguous matches fail with an actionable error. The relay requires stereo capture; it does not fall back to multichannel render loopback or averaging.
 
-## Run
+## Development commands
 
-From the `CSharp` folder, run:
+Build with `dotnet build SonicScout.ScoutPass.csproj -c Release`. The resulting executable is named SonicScout.SonicPass.exe.
 
-```text
-run_scoutpass.bat
-```
+CLI options:
 
-SonicPass automatically selects the first active endpoint matching `Sonic Scout`, `VB-Audio`, `VB-Cable`, `Virtual Cable`, `CABLE Input`, or `Hi-Fi Cable` as its virtual input. It renders to the Windows default multimedia output.
+- `--input-id`: processed recording endpoint ID, or a legacy cable playback ID to pair automatically.
+- `--input-name`: recording endpoint name fragment. More than one matching cable requires an explicit ID.
+- `--output-id` / `--output-name`: physical playback device; default is Windows multimedia output. Virtual cables and outputs with fewer than two channels are rejected.
+- `--buffer-ms`: 20–500 ms, default 20.
+- `--input-gain-db` / `--output-gain-db`: -12 to +12 dB.
 
-For explicit device selection:
+## Transport behavior
 
-```powershell
-.\SonicPass\bin\Release\net8.0-windows\SonicScout.SonicPass.exe `
-  --input-name "VB-Audio Virtual Cable" `
-  --output-name "Speakers" `
-  --buffer-ms 100
-```
+The relay preserves stereo left/right at unity gain, leaving extra physical-output channels silent. It resamples to the output rate and converts to the output's complete native format descriptor. It waits for capture packets before starting playback and reports an error if none arrive.
 
-Device IDs are more stable than names:
+Silence-padded reads prevent brief gaps from ending playback. When queued capture audio exceeds max(2 × selected buffer, 40 ms), SonicPass clears stale queued data before adding the next packet. This limits accumulated queue delay by discarding audio; it is not adaptive clock-drift correction or a measured latency guarantee.
 
-```text
---input-id <Windows endpoint ID>
---output-id <Windows endpoint ID>
-```
+The relay does not implement the game tune or spatial processing. These must run on the cable's playback endpoint before stereo capture. Adaptive drift correction, device-loss recovery, profile/setup integration and real-hardware latency/quality acceptance remain follow-up work.
 
-## Current scope
-
-- Shared-mode WASAPI capture and render
-- Supports both a dedicated capture/recording endpoint and a render-loopback endpoint as input
-- Physical output selection
-- Bounded jitter buffer with silence-padded reads (no premature stream termination on brief gaps)
-- Packet count and buffer-drop telemetry (drops only occur when the jitter buffer is genuinely full)
-- Graceful Ctrl+C shutdown
-- No Voicemeeter dependency
-
-The current pass includes transport and input/output gain. EQ, limiter, channel mapping, device-loss recovery, and named-pipe control remain follow-up layers. The WPF app remains separate so a UI failure cannot directly run inside the audio callback.
-
-### Startup ordering (important)
-
-Capture must start and buffer at least one packet before playback starts. NAudio's `WasapiOut` treats an empty first read as end-of-stream and will silently exit its render thread without ever starting the underlying audio engine, while still reporting `PlaybackState = Playing`. `SonicPassEngine.Start()` starts capture first, waits briefly for real audio data, and only then starts playback, avoiding this failure mode.
-
-### Buffer sizing
-
-The jitter buffer uses `ReadFully = true`, so a brief gap plays silence instead of ending the stream. Use a `--buffer-ms` of at least 150-250 when the source is a shared virtual-cable endpoint, since smaller buffers can still produce occasional buffer drops under normal jitter.
+The UI reports STARTING until the engine confirms startup. See docs/testing/sonicpass-fixes-2026-10-12 for regression checks and validation limits.

@@ -1,0 +1,8 @@
+PASS: stereo isolation/unity gain, silent extra channels, offsets, multichannel rejection, 20 ms default.
+DEVICE: {0.0.0.00000000}.{53aac8e0-0949-4729-b54f-b828fc8e946d} Speakers (High Definition Audio Device); adapter={2}.\\?\hdaudio#func_01&ven_8384&dev_7680&subsys_83847680&rev_1034#4&31e60982&0&0001#{6994ad04-93ef-11d0-a3cc-00a0c9223196}\espeakertopo; container=00000000-0000-0000-ffff-ffffffffffff; instance=missing
+DEVICE: {0.0.0.00000000}.{70e761e7-0e9c-4877-87e9-5678367764d6} Art Tune + (VB-Audio Virtual Cable); adapter={2}.\\?\root#media#0000#{6994ad04-93ef-11d0-a3cc-00a0c9223196}\vbaudiovacwdm2022_out1_topo_e51a78a01fb100001; container=00000000-0000-0000-ffff-ffffffffffff; instance=missing
+DEVICE: {0.0.1.00000000}.{04680202-ba5c-4e78-9d37-e151d68c6c4e} Art Tune Unified Output (VB-Audio Virtual Cable); adapter={2}.\\?\root#media#0000#{6994ad04-93ef-11d0-a3cc-00a0c9223196}\vbaudiovacwdm2022_in1_topo_e51a78a01fb200001; container=00000000-0000-0000-ffff-ffffffffffff; instance=missing
+DEVICE: {0.0.1.00000000}.{33335d90-0cdc-45c7-8d74-4fe7d588251a} Microphone (High Definition Audio Device); adapter={2}.\\?\hdaudio#func_01&ven_8384&dev_7680&subsys_83847680&rev_1034#4&31e60982&0&0001#{6994ad04-93ef-11d0-a3cc-00a0c9223196}\emicintopo; container=46b14498-2c3d-505d-8eb5-ff34941e9197; instance=missing
+PASS: legacy render ID resolved to Art Tune Unified Output (VB-Audio Virtual Cable) (Capture).
+VM: speaker peak=0.3238546550273895; bytes=4485936; packets=163; trims/drops=149; queued=50ms; error=
+PASS: actual SonicPass engine transported the processed cable signal to speaker loopback. Quality/latency unverified.

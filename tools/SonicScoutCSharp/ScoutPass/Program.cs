@@ -8,6 +8,16 @@ internal static class Program
 {
     private static int Main(string[] args)
     {
+        try { return Run(args); }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine($"SonicPass startup failed (HRESULT 0x{exception.HResult:X8}): {exception.Message}");
+            return 1;
+        }
+    }
+
+    private static int Run(string[] args)
+    {
         SonicPassOptions options;
         try
         {
@@ -71,7 +81,7 @@ internal sealed class SonicPassOptions
     public string? InputName { get; private set; }
     public string? OutputId { get; private set; }
     public string? OutputName { get; private set; }
-    public int BufferMilliseconds { get; private set; } = 100;
+    public int BufferMilliseconds { get; private set; } = 20;
     public double InputGainDb { get; private set; }
     public double OutputGainDb { get; private set; }
     public bool ShowHelp { get; private set; }
@@ -127,8 +137,8 @@ internal sealed class SonicPassOptions
     public static void PrintUsage()
     {
         Console.WriteLine("Sonic Scout SonicPass");
-        Console.WriteLine("  --input-id <id>       Virtual render endpoint ID");
-        Console.WriteLine("  --input-name <name>   Virtual render endpoint name fragment");
+        Console.WriteLine("  --input-id <id>       Processed cable recording endpoint ID (legacy cable render ID is paired automatically)");
+        Console.WriteLine("  --input-name <name>   Processed cable recording endpoint name fragment");
         Console.WriteLine("  --output-id <id>      Physical render endpoint ID");
         Console.WriteLine("  --output-name <name>  Physical render endpoint name fragment");
         Console.WriteLine("  --buffer-ms <20..500> Shared-mode buffer target");
@@ -161,28 +171,49 @@ internal static class DeviceResolver
 {
     private static readonly string[] VirtualEndpointHints =
     [
-        "Sonic Scout", "VB-Audio", "VB-Cable", "Virtual Cable", "CABLE Input", "Hi-Fi Cable"
+        "Sonic Scout", "SonicScout", "VB-Audio", "VB-Cable", "Virtual Cable", "CABLE Input", "Hi-Fi Cable"
     ];
 
     public static MMDevice ResolveInput(MMDeviceEnumerator enumerator, string? id, string? name)
     {
+        MMDevice[] captures = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active)
+            .Where(device => IsVirtualCable(device.FriendlyName)).ToArray();
         if (!string.IsNullOrWhiteSpace(id))
         {
-            return enumerator.GetDevice(id);
+            MMDevice selected = enumerator.GetDevice(id);
+            if (selected.State != DeviceState.Active || !IsVirtualCable(selected.FriendlyName))
+                throw new InvalidOperationException("SonicPass input must be an active virtual cable endpoint.");
+            if (selected.DataFlow == DataFlow.Capture) return selected;
+            string adapterId = ParentDeviceIdentity(selected.DeviceTopology.GetConnector(0).ConnectedToDeviceId);
+            if (string.IsNullOrWhiteSpace(adapterId))
+                throw new InvalidOperationException("The virtual cable's device identity is unavailable. Select its recording endpoint explicitly.");
+            MMDevice[] matches = captures.Where(device => string.Equals(
+                ParentDeviceIdentity(device.DeviceTopology.GetConnector(0).ConnectedToDeviceId), adapterId,
+                StringComparison.OrdinalIgnoreCase)).ToArray();
+            return RequireSingleCapture(matches);
         }
-
-        MMDeviceCollection devices = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
-        MMDevice? match = devices.FirstOrDefault(device =>
-            !string.IsNullOrWhiteSpace(name) && device.FriendlyName.Contains(name, StringComparison.OrdinalIgnoreCase));
-        match ??= enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active).FirstOrDefault(device =>
-            !string.IsNullOrWhiteSpace(name) && device.FriendlyName.Contains(name, StringComparison.OrdinalIgnoreCase));
-        match ??= devices.FirstOrDefault(device => VirtualEndpointHints.Any(hint =>
-            device.FriendlyName.Contains(hint, StringComparison.OrdinalIgnoreCase)));
-        match ??= enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active).FirstOrDefault(device => VirtualEndpointHints.Any(hint =>
-            device.FriendlyName.Contains(hint, StringComparison.OrdinalIgnoreCase)));
-        return match ?? throw new InvalidOperationException("No Sonic Scout virtual render endpoint was found. Install or select a virtual audio driver.");
+        if (!string.IsNullOrWhiteSpace(name))
+            captures = captures.Where(device => device.FriendlyName.Contains(name, StringComparison.OrdinalIgnoreCase)).ToArray();
+        return RequireSingleCapture(captures);
     }
 
+    internal static bool IsVirtualCable(string name) => VirtualEndpointHints.Any(hint =>
+        name.Contains(hint, StringComparison.OrdinalIgnoreCase));
+
+    // Render and capture have different topology filter names on the same driver.
+    // Keep the device-instance path preceding the interface class/filter suffix.
+    internal static string ParentDeviceIdentity(string topologyDeviceId)
+    {
+        int start = topologyDeviceId.IndexOf(@"\\?\", StringComparison.Ordinal);
+        int end = topologyDeviceId.IndexOf("#{", StringComparison.Ordinal);
+        return start >= 0 && end > start ? topologyDeviceId[start..end] : string.Empty;
+    }
+
+    private static MMDevice RequireSingleCapture(MMDevice[] captures) => captures.Length == 1
+        ? captures[0]
+        : throw new InvalidOperationException(captures.Length == 0
+            ? "No matching processed virtual cable recording endpoint is active. Enable the cable's recording output in Windows Sound settings."
+            : "More than one cable recording endpoint matches. Select its recording endpoint explicitly with --input-id.");
     public static MMDevice ResolveOutput(MMDeviceEnumerator enumerator, string? id, string? name)
     {
         if (!string.IsNullOrWhiteSpace(id))
@@ -237,9 +268,11 @@ internal sealed class SonicPassEngine : IDisposable
                 return;
             }
 
-            capture = inputDevice.DataFlow == DataFlow.Capture
-                ? new WasapiCapture(inputDevice)
-                : new WasapiLoopbackCapture(inputDevice);
+            if (inputDevice.DataFlow != DataFlow.Capture || inputDevice.AudioClient.MixFormat.Channels != 2)
+                throw new InvalidOperationException("SonicPass requires the processed stereo recording endpoint; render loopback and multichannel downmix are not supported.");
+            if (outputDevice.DataFlow != DataFlow.Render || outputDevice.AudioClient.MixFormat.Channels < 2 || DeviceResolver.IsVirtualCable(outputDevice.FriendlyName))
+                throw new InvalidOperationException("Select a physical output with at least two channels, rather than a virtual cable.");
+            capture = new WasapiCapture(inputDevice);
             buffer = new BufferedWaveProvider(capture.WaveFormat)
             {
                 BufferDuration = TimeSpan.FromMilliseconds(Math.Max(bufferMilliseconds * 4, 200)),
@@ -253,7 +286,7 @@ internal sealed class SonicPassEngine : IDisposable
                 ISampleProvider sampleProvider = buffer.ToSampleProvider();
                 if (sampleProvider.WaveFormat.Channels != outputFormat.Channels)
                 {
-                    sampleProvider = new ChannelAdaptingSampleProvider(sampleProvider, outputFormat.Channels);
+                    sampleProvider = new StereoOutputSampleProvider(sampleProvider, outputFormat.Channels);
                 }
                 if (sampleProvider.WaveFormat.SampleRate != outputFormat.SampleRate)
                 {
@@ -278,11 +311,12 @@ internal sealed class SonicPassEngine : IDisposable
             // Capture must deliver at least one packet before Play() starts the WASAPI render
             // thread; NAudio's WasapiOut treats an empty first read as end-of-stream and silently
             // exits without ever calling AudioClient.Start(), leaving PlaybackState stuck at Playing.
-            capture.StartRecording();
-            SpinWait.SpinUntil(() => buffer.BufferedBytes > 0, TimeSpan.FromSeconds(2));
-            output.Play();
             stopped = false;
             IsRunning = true;
+            capture.StartRecording();
+            if (!SpinWait.SpinUntil(() => buffer.BufferedBytes > 0 || LastError is not null, TimeSpan.FromSeconds(3)) || LastError is not null)
+                throw new InvalidOperationException("The cable recording endpoint did not deliver audio packets.", LastError);
+            output.Play();
         }
     }
 
@@ -335,6 +369,12 @@ internal sealed class SonicPassEngine : IDisposable
         }
 
         ApplyGain(eventArgs.Buffer, eventArgs.BytesRecorded);
+        // Drop stale queued audio instead of preserving an ever-growing game delay.
+        if (buffer.BufferedDuration.TotalMilliseconds > Math.Max(bufferMilliseconds * 2, 40))
+        {
+            buffer.ClearBuffer();
+            Interlocked.Increment(ref bufferDrops);
+        }
         int before = buffer.BufferedBytes;
         buffer.AddSamples(eventArgs.Buffer, 0, eventArgs.BytesRecorded);
         if (buffer.BufferedBytes == before && eventArgs.BytesRecorded > 0)
@@ -410,60 +450,30 @@ internal sealed class SonicPassEngine : IDisposable
     }
 }
 
-/// <summary>Maps between differing channel counts using equal-weight averaging (downmix) or round-robin reuse (upmix).</summary>
-internal sealed class ChannelAdaptingSampleProvider : ISampleProvider
+/// <summary>Places processed stereo L/R in the front pair; other output channels are silent.</summary>
+internal sealed class StereoOutputSampleProvider : ISampleProvider
 {
     private readonly ISampleProvider source;
-    private readonly int outputChannels;
-    private float[]? sourceBuffer;
-
-    public ChannelAdaptingSampleProvider(ISampleProvider source, int outputChannels)
+    private float[] sourceBuffer = [];
+    public StereoOutputSampleProvider(ISampleProvider source, int outputChannels)
     {
+        if (source.WaveFormat.Channels != 2 || outputChannels < 2)
+            throw new ArgumentException("Only processed stereo input and outputs with at least two channels are supported.");
         this.source = source;
-        this.outputChannels = outputChannels;
         WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(source.WaveFormat.SampleRate, outputChannels);
     }
-
     public WaveFormat WaveFormat { get; }
-
     public int Read(float[] buffer, int offset, int count)
     {
-        int inputChannels = source.WaveFormat.Channels;
-        int outputFrames = count / outputChannels;
-        int sourceCount = outputFrames * inputChannels;
-        if (sourceBuffer is null || sourceBuffer.Length < sourceCount)
-        {
-            sourceBuffer = new float[sourceCount];
-        }
-        int sourceRead = source.Read(sourceBuffer, 0, sourceCount);
-        int framesRead = sourceRead / inputChannels;
-
-        int channelsPerOutput = inputChannels / outputChannels;
-        int remainder = inputChannels % outputChannels;
+        int frames = count / WaveFormat.Channels;
+        if (sourceBuffer.Length < frames * 2) sourceBuffer = new float[frames * 2];
+        int framesRead = source.Read(sourceBuffer, 0, frames * 2) / 2;
+        Array.Clear(buffer, offset, framesRead * WaveFormat.Channels);
         for (int frame = 0; frame < framesRead; frame++)
         {
-            for (int outChannel = 0; outChannel < outputChannels; outChannel++)
-            {
-                float sample;
-                if (inputChannels >= outputChannels)
-                {
-                    int start = outChannel * channelsPerOutput + Math.Min(outChannel, remainder);
-                    int span = channelsPerOutput + (outChannel < remainder ? 1 : 0);
-                    float sum = 0f;
-                    for (int c = 0; c < span; c++)
-                    {
-                        sum += sourceBuffer[frame * inputChannels + start + c];
-                    }
-                    sample = span > 0 ? sum / span : 0f;
-                }
-                else
-                {
-                    sample = sourceBuffer[frame * inputChannels + (outChannel % inputChannels)];
-                }
-                buffer[offset + frame * outputChannels + outChannel] = sample;
-            }
+            buffer[offset + frame * WaveFormat.Channels] = sourceBuffer[frame * 2];
+            buffer[offset + frame * WaveFormat.Channels + 1] = sourceBuffer[frame * 2 + 1];
         }
-
-        return framesRead * outputChannels;
+        return framesRead * WaveFormat.Channels;
     }
 }

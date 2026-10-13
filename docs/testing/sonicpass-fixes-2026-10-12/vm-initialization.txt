@@ -1,0 +1,1 @@
+SonicPass playback initialization: capture=32 bit IEEFloat: 48000Hz 2 channels; native=WAVE_FORMAT_EXTENSIBLE IEEE_FLOAT 44100Hz 2 channels 32 bit; playback=WAVE_FORMAT_EXTENSIBLE IEEE_FLOAT 44100Hz 2 channels 32 bit; buffer=20ms; shared/event mode.

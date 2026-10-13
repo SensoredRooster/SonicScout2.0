@@ -102,6 +102,7 @@ public partial class MainWindow : Window
     private bool windowsLeqEnabled;
     private bool apoLinked;
     private Process? sonicPassProcess;
+    private string? sonicPassLastStartupError;
     private bool sonicPassStartedByLeqToggle;
     private SonicRoutingConfiguration routingConfiguration;
     private readonly QueuedScoutAudioController scriptAudioController;
@@ -1567,8 +1568,8 @@ public partial class MainWindow : Window
         sonicPassStartedByLeqToggle = false;
         SonicPassButton.Content = "STOP SONICPASS";
         SonicPassStartButton.Content = "STOP SONICPASS";
-        SonicPassStatusText.Text = "RUNNING - virtual input is routing to the physical output";
-        MessageText.Text = "SonicPass started. Virtual audio is routing to the selected physical output.";
+        SonicPassStatusText.Text = "STARTING - resolving the processed cable recording output";
+        MessageText.Text = "SonicPass is starting. Waiting for the audio engine.";
         UpdateTunedVirtualCableStatusIndicator();
     }
 
@@ -1595,17 +1596,20 @@ public partial class MainWindow : Window
             startInfo.ArgumentList.Add("--output-id");
             startInfo.ArgumentList.Add(outputId);
             startInfo.ArgumentList.Add("--buffer-ms");
-            startInfo.ArgumentList.Add(GetComboValue(SonicPassBufferComboBox, "100"));
+            startInfo.ArgumentList.Add(GetComboValue(SonicPassBufferComboBox, "20"));
             startInfo.ArgumentList.Add("--input-gain-db");
             startInfo.ArgumentList.Add(GetComboValue(SonicPassInputGainComboBox, "0"));
             startInfo.ArgumentList.Add("--output-gain-db");
             startInfo.ArgumentList.Add(GetComboValue(SonicPassOutputGainComboBox, "0"));
 
             sonicPassProcess = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
+            sonicPassLastStartupError = null;
             sonicPassProcess.ErrorDataReceived += (_, error) =>
             {
                 if (!string.IsNullOrWhiteSpace(error.Data))
                 {
+                    if (error.Data.StartsWith("SonicPass startup failed", StringComparison.Ordinal))
+                        sonicPassLastStartupError = error.Data;
                     SupportService.Log("sonicpass_error", new { inputId, outputId, message = error.Data }, true);
                 }
             };
@@ -1614,6 +1618,17 @@ public partial class MainWindow : Window
                 if (output.Data?.StartsWith("SonicPass running:") == true || output.Data?.StartsWith("Format:") == true)
                 {
                     SupportService.Log("sonicpass_started", new { inputId, outputId, message = output.Data });
+                    if (output.Data.StartsWith("SonicPass running:"))
+                    {
+                        Dispatcher.BeginInvoke(() =>
+                        {
+                            if (sonicPassProcess is not null && !sonicPassProcess.HasExited)
+                            {
+                                SonicPassStatusText.Text = "RUNNING - processed stereo is routing to the physical output";
+                                MessageText.Text = "SonicPass audio engine started.";
+                            }
+                        });
+                    }
                 }
             };
             sonicPassProcess.Exited += SonicPassProcess_Exited;
@@ -1653,7 +1668,7 @@ public partial class MainWindow : Window
             }
             else if (unexpectedExit)
             {
-                MessageText.Text = "SonicPass stopped unexpectedly. Check the endpoint state.";
+                MessageText.Text = sonicPassLastStartupError ?? "SonicPass stopped unexpectedly. Check diagnostics for the audio-engine error.";
             }
             UpdateTunedVirtualCableStatusIndicator();
         });
@@ -1763,7 +1778,7 @@ public partial class MainWindow : Window
     {
         if (IsLoaded)
         {
-            MessageText.Text = $"SonicPass buffer set to {GetComboValue(SonicPassBufferComboBox, "100")} ms.";
+            MessageText.Text = $"SonicPass buffer set to {GetComboValue(SonicPassBufferComboBox, "20")} ms.";
         }
     }
 
@@ -1903,7 +1918,7 @@ public partial class MainWindow : Window
                 Provisioned: true,
                 EndpointId: sonicScoutEndpoint.ID,
                 EndpointName: DisplayDeviceName(sonicScoutEndpoint.FriendlyName),
-                Detail: $"Cloned selected physical output into virtual route '{routingConfiguration.SonicScoutAlias}' on endpoint: {DisplayDeviceName(sonicScoutEndpoint.FriendlyName)}.");
+                Detail: $"Selected existing virtual route '{routingConfiguration.SonicScoutAlias}' on endpoint: {DisplayDeviceName(sonicScoutEndpoint.FriendlyName)}.");
         });
     }
 
@@ -3026,5 +3041,3 @@ public partial class MainWindow : Window
         }
     }
 }
-
-

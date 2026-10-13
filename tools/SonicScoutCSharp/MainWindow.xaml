@@ -367,7 +367,8 @@
                         <StackPanel Grid.Row="2" Grid.Column="4" HorizontalAlignment="Stretch">
                             <TextBlock Text="BUFFER" Foreground="{DynamicResource CyanBrush}" FontSize="10" FontWeight="Bold" TextAlignment="Center" HorizontalAlignment="Center" />
                             <TextBlock Text="Stability vs latency" Foreground="{DynamicResource SurfaceTextBrush}" FontSize="10" TextAlignment="Center" HorizontalAlignment="Center" Margin="0,1,0,3" />
-                            <ComboBox x:Name="SonicPassBufferComboBox" Height="28" SelectedIndex="2" SelectionChanged="SonicPassBuffer_SelectionChanged">
+                            <ComboBox x:Name="SonicPassBufferComboBox" Height="28" SelectedIndex="0" SelectionChanged="SonicPassBuffer_SelectionChanged">
+                                <ComboBoxItem Content="20 ms" Tag="20" />
                                 <ComboBoxItem Content="50 ms" Tag="50" />
                                 <ComboBoxItem Content="75 ms" Tag="75" />
                                 <ComboBoxItem Content="100 ms" Tag="100" />
