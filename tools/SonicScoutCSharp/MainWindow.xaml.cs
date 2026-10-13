@@ -170,9 +170,29 @@ public partial class MainWindow : Window
         foreach (string profilePath in Directory.GetFiles(profilesDirectory, "custom_*.txt"))
         {
             string profileId = Path.GetFileNameWithoutExtension(profilePath);
+            if (profileId.EndsWith("_target", StringComparison.OrdinalIgnoreCase) &&
+                File.Exists(Path.Combine(profilesDirectory, profileId[..^7] + ".txt")))
+            {
+                continue;
+            }
             string profileName = HumanizeProfileName(profileId);
-            WpfButton profileButton = CreateProfileButton(profileId, profileName, "Saved headphone / IEM target");
-            profiles[profileId] = (profileName, "Saved headphone / IEM target", profileButton);
+            string subtitle = "Saved headphone / IEM profile";
+            string metadataPath = profilePath + ".metadata.json";
+            try
+            {
+                if (File.Exists(metadataPath))
+                {
+                    using JsonDocument metadata = JsonDocument.Parse(File.ReadAllText(metadataPath));
+                    profileName = metadata.RootElement.GetProperty("Name").GetString() ?? profileName;
+                    subtitle = metadata.RootElement.GetProperty("Subtitle").GetString() ?? subtitle;
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or KeyNotFoundException)
+            {
+                SupportService.Log("profile_metadata_unavailable", new { profileId, error = exception.Message });
+            }
+            WpfButton profileButton = CreateProfileButton(profileId, profileName, subtitle);
+            profiles[profileId] = (profileName, subtitle, profileButton);
         }
     }
 
@@ -194,6 +214,8 @@ public partial class MainWindow : Window
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
+        MessageText.Text = "Checking the audio installation...";
+        SonicPassStatusText.Text = "CHECKING SETUP - audio routing will start after verification";
         await EnsureTurnkeyStartupSetupAsync();
         LoadLogo();
         ApplyTheme(ThemeComboBox.SelectedItem is ComboBoxItem selected ? selected.Content?.ToString() : "Copper Signal");
@@ -208,6 +230,10 @@ public partial class MainWindow : Window
             SaveEqProfile();
         };
         EnsureApoLink();
+        if (routingConfiguration.ActiveProfileId is string savedProfileId && profiles.TryGetValue(savedProfileId, out var savedProfile))
+        {
+            ProfileButton_Click(savedProfile.Button, new RoutedEventArgs());
+        }
         try
         {
             await RefreshRoutingConfigurationFromSystemAsync();
@@ -324,13 +350,16 @@ public partial class MainWindow : Window
             // Bounded so a wedged dependency check can never block app startup
             // indefinitely. Returning null makes the caller treat the wizard as needed,
             // which is the safe direction to be wrong in.
-            using CancellationTokenSource timeoutSource = new(TimeSpan.FromMinutes(3));
+            Task<string> preflightOutput = process.StandardOutput.ReadToEndAsync();
+            Task<string> preflightErrors = process.StandardError.ReadToEndAsync();
+            using CancellationTokenSource timeoutSource = new(TimeSpan.FromSeconds(45));
             using CancellationTokenSource linked =
                 CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token);
 
             try
             {
                 await process.WaitForExitAsync(linked.Token);
+                await Task.WhenAll(preflightOutput, preflightErrors);
             }
             catch (OperationCanceledException) when (timeoutSource.IsCancellationRequested)
             {
@@ -1385,7 +1414,7 @@ public partial class MainWindow : Window
             StartAudioMonitor(OutputDeviceComboBox.SelectedIndex >= 0 && OutputDeviceComboBox.SelectedIndex < outputDeviceReferences.Count
                 ? outputDeviceReferences[OutputDeviceComboBox.SelectedIndex]
                 : null);
-            MessageText.Text = $"Script bridge reloaded the audio pipeline. {reason}";
+            MessageText.Text = $"Audio devices refreshed. {reason}";
         });
     }
 
@@ -1397,8 +1426,8 @@ public partial class MainWindow : Window
             ApplySafePhysicalOutputFallback();
             sonicPassStartedByLeqToggle = false;
             StopSonicPass();
-            MessageText.Text = $"Script bridge activated safe bypass mode. {reason}";
-            SonicPassStatusText.Text = "BYPASS - safe physical output fallback is active";
+            MessageText.Text = $"Audio routing stopped. If your game uses the Sonic Scout cable, select your physical headphones or speakers in the game until setup succeeds. {reason}";
+            SonicPassStatusText.Text = "STOPPED - choose physical output in your game to restore audio";
         });
     }
 
@@ -1891,7 +1920,7 @@ public partial class MainWindow : Window
             MMDeviceCollection outputs = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
             MMDevice? sonicScoutEndpoint = null;
 
-            foreach (MMDevice output in outputs)
+            foreach (MMDevice output in outputs.OrderBy(output => AudioRoutePreference.Rank(output.FriendlyName)))
             {
                 string displayName = DisplayDeviceName(output.FriendlyName);
                 if (string.Equals(output.ID, selectedPhysicalOutputId, StringComparison.OrdinalIgnoreCase))
@@ -1977,7 +2006,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private static IReadOnlyList<SetupCheckResult> ReadInstallationIssues(DateTimeOffset startedAt)
+    private static IReadOnlyList<SetupCheckResult> ReadInstallationStages(DateTimeOffset startedAt)
     {
         try
         {
@@ -1992,16 +2021,15 @@ public partial class MainWindow : Window
             {
                 return Array.Empty<SetupCheckResult>();
             }
-            List<SetupCheckResult> issues = new();
+            Dictionary<string, SetupCheckResult> stagesByName = new(StringComparer.OrdinalIgnoreCase);
             foreach (var stage in stages.EnumerateArray())
             {
                 if (!stage.TryGetProperty("state", out var state) || state.ValueKind != System.Text.Json.JsonValueKind.String) { continue; }
-                if (state.GetString() is not ("UPDATE" or "ERROR" or "BLOCKED")) { continue; }
                 if (!stage.TryGetProperty("name", out var name) || name.ValueKind != System.Text.Json.JsonValueKind.String ||
                     !stage.TryGetProperty("detail", out var detail) || detail.ValueKind != System.Text.Json.JsonValueKind.String) { continue; }
-                issues.Add(new SetupCheckResult(name.GetString()!, state.GetString()!, detail.GetString()!));
+                stagesByName[name.GetString()!] = new SetupCheckResult(name.GetString()!, state.GetString()!, detail.GetString()!);
             }
-            return issues;
+            return stagesByName.Values.ToArray();
         }
         catch (IOException) { return Array.Empty<SetupCheckResult>(); }
         catch (UnauthorizedAccessException) { return Array.Empty<SetupCheckResult>(); }
@@ -2016,7 +2044,9 @@ public partial class MainWindow : Window
         SetupCheckResult Report(string name, string state, string detail)
         {
             SetupCheckResult result = new(name, state, detail);
-            results.Add(result);
+            int existing = results.FindIndex(item => string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (existing >= 0) results[existing] = result;
+            else results.Add(result);
             progress.Report(result);
             return result;
         }
@@ -2054,6 +2084,11 @@ public partial class MainWindow : Window
                 catch (JsonException) { }
             }
             ScriptExecutionResult? setupAutomationResult = await setupTask;
+            if (setupAutomationResult is not null)
+            {
+                foreach (SetupCheckResult stage in ReadInstallationStages(setupAutomationResult.StartedAtUtc))
+                    Report(stage.Name, stage.State, stage.Detail);
+            }
             if (setupAutomationResult is null)
             {
                 Report("Audio components", "UPDATE", "Audio setup files are missing. Reinstall Sonic Scout using SonicScout-Setup.exe.");
@@ -2067,10 +2102,6 @@ public partial class MainWindow : Window
             {
                 string failure = setupAutomationResult.ErrorMessage ?? "Setup automation script failed.";
                 Report("Audio components", "UPDATE", $"Installation needs attention. {failure} Review the installation report in %LOCALAPPDATA%\\SonicScout\\logs. If a restart was requested, restart Windows and retry installation.");
-                foreach (SetupCheckResult issue in ReadInstallationIssues(setupAutomationResult.StartedAtUtc))
-                {
-                    Report(issue.Name, issue.State, issue.Detail);
-                }
                 return results;
             }
 
@@ -2287,20 +2318,29 @@ public partial class MainWindow : Window
 
     private static string ResolveProfilesDirectory()
     {
+        string userProfiles = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SonicScout", "profiles");
+        Directory.CreateDirectory(userProfiles);
         string publishedProfiles = Path.Combine(AppContext.BaseDirectory, "profiles");
-        if (Directory.Exists(publishedProfiles))
-        {
-            return publishedProfiles;
-        }
-
         string workingDirectoryProfiles = Path.Combine(Environment.CurrentDirectory, "profiles");
-        if (Directory.Exists(workingDirectoryProfiles))
-        {
-            return workingDirectoryProfiles;
-        }
-
         string parentProfiles = Path.Combine(Directory.GetParent(Environment.CurrentDirectory)?.FullName ?? Environment.CurrentDirectory, "profiles");
-        return parentProfiles;
+        foreach (string legacyDirectory in new[] { publishedProfiles, workingDirectoryProfiles, parentProfiles }.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!Directory.Exists(legacyDirectory) || string.Equals(legacyDirectory, userProfiles, StringComparison.OrdinalIgnoreCase)) continue;
+            foreach (string legacyFile in Directory.GetFiles(legacyDirectory, "custom_*"))
+            {
+                string destination = Path.Combine(userProfiles, Path.GetFileName(legacyFile));
+                try
+                {
+                    if (!File.Exists(destination)) File.Copy(legacyFile, destination);
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    // Leave the original intact; a failed legacy copy must not prevent startup.
+                    Debug.WriteLine($"Legacy profile copy failed: {exception.Message}");
+                }
+            }
+        }
+        return userProfiles;
     }
 
     private void ProfileButton_Click(object sender, RoutedEventArgs e)
@@ -2325,6 +2365,8 @@ public partial class MainWindow : Window
 
         if (WriteProfileToEapo(profileId, out string activationError))
         {
+            routingConfiguration.ActiveProfileId = profileId;
+            SonicRoutingConfigurationStore.Save(routingConfigurationPath, routingConfiguration);
             SetEapoStatus(true, $"Activated {profile.Name} for {profile.Subtitle}.");
         }
         else
@@ -2644,12 +2686,13 @@ public partial class MainWindow : Window
             {
                 string targetPath = Path.Combine(profilesDirectory, $"{profileId}_target.txt");
                 File.WriteAllText(targetPath, dialog.TargetCurveContent);
-                subtitle = $"{subtitle} / Target: {dialog.TargetCurveName}";
+                subtitle = $"{subtitle} / Saved target: {dialog.TargetCurveName} (not applied)";
             }
+            File.WriteAllText(profilePath + ".metadata.json", JsonSerializer.Serialize(new { Name = dialog.ProfileName, Subtitle = subtitle }));
             WpfButton profileButton = CreateProfileButton(profileId, dialog.ProfileName, subtitle);
             profiles[profileId] = (dialog.ProfileName, subtitle, profileButton);
             UpdateProfileState();
-            SetEapoStatus(true, $"Added {dialog.ProfileName}. Select its tile to activate the EQ target.");
+            ProfileButton_Click(profileButton, new RoutedEventArgs());
         }
         catch (IOException)
         {
@@ -2872,12 +2915,18 @@ public partial class MainWindow : Window
 
             EnsureFileIsWritable(profilePath);
             File.Delete(profilePath);
+            foreach (string associatedPath in new[] { profilePath + ".metadata.json", Path.Combine(profilesDirectory, profileId + "_target.txt") })
+            {
+                if (File.Exists(associatedPath)) File.Delete(associatedPath);
+            }
 
             ProfileStackPanel.Children.Remove(card);
             profiles.Remove(profileId);
             if (deletingActiveProfile)
             {
                 activeProfileId = null;
+                routingConfiguration.ActiveProfileId = null;
+                SonicRoutingConfigurationStore.Save(routingConfigurationPath, routingConfiguration);
                 eqValues.Clear();
                 EqPanel.Visibility = Visibility.Collapsed;
                 FilterText.Text = "Select a profile to inspect its Equalizer APO filters.";

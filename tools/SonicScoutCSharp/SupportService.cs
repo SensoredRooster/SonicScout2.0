@@ -140,6 +140,8 @@ internal static class SupportService
                 string name = Path.GetFileName(file);
                 if (!name.StartsWith("sonic-scout.jsonl", StringComparison.OrdinalIgnoreCase) &&
                     !name.StartsWith("errors.jsonl", StringComparison.OrdinalIgnoreCase) &&
+                    !(name.StartsWith("audio-setup-report-", StringComparison.OrdinalIgnoreCase) && name.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) &&
+                    !(name.StartsWith("installation-", StringComparison.OrdinalIgnoreCase) && name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)) &&
                     !name.EndsWith(".log", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;

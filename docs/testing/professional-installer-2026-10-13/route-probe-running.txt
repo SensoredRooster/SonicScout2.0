@@ -1,0 +1,1 @@
+route=SonicScout2.0 (VB-Audio Virtual Cable) -> Speakers (High Definition Audio Device); sampleFormat=32 bit IEEFloat: 44100Hz 2 channels; samples=838376; rms=0.004699943894709364; peak=0.0336257629096508; state=running

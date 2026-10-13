@@ -11,5 +11,8 @@ Check(second.StartsWith(source.TrimEnd()),"repeat edit preserves original correc
 Check(second.Split(EqProfileEdits.Begin).Length==2,"one adjustment block after repeat edit");
 Check(!EqProfileEdits.Adjustments(second).Contains("Gain +2.0"),"previous adjustment replaced");
 Check(EqProfileEdits.Adjustments(source)==string.Empty,"imported correction is not treated as slider offsets");
+string[] endpoints=["SonicScout2.0 + (VB-Audio Virtual Cable)","SonicScout2.0 (VB-Audio Virtual Cable)"];
+Check(endpoints.OrderBy(AudioRoutePreference.Rank).First()==endpoints[1],"normal cable preferred regardless of enumeration order");
+Check(AudioRoutePreference.Rank("CABLE Input (VB-Audio Virtual Cable)") < AudioRoutePreference.Rank("CABLE In 16ch (VB-Audio Virtual Cable)"),"unrenamed normal cable preferred");
 Console.WriteLine("PASS: headphone filters, preamp and includes preserved across repeated EQ edits; only user adjustment block replaced.");
 static void Check(bool ok,string message){if(!ok)throw new Exception(message);}

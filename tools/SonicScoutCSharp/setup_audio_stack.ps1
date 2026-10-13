@@ -493,7 +493,7 @@ function Invoke-InstallerStage {
 
     Write-Stage -Name $StageName -State 'RUNNING' -Detail "Launching installer: $($installer.Name)"
     if ($StageName -eq 'Equalizer APO') {
-        Write-Stage -Name $StageName -State 'RUNNING' -Detail 'If Device Selector opens, select SonicScout2.0 / CABLE Input playback. Leave unrelated microphones and speakers unchecked. Complete the dialogs, then restart Windows.'
+        Write-Stage -Name $StageName -State 'RUNNING' -Detail 'Installing Equalizer APO files. Sonic Scout will register its cable endpoints automatically.'
     }
     if ($StageName -eq 'VB-Cable Hi-Fi Route') {
         Write-Stage -Name $StageName -State 'RUNNING' -Detail 'Click Install in the Hi-Fi Cable window, complete its prompts, then close it. Closing without installing leaves this component incomplete.'
@@ -511,6 +511,20 @@ function Invoke-InstallerStage {
         if ($installer.Extension -ieq '.msi') {
             $process = Start-Process -FilePath 'msiexec.exe' -ArgumentList "/i `"$($installer.FullName)`" /passive /norestart" -Wait -PassThru
         }
+        elseif ($StageName -eq 'Equalizer APO') {
+            $process = Start-Process -WorkingDirectory $installer.DirectoryName -FilePath $installer.FullName -ArgumentList $silentArgs -PassThru -WindowStyle Hidden
+            $selectorPath = Join-Path $env:ProgramFiles 'EqualizerAPO\DeviceSelector.exe'
+            while (-not $process.WaitForExit(400)) {
+                # Upstream /S still starts a mandatory selector. Only dismiss the
+                # /i child belonging to this installer, never a user's own tool.
+                $selectors = @(Get-CimInstance Win32_Process -Filter "Name='DeviceSelector.exe' AND ParentProcessId=$($process.Id)" -ErrorAction SilentlyContinue)
+                foreach ($selector in $selectors) {
+                    if ($selector.ExecutablePath -ieq $selectorPath -and $selector.CommandLine -match '(?:^|\s)/i(?:\s|$)') {
+                        Stop-Process -Id $selector.ProcessId -Force -ErrorAction Stop
+                    }
+                }
+            }
+        }
         elseif ($StageName -eq 'HeSuVi') {
             # Start-Process -Wait also waits for the GUI/browser descendants.
             # Wait for extraction itself; verify the actual installed files below.
@@ -526,7 +540,9 @@ VB-Audio driver pack needs one confirmation from you.
   4. Wait for 'Installation complete', then close the window.
 Other components may open their own dialogs. Complete each prompt and restart Windows after driver installation.
 "@
-            $process = Start-Process -WorkingDirectory $installer.DirectoryName -FilePath $installer.FullName -Wait -PassThru
+            $process = Start-Process -WorkingDirectory $installer.DirectoryName -FilePath $installer.FullName -PassThru
+            # Wait for the driver installer itself, not its thank-you browser tab.
+            $process.WaitForExit()
         }
         elseif ($silentArgs.Count -gt 0) {
             $joined = $silentArgs -join ' '

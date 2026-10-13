@@ -1,0 +1,8 @@
+{
+    "appPresent":  false,
+    "desktopShortcutPresent":  false,
+    "installedAppsPresent":  false,
+    "legacyProfilePresent":  false,
+    "activeProfilePresent":  true,
+    "apoPresent":  true
+}

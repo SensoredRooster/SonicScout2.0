@@ -1,6 +1,6 @@
 # Professional installer and end-to-end verification — 2026-10-13
 
-Status: development build; end-to-end testing is in progress. This is not a tester-release approval.
+Status: **release qualification failed; development build only.** The VM walkthrough found and repaired several defects, but game-target processing, vendor installation prompts and hardware audio qualification remain blockers. This is not a tester-release approval.
 
 ## Implemented changes
 
@@ -31,19 +31,58 @@ Status: development build; end-to-end testing is in progress. This is not a test
 
 The first live audio probe was invalidated while setup was restarting Windows audio. Repeating after setup settled passed. It temporarily changed the managed EQ to measure gain and restored the original file in `finally`.
 
-## End-to-end test still underway
+## Continued VM walkthrough
 
-Fresh dependency installation and reboot/recovery, final package retest with EQ fix, normal-user reopening, live slider editing, diagnostics export, game-target selection, stop/start routing, upgrade and uninstall require further VM walkthrough results. Windows driver/vendor dialogs are still part of some fresh-install paths. Voicemeeter fallback and GC7 hardware behavior have not passed this round.
+The E2E clone had Equalizer APO, VB-Cable and standalone .NET runtime removed, dependencies backed up, and Windows rebooted. The baseline showed only physical endpoints, no APO configuration, no ReaPlugs DLL and no installed .NET runtime. The self-contained EXE installed and launched successfully.
+
+| Scenario | Actual result |
+|---|---|
+| Decline elevation | Passed: reported blocked administrator access and offered retry |
+| Fresh dependency installation | Completed, but VB-Cable, ReaPlugs and HeSuVi vendor prompts remained; not fully automatic |
+| APO selector handoff | Original package reproduced unwanted selector. The subsequent managed-child handoff repair passed without selector interaction; see `selector-handoff-test.txt` |
+| Reboot recovery | Correctly reported restart required; rebooted and subsequent setup completed READY |
+| Round2 replacement | GUI installation and launch passed; final stages no longer showed stale RUNNING rows |
+| Default audio route | SonicPass GUI running on normal SonicScout2.0 cable → physical Speakers, 20 ms setting |
+| Game selection | Black Ops 7 (V0) selected and target saved; **functional qualification failed: curve is not applied** |
+| Headphone correction | AutoEQ 1Custom SA02 downloaded and activated with −6 dB preamp and ten correction filters |
+| Live EQ slider | Passed: GUI +7 dB at 60 Hz appended adjustments and retained all imported filters and preamp; slider returned to neutral afterward |
+| Diagnostics/local ZIP | Passed: window opened, bundle created and inspected; three setup reports, installation transcripts, error/app logs and routing configuration included. Nothing uploaded |
+| Stop/start | STOPPED state displayed; manual start exercised. This alone does not establish audible output |
+| Normal shortcut reopen | Launched without elevation. Reproduced duplicate target tile and lost profile metadata; fixed in subsequent source. Setup reappeared because manual verification was incomplete |
+| GUI uninstall | Completed; executable, public desktop shortcut and Installed Apps entry removed; active user EQ and shared APO configuration retained. Unrelated-file sentinel creation failed without elevation, so that specific preservation case was not exercised |
+| Latest EXE reinstall | GUI reinstall completed and launched; legacy profiles migrated to LocalAppData and paired target sidecar no longer created a second tile |
+| Automatic profile activation | Latest EXE: downloaded 1Custom SA03 activated immediately; correct name/category metadata saved in user data |
+| Profile persistence | Latest EXE normal desktop-shortcut launch restored 1Custom SA03 as active with its correct name/category after closing the incomplete manual verification wizard; no activation click needed. `final-normal-persistence-pass.png`, local routing JSON and committed `profile-metadata.json` provide evidence |
+| Actual physical-output signal | Quiet 1,234 Hz test tone sent to the 8-channel cable. SonicPass stopped: physical loopback silent; running: 838,376 float samples, RMS 0.00469994, peak 0.03362576. This verifies signal reaches the VM's physical endpoint, not sound quality, fidelity, latency or game behavior; see `route-probe-*.txt` |
+
+Further fixes: wait only for the VB installer process rather than its thank-you browser; reconcile final progress; concurrently drain preflight output; include installation reports in diagnostics; prefer 8-channel initial routing. Profiles now live in per-user LocalAppData, legacy originals remain intact during migration, target sidecars are excluded from profile tiles, downloaded profiles activate immediately, and metadata/active selection persist.
+
+The game-target defect is **not fixed** by saving metadata: the label now explicitly says the target is saved, not applied. Correct target processing requires implementation and audio verification.
+
+Evidence in the local QA folder: `continued-profile-added.png`, `continued-diagnostics.png`, `continued-bundle.png`, `continued-stop-slider.png`, `continued-normal-reopen.png`, `continued-uninstall-complete.png`; `evidence-fresh/active-profile-after-gui-slider.txt`, `support-continued-43492b72c0df.zip`, `uninstall-continued-result.json`.
+
+An unexpected guest reboot happened before audio setup executed; no evidence attributes it to the app. Guest scheduling also stalled commands. The attempted live snapshot of the older GUI VM was cancelled and is not a recovery checkpoint.
+
+## Remaining release blockers
+
+1. Game-target curves are saved but not applied. Arbitrarily stacking filters would not establish the intended target calculation.
+2. Fresh setup still requires vendor prompts and opens browsers. Silent dependency installation/extraction needs a clean-machine retest.
+3. Manual verification asks for running SonicPass while the modal setup window prevents starting it. The user must leave the dialog first; this needs a coherent verification flow.
+4. Initial spectrum input may be the physical microphone, independent of game routing. CONNECTED/SIGNAL labels do not prove audible content.
+5. Voicemeeter fallback, Wave Link, GC7, real game output, sound quality, latency and underruns have not passed this round.
+6. APO changes have backups but no automatic transactional rollback. Shared components remain after uninstall and should be explained by its UI.
 
 VirtualBox scheduling stalls prevent a credible assessment of real gaming latency, sound quality or underruns. A running engine and APO gain response do not establish these results. No real game has been installed in the VM.
 
-Known usability findings: `Use profile` currently adds a tile requiring another activation click; the profile picker lists some catalog-only entries without downloadable filters; the Windows verification dialog requires leaving it to start SonicPass; the GUI's connected/signal labels do not prove that a game is sending audible content. Shared drivers and APO configuration remain after application uninstall.
+The latest source removes the extra profile activation click. Catalog-only entries without downloadable filters remain. Installer branding is standard NSIS and the EXE is unsigned, so it remains a development artifact.
 
 ## Evidence and build locations
 
 Local full logs, screenshots, backups and build artifacts: `C:\Users\brand\Documents\SonicScout-GUI-QA-2026-10-13`. Disposable VM accounts and credentials are excluded from the repository.
 
-VMs: `SonicScout-GUI-QA-20261013` for upgrade/automatic-APO verification; `SonicScout-E2E-QA-20261013` for fresh dependency testing. Both are isolated from host audio configuration. The second VM is a linked clone of the original verified installation snapshot and must have dependencies removed before it qualifies as a fresh-install test.
+VMs: `SonicScout-GUI-QA-20261013` for upgrade/automatic-APO verification; `SonicScout-E2E-QA-20261013` for fresh dependency testing. Both are isolated from host audio configuration. The second VM is a linked clone of the original verified installation snapshot; dependencies were removed and the baseline rechecked before the fresh-component run.
+
+Latest unsigned development installer: `C:\Users\brand\Documents\SonicScout-GUI-QA-2026-10-13\final-installer\SonicScout-Setup.exe`, 127,149,559 bytes, SHA256 `2E391630F6C6DB9D4C5550AF0B17CD6D4100E2D328F1F1CEAA346797C3838E19`. Includes the continued-walkthrough fixes above. Earlier Round2 and other installer folders are superseded; no release was published.
 
 Developer build command (NSIS compiler downloaded separately):
 
