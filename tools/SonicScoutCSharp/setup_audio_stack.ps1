@@ -38,15 +38,14 @@ function Test-EqualizerApoEndpointBinding {
         $name = [string]$properties.'{a45c254e-df1c-4efd-8020-67d146a850e0},2'
         if ($name -notmatch '^SonicScout2\.0(?: \+)?$|^CABLE (?:Input|In 16ch)(?:\s|\(|$)|^Hi-Fi Cable Input(?:\s|\(|$)') { continue }
         $matchedCount++
-        $bound = $false
+        $bound = $true
         $effects = Get-ItemProperty (Join-Path $endpoint.PSPath 'FxProperties') -ErrorAction SilentlyContinue
-        foreach ($effect in @($effects.PSObject.Properties | Where-Object Name -notmatch '^PS')) {
-            foreach ($value in @($effect.Value)) {
-                $clsid = [guid]::Empty
-                if (-not [guid]::TryParse([string]$value, [ref]$clsid)) { continue }
-                $server = Get-Item "HKLM:\SOFTWARE\Classes\CLSID\{$clsid}\InprocServer32" -ErrorAction SilentlyContinue
-                if ($server -and [IO.Path]::GetFileName(([string]$server.GetValue('')).Trim('"')) -ieq 'EqualizerAPO.dll') { $bound = $true }
-            }
+        if ($null -eq $effects) { return $false }
+        foreach ($slot in @('{d04e05a6-594b-4fb6-a80d-01af5eed7d1d},1','{d04e05a6-594b-4fb6-a80d-01af5eed7d1d},2')) {
+            $value = $effects.PSObject.Properties[$slot]
+            if ($null -eq $value) { $bound = $false; break }
+            $server = Get-Item "HKLM:\SOFTWARE\Classes\CLSID\$($value.Value)\InprocServer32" -ErrorAction SilentlyContinue
+            if (-not $server -or [IO.Path]::GetFileName(([string]$server.GetValue('')).Trim('"')) -ine 'EqualizerAPO.dll') { $bound = $false; break }
         }
         if (-not $bound) { return $false }
     }
@@ -67,6 +66,18 @@ function Write-Stage {
         detail = $Detail
     }
     $script:Stages.Add($entry)
+    if ($Mode -eq 'Install') {
+        Ensure-LogDirectory
+        $live=Join-Path $script:LogDirectory 'audio-setup-progress.json'
+        $temp=$live+'.tmp'
+        try {
+            [IO.File]::WriteAllText($temp,($entry | ConvertTo-Json))
+            if(Test-Path $live){[IO.File]::Replace($temp,$live,$live+'.previous')}else{[IO.File]::Move($temp,$live)}
+        } catch {
+            # Progress display must never prevent installation or final error reporting.
+            Write-Warning "Live progress could not be updated: $($_.Exception.Message)"
+        }
+    }
 
     if (-not $Quiet) {
         $prefix = "[{0}] {1}" -f $State, $Name
@@ -88,6 +99,13 @@ function Write-DryRunTrace {
         detail = "WOULD $Action : $Detail"
     }
     $script:Stages.Add($entry)
+    if ($Mode -eq 'Install') {
+        Ensure-LogDirectory
+        $live=Join-Path $script:LogDirectory 'audio-setup-progress.json'
+        $temp=$live+'.tmp'
+        [IO.File]::WriteAllText($temp,($entry | ConvertTo-Json))
+        if(Test-Path $live){[IO.File]::Replace($temp,$live,$null)}else{[IO.File]::Move($temp,$live)}
+    }
 
     if (-not $Quiet) {
         Write-Host "[DRYRUN] $Name - WOULD $Action : $Detail"
@@ -117,7 +135,8 @@ function Save-SetupHistory {
 
     $report | ConvertTo-Json -Depth 8 | Set-Content -Path $jsonPath -Encoding UTF8
 
-    Add-Content -Path $historyPath -Value ("`n===== Sonic Scout audio setup run {0} ({1}) =====" -f (Get-Date), $Mode)
+    Add-Content -Path $historyPath -Value ("
+===== Sonic Scout audio setup run {0} ({1}) =====" -f (Get-Date), $Mode)
     foreach ($stage in $script:Stages) {
         Add-Content -Path $historyPath -Value ("[{0}] {1} - {2}" -f $stage.state, $stage.name, $stage.detail)
     }
@@ -776,24 +795,18 @@ if ($readyForTesting -and $Mode -eq 'Install') {
 }
 
 if (-not $DryRun) {
-    if (-not (Test-EqualizerApoEndpointBinding)) {
-        $selector = Join-Path $env:ProgramFiles 'EqualizerAPO\Configurator.exe'
-        $currentSelector = Join-Path $env:ProgramFiles 'EqualizerAPO\DeviceSelector.exe'
-        if (Test-Path -LiteralPath $currentSelector) { $selector = $currentSelector }
-        if ($Mode -eq 'Install' -and (Test-Path -LiteralPath $selector)) {
-            Write-Stage -Name 'Equalizer APO device selection' -State 'RUNNING' -Detail 'Select the SonicScout2.0 playback entries (including + when listed), or CABLE Input / CABLE In 16ch before renaming. Click OK and complete its prompts. Leave unrelated speakers and microphones unchanged.'
-            $selectorProcess = Start-Process -WorkingDirectory (Split-Path $selector -Parent) -FilePath $selector -Wait -PassThru
-            if ($selectorProcess.ExitCode -ne 0) { Write-Stage -Name 'Equalizer APO device selection' -State 'ERROR' -Detail "Device Selector exited with code $($selectorProcess.ExitCode). Repair Equalizer APO and retry installation." }
-            if (Test-EqualizerApoEndpointBinding) { $script:RestartRequired = $true }
-        }
-        if (-not (Test-EqualizerApoEndpointBinding)) {
-            Write-Stage -Name 'Equalizer APO device selection' -State 'UPDATE' -Detail 'Equalizer APO is not attached to the virtual playback endpoint. Run installation again and select CABLE Input / SonicScout2.0 in Device Selector.'
+    if ($Mode -eq 'Install' -and $readyForTesting) {
+        try {
+            . (Join-Path $PSScriptRoot 'apo_automation.ps1')
+            Install-SonicScoutAutomaticApo
+        } catch {
+            Write-Stage -Name 'Automatic audio configuration' -State 'ERROR' -Detail $_.Exception.Message
             $readyForTesting = $false
-        } else {
-            Write-Stage -Name 'Equalizer APO device selection' -State 'READY' -Detail 'Equalizer APO registration on the virtual playback endpoint was verified. Restart Windows before testing audio.'
         }
-    } else {
-        Write-Stage -Name 'Equalizer APO device selection' -State 'READY' -Detail 'Equalizer APO registration on the virtual playback endpoint was verified.'
+    }
+    if (-not (Test-EqualizerApoEndpointBinding)) {
+        Write-Stage -Name 'Equalizer APO registration' -State 'UPDATE' -Detail 'Cable APO registration is incomplete. Run setup to repair automatically.'
+        $readyForTesting = $false
     }
     $requiredFiles = @(
         "${env:ProgramFiles}\VSTPlugins\ReaPlugs\reajs.dll",
@@ -828,7 +841,7 @@ if (-not $DryRun) {
         if (-not $pendingRestart -and $Mode -eq 'Install') { Remove-Item -LiteralPath $script:RestartMarker }
     }
     if ($pendingRestart) {
-        Write-Stage -Name 'Restart Windows' -State 'UPDATE' -Detail 'Drivers were installed. Restart Windows, then run Install-SonicScout.bat again to verify and finish.'
+        Write-Stage -Name 'Restart Windows' -State 'UPDATE' -Detail 'Drivers were installed. Restart Windows, reopen Sonic Scout, and run SETUP again to verify and finish.'
         $readyForTesting = $false
     }
 }
@@ -842,7 +855,7 @@ if ($readyForTesting) {
     }
 }
 else {
-    $detail = if (-not $DryRun -and $pendingRestart) { 'Installation changes are complete. Restart Windows and rerun Install-SonicScout.bat to finish verification.' } else { 'Installation is incomplete. Review the reported items, correct them and retry installation.' }
+    $detail = if (-not $DryRun -and $pendingRestart) { 'Installation changes are complete. Restart Windows, reopen Sonic Scout, and run SETUP again to finish verification.' } else { 'Installation is incomplete. Review the reported items, correct them and retry installation.' }
     Write-Stage -Name 'Final verification' -State 'UPDATE' -Detail $detail
 }
 
@@ -858,8 +871,3 @@ if ($readyForTesting -and (-not $DryRun -or $finalState.AudioServiceRunning)) {
 }
 
 exit 2
-
-
-
-
-

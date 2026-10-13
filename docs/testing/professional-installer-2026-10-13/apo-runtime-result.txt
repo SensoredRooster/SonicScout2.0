@@ -1,0 +1,2 @@
+baselineRms=0.0035251812853278343; reducedRms=0.0008777419107706203; measuredGainDb=-12.076292402651315; expected=-12 dB
+PASS: live APO gain response on 16-channel cable to processed recording endpoint.

@@ -25,6 +25,8 @@
     <None Remove="ScoutPass\**" />
     <None Include="logo.png" Condition="Exists('logo.png')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
     <None Include="setup_audio_stack.ps1" Condition="Exists('setup_audio_stack.ps1')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+    <None Include="apo_automation.ps1" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+    <None Include="..\LEQControlPanel\src\scripts\Modules\LEQ-Engine.ps1" Link="LEQ-Engine.ps1" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
     <None Include="run_audio_stack_setup.bat" Condition="Exists('run_audio_stack_setup.bat')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
     <None Remove="profiles\**" />
     <Content Remove="profiles\**" />

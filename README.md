@@ -28,18 +28,30 @@ Check out [www.github.com/sensoredrooster](https://www.github.com/sensoredrooste
 - Internet access for audio components not already included in the package. The tune library, plugins and Default HRIR files are bundled.
 - **Source checkout only:** install the .NET 8 SDK before building. Published packages include the .NET runtime; destination PCs do not need an SDK or separate runtime.
 
-## Install from this source checkout
+## Install the Windows app
+
+The new installer is a **development build undergoing VM verification**, not yet a public tester release. Build and test details are in `docs/testing/professional-installer-2026-10-13/REPORT.md`.
+
+1. Open `SonicScout-Setup.exe` and accept the Windows permission prompt.
+2. Follow the installation wizard. Leave **Open Sonic Scout and complete audio setup** checked, then choose **Finish**.
+3. In Sonic Scout's setup window, select the physical headphones or speakers you listen through, authorise the audio changes, and choose **Run install setup**.
+4. Sonic Scout registers Equalizer APO on its virtual cable automatically. If a vendor driver window appears, follow its instructions. If setup requests a restart, restart Windows, reopen Sonic Scout from its shortcut, and run **SETUP** again.
+5. Complete **Verify settings** before assigning a game to the virtual cable. Select your headphone profile and confirm SonicPass is running before routing game audio.
+
+Users do not need a terminal, Git, or the .NET SDK. The repository's source ZIP does not contain the built installer. Development builds are currently unsigned. Uninstalling the app preserves user profiles and shared audio components/configuration.
+
+## Build from this source checkout (developers)
 
 1. Run `tools\SonicScoutCSharp\publish_sonic_scout.bat`. It creates a complete Windows x64 package in `Desktop\SonicScout`. An existing package is preserved until publishing succeeds, then kept as a dated backup.
-2. Open that published folder and run `Install-SonicScout.bat`. Accept the Windows administrator prompt and confirm that you want the audio components installed.
-3. Complete any vendor installer dialogs. For Equalizer APO Device Selector, select SonicScout2.0 and SonicScout2.0 + when listed (CABLE Input / CABLE In 16ch before renaming). Leave unrelated microphones and speakers unchecked.
-4. If installation asks for a restart, restart Windows and run `Install-SonicScout.bat` again. The app starts only after installation verification succeeds.
+2. Open `SonicScout.exe` in that folder and complete its setup wizard. Equalizer APO cable registration is automatic.
+3. For a distributable EXE, run `tools/packaging/build_installer.ps1` with a local NSIS compiler, output directory, and optional published payload directory. See the packaging report for the tested command.
+4. If setup requests a restart, restart Windows, reopen Sonic Scout, and retry **SETUP**.
 
 `tools\SonicScoutCSharp\Install-SonicScout.bat` also publishes first when run from source. Developers can use `run_sonic_scout_csharp.bat` to build and launch the app; that path requires the SDK.
 
 ## Install a published package
 
-Extract the **entire** SonicScout package into a writable folder. Keep its library, scripts and installer folders together. Run `Install-SonicScout.bat` there and follow steps 2–4 above. Do not launch an executable from inside a ZIP. No separate .NET installation is needed.
+For an EXE installer, use the Windows app instructions above. For a developer's portable published folder, extract the **entire** package, keep its library/scripts/installers together, and open `SonicScout.exe`. Do not launch from inside a ZIP. No separate .NET installation is needed.
 
 The first-run wizard performs read-only checks and opens when installation is incomplete. Installation failures and cancelled prompts remain incomplete; review the result rows, expand installation choices and retry. Logs from installation are saved under `%LOCALAPPDATA%\SonicScout\logs`.
 
@@ -77,7 +89,7 @@ Most of the chain needs no manual steps. These are all handled for you:
 | Output device selection | Physical endpoints are detected and ranked (headphone/headset > DAC > amp > USB > speaker). Virtual cables are excluded, so a cable never gets auto-selected as "the device you hear" |
 | Third-party mixer detection | Voicemeeter, Elgato Wave Link and Sound Blaster are detected from your endpoints and ticked for you |
 | Driver installs | Known silent switches are used where supported. VB-Audio, Hi-Fi Cable and Equalizer APO may open dialogs; follow the component instructions and restart when requested |
-| Equalizer APO device selection | If Device Selector opens, select both SonicScout2.0 playback entries when listed (CABLE Input / CABLE In 16ch before renaming). Installing files alone does not establish that the audio effects are attached to the playback endpoint |
+| Equalizer APO device selection | The app registers and verifies LFX/GFX on its cable endpoints, configuring the 8-channel loudness chain separately from the 16-channel path. The legacy PowerShell menu still has its own manual flow |
 | SonicPass | Built and shipped with the app. There is no separate "run the bat once" step |
 | Dependencies | Available installers ship with the app. Missing required components are downloaded from vendor sites, with a bounded timeout and validation |
 

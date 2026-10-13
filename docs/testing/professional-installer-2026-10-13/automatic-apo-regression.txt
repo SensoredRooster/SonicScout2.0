@@ -1,0 +1,30 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261013004117
+Username: SONICSCOUT-QA\scouttester
+RunAs User: SONICSCOUT-QA\scouttester
+Configuration Name: 
+Machine: SONICSCOUT-QA (Microsoft Windows NT 10.0.26300.0)
+Host Application: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\QA\test-auto-apo.ps1
+Process ID: 5912
+PSVersion: 5.1.26100.9444
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9444
+BuildVersion: 10.0.26100.9444
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Transcript started, output file is C:\QA\automatic-apo-test.txt
+RUNNING | Equalizer APO registration | Registering LFX/GFX processing on the SonicScout cable.
+READY | Equalizer APO registration | Cable LFX/GFX slots registered and verified.
+RUNNING | Loudness equalization | Configuring the 8-channel cable; the 16-channel path stays separate.
+READY | Loudness equalization | Loudness configuration applied.
+RUNNING | Audio configuration verification | Finalizing APO registration and restarting Windows audio.
+READY | Audio configuration verification | Automatic APO configuration completed; settings were backed up.
+PASS: automatic APO phases completed; physical effects unchanged.
+**********************
+Windows PowerShell transcript end
+End time: 20261013004122
+**********************

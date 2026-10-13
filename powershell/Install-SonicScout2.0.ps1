@@ -5843,6 +5843,8 @@ function Write-InitialConfig {
             $lines += "Include: SonicScout2.0\active-config\boost.txt"
         }
 
+        $lines += ""
+        $lines += "Device: all"
         Set-Content -Path $configFile -Value ($lines -join "`r`n") -Force
 
         $script:ConfigIsPlaceholder = $true

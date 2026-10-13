@@ -24,7 +24,6 @@ try {
     if (Test-Path -LiteralPath $destination) { Move-Item -LiteralPath $destination -Destination $backup }
     try { Move-Item -LiteralPath $stage -Destination $destination }
     catch { if (Test-Path -LiteralPath $backup) { Move-Item -LiteralPath $backup -Destination $destination }; throw }
-    Write-Host "Published to $destination. Run Install-SonicScout.bat there."
+    Write-Host "Published to $destination. Open SonicScout.exe to complete audio setup."
     if (Test-Path $backup) { Write-Host "Previous build preserved at $backup" }
 } catch { Write-Error $_; exit 1 }
-

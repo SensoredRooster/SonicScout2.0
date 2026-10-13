@@ -70,7 +70,7 @@ function Get-ItemProperty { param($Path,$ErrorAction)
         return [pscustomobject]@{'{a45c254e-df1c-4efd-8020-67d146a850e0},2'=$name}
     }
     if($Path -match 'FxProperties$') {
-        if($Path -notmatch 'r16' -or $script:bind16){return [pscustomobject]@{Effect='{11111111-1111-1111-1111-111111111111}'}}
+        if($Path -notmatch 'r16' -or $script:bind16){return [pscustomobject]@{'{d04e05a6-594b-4fb6-a80d-01af5eed7d1d},1'='{11111111-1111-1111-1111-111111111111}';'{d04e05a6-594b-4fb6-a80d-01af5eed7d1d},2'='{11111111-1111-1111-1111-111111111111}'}}
         return [pscustomobject]@{}
     }
     return [pscustomobject]@{DeviceState=1}

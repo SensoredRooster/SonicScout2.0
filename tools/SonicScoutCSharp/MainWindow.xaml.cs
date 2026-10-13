@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json;
 using Path = System.IO.Path;
 using System.Diagnostics;
 using System.ComponentModel;
@@ -1122,7 +1123,7 @@ public partial class MainWindow : Window
                     WindowsLeqToggle.IsChecked = false;
                     routingConfiguration.SonicScoutEngaged = false;
                     RefreshWindowsLeqState();
-                    MessageText.Text = "SonicPass is not built. Run CSharp\\run_scoutpass.bat once.";
+                    MessageText.Text = "The SonicPass component is missing. Reinstall Sonic Scout using SonicScout-Setup.exe.";
                     return;
                 }
 
@@ -1553,7 +1554,7 @@ public partial class MainWindow : Window
 
         if (ResolveSonicPassExecutablePath() is null)
         {
-            MessageText.Text = "SonicPass is not built. Run CSharp\\run_scoutpass.bat once.";
+            MessageText.Text = "The SonicPass component is missing. Reinstall Sonic Scout using SonicScout-Setup.exe.";
             SonicPassStatusText.Text = "NOT BUILT - build SonicPass before starting";
             return;
         }
@@ -1936,12 +1937,12 @@ public partial class MainWindow : Window
 
                 List<string> lines =
                 [
-                    "# Sonic Scout background tuning profile",
+                    "# Sonic Scout routing preferences",
                     $"# Channel alias: {routingConfiguration.SonicScoutAlias}",
                     $"# Physical source: {routingConfiguration.SelectedPhysicalOutputName ?? "Unknown"}",
                     $"# Virtual target: {routingConfiguration.SonicScoutEndpointName ?? "Unavailable"}",
                     $"# Compatibility mode: {(routingConfiguration.HasCompatibilityMixer ? "Third-party mixer protected" : "Direct route")}",
-                    "# Processing mode: proprietary background tuning enabled"
+                    "# Routing metadata only; the active headphone profile supplies EQ."
                 ];
                 File.WriteAllLines(sonicScoutAlgorithmPath, lines);
                 return true;
@@ -2027,21 +2028,45 @@ public partial class MainWindow : Window
                 throw new InvalidOperationException("Setup requires all ownership and apply confirmations before Sonic Scout can configure routing.");
             }
 
-            Report("Script bridge", "RUNNING", "Installing and verifying audio components. Complete the Windows permission prompt and any vendor dialogs.");
-            ScriptExecutionResult? setupAutomationResult = await RunSetupAutomationScriptAsync(request, CancellationToken.None);
+            Report("Audio components", "RUNNING", "Installing and verifying audio components. Accept the Windows permission prompt if requested.");
+            DateTime setupStarted = DateTime.UtcNow;
+            string? previousStage = null;
+            Task<ScriptExecutionResult?> setupTask = RunSetupAutomationScriptAsync(request, CancellationToken.None);
+            while (!setupTask.IsCompleted)
+            {
+                await Task.WhenAny(setupTask, Task.Delay(500));
+                try
+                {
+                    string livePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SonicScout", "logs", "audio-setup-progress.json");
+                    if (File.Exists(livePath))
+                    {
+                        string json = File.ReadAllText(livePath);
+                        using JsonDocument document = JsonDocument.Parse(json);
+                        JsonElement stage = document.RootElement;
+                        if (json != previousStage && stage.GetProperty("timestamp").GetDateTime().ToUniversalTime() >= setupStarted)
+                        {
+                            previousStage = json;
+                            Report(stage.GetProperty("name").GetString()!, stage.GetProperty("state").GetString()!, stage.GetProperty("detail").GetString()!);
+                        }
+                    }
+                }
+                catch (IOException) { }
+                catch (JsonException) { }
+            }
+            ScriptExecutionResult? setupAutomationResult = await setupTask;
             if (setupAutomationResult is null)
             {
-                Report("Script bridge", "UPDATE", "setup_audio_stack.ps1 was not found beside the app. Copy it into the app folder to enable turnkey setup automation.");
+                Report("Audio components", "UPDATE", "Audio setup files are missing. Reinstall Sonic Scout using SonicScout-Setup.exe.");
                 return results;
             }
             else if (setupAutomationResult.State == ScriptExecutionState.Succeeded)
             {
-                Report("Script bridge", "READY", "Installation completed and required assets were verified.");
+                Report("Audio components", "READY", "Installation completed and required assets were verified.");
             }
             else
             {
                 string failure = setupAutomationResult.ErrorMessage ?? "Setup automation script failed.";
-                Report("Script bridge", "UPDATE", $"Installation needs attention. {failure} Review the installation report in %LOCALAPPDATA%\\SonicScout\\logs. If a restart was requested, restart Windows and retry installation.");
+                Report("Audio components", "UPDATE", $"Installation needs attention. {failure} Review the installation report in %LOCALAPPDATA%\\SonicScout\\logs. If a restart was requested, restart Windows and retry installation.");
                 foreach (SetupCheckResult issue in ReadInstallationIssues(setupAutomationResult.StartedAtUtc))
                 {
                     Report(issue.Name, issue.State, issue.Detail);
@@ -2143,12 +2168,12 @@ public partial class MainWindow : Window
             SonicRoutingConfigurationStore.Save(routingConfigurationPath, routingConfiguration);
             Report("Sonic Scout provisioning", provisionResult.Provisioned ? "FIXED" : "UPDATE", provisioningDetail);
 
-            Report("Background tuning", "RUNNING", "Applying Sonic Scout background algorithm profile...");
+            Report("Routing preferences", "RUNNING", "Saving the selected audio route...");
             bool backgroundProfileWritten = await WriteSonicScoutBackgroundProfileAsync();
-            Report("Background tuning", backgroundProfileWritten ? "READY" : "UPDATE",
+            Report("Routing preferences", backgroundProfileWritten ? "READY" : "UPDATE",
                 backgroundProfileWritten
-                    ? $"Background tuning profile written to {sonicScoutAlgorithmPath}."
-                    : "Background tuning profile could not be saved. Routing still falls back safely to physical output.");
+                    ? "Audio route preferences saved."
+                    : "Audio route preferences could not be saved. Retry setup before routing game audio.");
 
             Report("Routing safety", "RUNNING", "Refreshing runtime outputs and applying fallback-safe routing...");
             LoadAudioDevices();
@@ -2170,7 +2195,7 @@ public partial class MainWindow : Window
             Report("Equalizer APO", "RUNNING", "Checking the APO include and repairing it when Windows allows...");
             await Task.Delay(120);
             EnsureApoLink();
-            Report("Equalizer APO", apoLinked ? "READY" : "UPDATE", apoLinked ? "Sonic Scout link is active." : "Run Sonic Scout as administrator once, then run SETUP again.");
+            Report("Equalizer APO", apoLinked ? "READY" : "UPDATE", apoLinked ? "Sonic Scout link is active." : "Run SETUP to repair the Equalizer APO configuration and file access.");
             Report("Live spectrum", "RUNNING", "Restarting loopback capture on the selected output...");
             await Task.Delay(120);
             StartAudioMonitor(OutputDeviceComboBox.SelectedIndex >= 0 && OutputDeviceComboBox.SelectedIndex < outputDeviceReferences.Count ? outputDeviceReferences[OutputDeviceComboBox.SelectedIndex] : null);
@@ -2325,7 +2350,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        string content = File.ReadAllText(sourcePath);
+        string content = EqProfileEdits.Adjustments(File.ReadAllText(sourcePath));
         eqValues.Clear();
         Match preampMatch = Regex.Match(content, @"Preamp:\s*([+-]?\d+(?:\.\d+)?)", RegexOptions.IgnoreCase);
         eqValues["PREAMP"] = preampMatch.Success ? Math.Clamp(double.Parse(preampMatch.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture), -12, 12) : 0;
@@ -2474,14 +2499,10 @@ public partial class MainWindow : Window
 
     private List<string> BuildEqLines()
     {
-        List<string> lines = new();
-        for (int index = 0; index < EqFrequencies.Length; index++)
-        {
-            int frequency = EqFrequencies[index];
-            double gain = eqValues.ContainsKey(frequency.ToString()) ? eqValues[frequency.ToString()] : 0;
-            lines.Add($"Filter {index + 1}: ON PK Fc {frequency} Hz Gain {FormatDb(gain)} Q 1.00");
-        }
-        return lines;
+        string sourcePath = Path.Combine(profilesDirectory, $"{activeProfileId}.txt");
+        string original = File.Exists(sourcePath) ? File.ReadAllText(sourcePath) : string.Empty;
+        return EqProfileEdits.Apply(original, eqValues, EqFrequencies)
+            .Split(new[] { "\r\n", "\n" }, StringSplitOptions.None).ToList();
     }
 
     private void UpdateFilterPreview()
@@ -2514,12 +2535,24 @@ public partial class MainWindow : Window
 
         try
         {
-            bool linked = File.ReadAllLines(apoConfigPath).Any(line => line.Trim().Equals(includeLine, StringComparison.OrdinalIgnoreCase));
-            if (!linked)
+            string managedEq = Path.Combine(Path.GetDirectoryName(apoConfigPath)!, "SonicScout2.0", "active-config", "eq.txt");
+            bool managedChain = File.ReadAllLines(apoConfigPath).Any(line =>
+                line.Trim().Equals(@"Include: SonicScout2.0\active-config\eq.txt", StringComparison.OrdinalIgnoreCase));
+            if (!managedChain)
             {
-                string backupPath = $"{apoConfigPath}.sonicscout-auto-backup-{DateTime.Now:yyyyMMdd-HHmmss}";
-                File.Copy(apoConfigPath, backupPath, overwrite: false);
-                File.AppendAllText(apoConfigPath, Environment.NewLine + includeLine + Environment.NewLine);
+                apoLinked = false;
+                EapoStatus.Text = "SETUP REQUIRED";
+                RefreshProfileApoIndicators();
+                return;
+            }
+            // The shared EQ include is inside both correctly scoped cable chains.
+            // Never append an unscoped profile to the root APO configuration.
+            Directory.CreateDirectory(Path.GetDirectoryName(managedEq)!);
+            string contents = includeLine + Environment.NewLine;
+            if (!File.Exists(managedEq) || File.ReadAllText(managedEq) != contents)
+            {
+                if (File.Exists(managedEq)) File.Copy(managedEq, managedEq + ".sonicscout-backup", overwrite: true);
+                File.WriteAllText(managedEq, contents);
             }
             apoLinked = true;
             EapoStatus.Text = "OK";
@@ -2532,7 +2565,7 @@ public partial class MainWindow : Window
             EapoStatus.Text = "LINK ERROR";
             EapoStatus.Foreground = (WpfBrush)FindResource("ErrorBrush");
             RefreshProfileApoIndicators();
-            MessageText.Text = "Windows denied automatic Equalizer APO setup. Run Sonic Scout once as administrator.";
+            MessageText.Text = "Windows denied access to the managed EQ files. Open SETUP to repair file access.";
         }
         catch (IOException)
         {

@@ -477,6 +477,8 @@ OwnershipConsentCheckBox.IsChecked == true,
 
         SetInstallerInputEnabled(false);
         StepText.Text = "STEP 2 OF 4  |  CHECKING AND INSTALLING AUDIO COMPONENTS";
+        InstallationChoices.IsExpanded = false;
+        InstallationChoices.Header = "Installation choices — setup is running";
         DoneButton.IsEnabled = false;
         BeginSetupButton.IsEnabled = false;
         SetWrappedButtonText(BeginSetupButton, "RUNNING INSTALL SETUP...");
@@ -493,7 +495,7 @@ OwnershipConsentCheckBox.IsChecked == true,
             ActionHintText.Text = problems == 0
                 ? "Great. Click VERIFY SETTINGS, then DONE."
                 : results.Any(result => result.Name == "Restart Windows" && result.State == "UPDATE")
-                ? "Restart Windows, then run Install-SonicScout.bat again to finish installation verification."
+                ? "Restart Windows, reopen Sonic Scout, and run SETUP again to finish verification."
                 : "Review the yellow/red rows, then expand Installation choices to retry. If you declined Windows permission, retry and choose Yes.";
             DoneButton.Content = problems == 0 ? "DONE" : "CLOSE AND REVIEW";
             VerifySettingsButton.IsEnabled = problems == 0;
@@ -603,9 +605,9 @@ OwnershipConsentCheckBox.IsChecked == true,
         }
 
         string key = result.Name.ToLowerInvariant();
-        if (result.State == "RUNNING" && key.Contains("script"))
+        if (result.State == "RUNNING" && key.Contains("audio components"))
         {
-            return "Allow the Windows permission prompt, then complete the vendor dialogs. For VB-Cable, click Install Driver. In Equalizer APO Device Selector, select both SonicScout2.0 playback entries when listed (CABLE Input / CABLE In 16ch before renaming). Restart when requested and rerun installation.";
+            return "Allow the Windows permission prompt. If the VB-Cable installer appears, choose Install Driver. Sonic Scout configures Equalizer APO automatically. Restart Windows only when setup requests it, then reopen Sonic Scout and retry SETUP.";
         }
         return key switch
         {
@@ -639,4 +641,3 @@ OwnershipConsentCheckBox.IsChecked == true,
         }
     }
 }
-
