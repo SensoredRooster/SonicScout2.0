@@ -28,3 +28,11 @@ The screenshot error matches `errors.jsonl` and `wizard-crash.log`: `TryRefreshS
 Correction: stop SonicPass and loopback monitoring before invoking installation automation, suspend spectrum ticks and audio starts during configuration, and resume normal runtime initialization only after successful automation. Always release the configuration guard on completion/failure. Meter reads contain only the two observed transient COM error codes, rather than turning these expected endpoint invalidations into global dialogs.
 
 Validation: Release build passes with zero warnings/errors; Windows PowerShell installation regressions pass. Replacement EXE runtime qualification is still pending. The Desktop installer does not yet contain this correction. Distribution remains ON HOLD, and physical audio quality/latency remain unqualified.
+
+## Packaged restart correction qualification
+
+Rebuilt installer from source `6cdb81e`: SHA256 `9842DF7A5A672A59ECE730F19961CDFEBECDE0D1496713C2736F074B42E6BB96`. Installed it over the prior app in SonicScout-E2E-QA-20261013. Installed DLL SHA256 matches payload: `DF3881FA5DDB3F714ED77DFB98C125B809E104D6610487F724D40D12F8BBB064`.
+
+Started SETUP through the GUI while SonicPass was running. Routing stopped before configuration. Automatic APO LFX/GFX registration, loudness configuration and final verification completed READY; the app refreshed monitoring and automatically restarted SonicPass. At 14:44 guest time Audiosrv was Running, the new SonicPass process was alive, and no errors.jsonl existed. The saved profile and 50 ms / -3 dB / -6 dB preferences survived the upgrade. This is a targeted upgrade/repeated-setup regression, not a new clean-machine qualification or physical audio-quality/latency measurement.
+
+Evidence is in `evidence/restart-fix-*`. Full local artifacts and original physical logs are retained under `C:\Users\brand\Documents\SonicScout-Restart-Fix-20261014`. Corrected installer delivered separately at `C:\Users\brand\OneDrive\Desktop\SonicScout-Fix-2026-10-14\SonicScout-Setup.exe`. Old Desktop tester package remains on hold. Owner physical validation is still required before distribution.
