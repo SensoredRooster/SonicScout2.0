@@ -1,0 +1,10 @@
+{
+    "os":  "Microsoft Windows NT 10.0.26300.0",
+    "apo":  false,
+    "reaplugs":  false,
+    "app":  false,
+    "devices":  [
+                    "Microphone (High Definition Audio Device)",
+                    "Speakers (High Definition Audio Device)"
+                ]
+}

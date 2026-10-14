@@ -23,7 +23,7 @@ Set-Content $scriptPath $source -Encoding UTF8
 $fakeProgramFiles=Join-Path $testRoot 'ProgramFiles'
 $fakeLogs=Join-Path $testRoot 'LocalAppData'
 $fakeProgramData=Join-Path $testRoot 'ProgramData'
-$files=@('VSTPlugins\ReaPlugs\reajs.dll','VSTPlugins\ReaPlugs\reaeq.dll','VSTPlugins\ReaPlugs\reacomp.dll','VSTPlugins\ReaPlugs\reagate.dll','VSTPlugins\ReaPlugs\readelay.dll','VSTPlugins\ReaPlugs\JS\Effects\SonicScout2.0\ss_spatial_engine.jsfx','VSTPlugins\SonicScout2.0\ss_spatial_engine_bravo_v2_0_0.dll','EqualizerAPO\config\HeSuVi\hesuvi.txt','EqualizerAPO\config\HeSuVi\conv.txt','EqualizerAPO\config\HeSuVi\hrir\EAC_Default.wav','EqualizerAPO\config\SonicScout2.0\library\version.txt','EqualizerAPO\config\config.txt')
+$files=@('VSTPlugins\ReaPlugs\reajs.dll','VSTPlugins\ReaPlugs\reaeq.dll','VSTPlugins\ReaPlugs\reacomp.dll','VSTPlugins\ReaPlugs\reagate.dll','VSTPlugins\ReaPlugs\readelay.dll','VSTPlugins\ReaPlugs\JS\Effects\SonicScout2.0\ss_spatial_engine.jsfx','VSTPlugins\SonicScout2.0\ss_spatial_engine_bravo_v2_0_0.dll','EqualizerAPO\config\SonicScout2.0\HeSuVi\hesuvi.txt','EqualizerAPO\config\SonicScout2.0\HeSuVi\conv.txt','EqualizerAPO\config\SonicScout2.0\HeSuVi\hrir\EAC_Default.wav','EqualizerAPO\config\SonicScout2.0\library\version.txt','EqualizerAPO\config\config.txt')
 foreach ($file in $files) {
     $path=Join-Path $fakeProgramFiles $file
     New-Item (Split-Path $path -Parent) -ItemType Directory -Force | Out-Null

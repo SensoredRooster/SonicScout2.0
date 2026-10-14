@@ -427,6 +427,37 @@ function Invoke-InstallerStage {
         return $false
     }
 
+    if (-not $DryRun -and $StageName -in @('HeSuVi','ReaPlugs')) {
+        $extractor=Join-Path $script:ScriptRootPath 'tools\archive\7z.exe'
+        if (-not(Test-Path $extractor)) { Write-Stage $StageName 'ERROR' 'This application package is missing its extraction tool. Reinstall Sonic Scout.'; return $false }
+        $expectedHash=if($StageName -eq 'HeSuVi'){'A31774714D8F7A87AE4FD5BDBAA4BFA294A808296BDCC9E9935DA4B427A601BA'}else{'1654F1F78D746FC87A6F6D078A8F928EA61C7B49997B1F2C07DFC870F8FA6C10'}
+        if((Get-FileHash $installer.FullName -Algorithm SHA256).Hash -ne $expectedHash) { Write-Stage $StageName 'ERROR' 'The vendor package does not match the verified version. Re-download the original package.'; return $false }
+        Write-Stage $StageName 'RUNNING' 'Installing verified audio component files automatically...'
+        $staging=Join-Path $env:LOCALAPPDATA ('SonicScout\component-staging\'+[guid]::NewGuid().ToString('N'))
+        New-Item $staging -ItemType Directory -Force | Out-Null
+        $extractLog=Join-Path $staging 'extract.log'
+        $worker=Start-Process -FilePath $extractor -ArgumentList @('x',('"'+$installer.FullName+'"'),('-o"'+$staging+'"'),'-y') -WindowStyle Hidden -RedirectStandardOutput $extractLog -RedirectStandardError (Join-Path $staging 'extract-errors.log') -Wait -PassThru
+        if($worker.ExitCode -ne 0){Write-Stage $StageName 'ERROR' "Component extraction failed. See $extractLog";return $false}
+        if($StageName -eq 'HeSuVi'){
+            $source=Join-Path $staging 'HeSuVi'
+            if(-not(Test-Path (Join-Path $source 'hesuvi.txt')) -or -not(Test-Path (Join-Path $source 'HeSuVi.exe'))){Write-Stage $StageName 'ERROR' 'HeSuVi package is incomplete.';return $false}
+            $destination=Join-Path $env:ProgramFiles 'EqualizerAPO\config\SonicScout2.0\HeSuVi'
+        }else{
+            $source=$staging
+            if(-not(Test-Path (Join-Path $source 'reaxcomp-standalone.dll')) -or -not(Test-Path (Join-Path $source 'reaplugs_readme.txt'))){Write-Stage $StageName 'ERROR' 'ReaPlugs package is incomplete.';return $false}
+            $destination=Join-Path $env:ProgramFiles 'VSTPlugins\ReaPlugs'
+        }
+        New-Item $destination -ItemType Directory -Force | Out-Null
+        Copy-Item (Join-Path $source '*') $destination -Recurse -Force
+        if($StageName -eq 'HeSuVi'){
+            Copy-Item (Join-Path $script:ScriptRootPath 'hrir\*') (Join-Path $destination 'hrir') -Recurse -Force
+            $initializer=Start-Process -FilePath (Join-Path $destination 'HeSuVi.exe') -WorkingDirectory $destination -ArgumentList @('-v','EAC_Default.wav','-d','0','-m','0') -WindowStyle Hidden -Wait -PassThru
+            if($initializer.ExitCode -ne 0){Write-Stage $StageName 'ERROR' 'Surround configuration initialization failed.';return $false}
+        }
+        if(& $IsInstalled){Write-Stage $StageName 'FIXED' 'Audio component installed and verified without vendor dialogs.';return $true}
+        Write-Stage $StageName 'ERROR' 'Component files were copied but verification failed.';return $false
+    }
+
     # Best-effort silent arguments, so a fresh install is not a chain of third-party
     # GUI click-throughs.
     #
@@ -481,7 +512,7 @@ function Invoke-InstallerStage {
             $arguments = "/i `"$($installer.FullName)`" /passive /norestart"
             Write-DryRunTrace -Name $StageName -Action 'install' -Detail "Would launch msiexec.exe $arguments."
         }
-        elseif ($isVBAudio) {
+        elseif ($isVBAudio -or $StageName -like 'VB-Cable*') {
             Write-DryRunTrace -Name $StageName -Action 'install interactively' -Detail "Would launch $($installer.FullName). VB-Audio has no reliable silent mode; its modal consent must be clicked."
         }
         else {
@@ -528,19 +559,12 @@ function Invoke-InstallerStage {
         elseif ($StageName -eq 'HeSuVi') {
             # Start-Process -Wait also waits for the GUI/browser descendants.
             # Wait for extraction itself; verify the actual installed files below.
-            $process = Start-Process -WorkingDirectory $installer.DirectoryName -FilePath $installer.FullName -PassThru
+            $process = Start-Process -WorkingDirectory $installer.DirectoryName -FilePath $installer.FullName -ArgumentList @('-i','-h') -WindowStyle Hidden -PassThru
             $process.WaitForExit()
         }
-        elseif ($isVBAudio) {
-            Write-Stage -Name $StageName -State 'RUNNING' -Detail @"
-VB-Audio driver pack needs one confirmation from you.
-  1. A 'VBCABLE driver setup' window will appear. Read the notice.
-  2. Click 'Install Driver'.
-  3. If Windows asks to allow changes, choose Yes.
-  4. Wait for 'Installation complete', then close the window.
-Other components may open their own dialogs. Complete each prompt and restart Windows after driver installation.
-"@
-            $process = Start-Process -WorkingDirectory $installer.DirectoryName -FilePath $installer.FullName -PassThru
+        elseif ($isVBAudio -or $StageName -like 'VB-Cable*') {
+            Write-Stage -Name $StageName -State 'RUNNING' -Detail 'Installing the VB-Audio driver automatically. Allow a Windows driver permission prompt if one appears.'
+            $process = Start-Process -WorkingDirectory $installer.DirectoryName -FilePath $installer.FullName -ArgumentList @('-i','-h') -WindowStyle Hidden -PassThru
             # Wait for the driver installer itself, not its thank-you browser tab.
             $process.WaitForExit()
         }
@@ -737,7 +761,7 @@ if (-not $((Get-ChildItem "${env:ProgramFiles}\VSTPlugins\ReaPlugs\*.dll" -Error
 }
 
 [void](Invoke-InstallerStage -StageName 'HeSuVi' `
-    -IsInstalled { (Test-Path "${env:ProgramFiles}\EqualizerAPO\config\HeSuVi\hesuvi.txt") -and (Test-Path "${env:ProgramFiles}\EqualizerAPO\config\HeSuVi\conv.txt") } `
+    -IsInstalled { (Test-Path "${env:ProgramFiles}\EqualizerAPO\config\SonicScout2.0\HeSuVi\hesuvi.txt") -and (Test-Path "${env:ProgramFiles}\EqualizerAPO\config\SonicScout2.0\HeSuVi\conv.txt") } `
     -InstallerPatterns @('HeSuVi*.exe') -MissingDetail 'HeSuVi is not installed.' -DownloadComponent '/hesuvi')
 
 $finalState = Get-SystemState
@@ -802,6 +826,10 @@ if ($readyForTesting -and $Mode -eq 'Install') {
                 return $true
             }
             if (-not $configurationOk) { throw 'Configuration did not complete.' }
+            $rootConfig=Join-Path $env:ProgramFiles 'EqualizerAPO\config\config.txt'
+            $text=[IO.File]::ReadAllText($rootConfig)
+            $scoped=[regex]::Replace($text,'(?m)(^Include: SonicScout2\.0\\active-config\\prehesuvi\.txt\r?\n)Include: HeSuVi\\hesuvi\.txt','$1Include: SonicScout2.0\HeSuVi\hesuvi.txt')
+            if($scoped -ne $text){Copy-Item $rootConfig ($rootConfig+'.before-scoped-hesuvi') -Force; [IO.File]::WriteAllText($rootConfig,$scoped)}
             Write-Stage -Name 'APO Configuration' -State 'READY' -Detail 'Bundled library, plugins, HRIR and managed configuration verified.'
         } catch {
             Write-Stage -Name 'APO Configuration' -State 'ERROR' -Detail $_.Exception.Message
@@ -828,9 +856,9 @@ if (-not $DryRun) {
         "${env:ProgramFiles}\VSTPlugins\ReaPlugs\reajs.dll",
         "${env:ProgramFiles}\VSTPlugins\ReaPlugs\JS\Effects\SonicScout2.0\ss_spatial_engine.jsfx",
         "${env:ProgramFiles}\VSTPlugins\SonicScout2.0\ss_spatial_engine_bravo_v2_0_0.dll",
-        "${env:ProgramFiles}\EqualizerAPO\config\HeSuVi\hesuvi.txt",
-        "${env:ProgramFiles}\EqualizerAPO\config\HeSuVi\conv.txt",
-        "${env:ProgramFiles}\EqualizerAPO\config\HeSuVi\hrir\EAC_Default.wav",
+        "${env:ProgramFiles}\EqualizerAPO\config\SonicScout2.0\HeSuVi\hesuvi.txt",
+        "${env:ProgramFiles}\EqualizerAPO\config\SonicScout2.0\HeSuVi\conv.txt",
+        "${env:ProgramFiles}\EqualizerAPO\config\SonicScout2.0\HeSuVi\hrir\EAC_Default.wav",
         "${env:ProgramFiles}\EqualizerAPO\config\SonicScout2.0\library\version.txt"
     )
     foreach ($file in $requiredFiles) {

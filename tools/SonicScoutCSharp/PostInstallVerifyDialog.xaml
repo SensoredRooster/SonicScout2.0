@@ -19,7 +19,7 @@
             <Grid MouseLeftButtonDown="Header_MouseLeftButtonDown">
                 <StackPanel>
                     <TextBlock Text="VERIFY YOUR SETTINGS" Foreground="{DynamicResource PopupTextBrush}" FontSize="18" FontWeight="Bold" />
-                    <TextBlock Text="These settings can't be checked automatically. Confirm each one in Windows, then mark it done."
+                    <TextBlock Text="Playback volume and the running route are checked automatically. Confirm Spatial Sound is off for the Sonic Scout cable and your physical output."
                                Foreground="{DynamicResource PopupTextBrush}" Opacity="0.9" FontSize="12" Margin="0,5,0,0" TextWrapping="Wrap" />
                 </StackPanel>
                 <Button Content="×" Width="30" Height="28" Padding="0" FontSize="16" HorizontalAlignment="Right" Click="CloseButton_Click" ToolTip="Close" />

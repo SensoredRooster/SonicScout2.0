@@ -312,56 +312,13 @@ OwnershipConsentCheckBox.IsChecked == true,
 
     private void AppendRemainingManualSteps(bool allChecksPassed)
     {
-        (string Title, string Steps)[] manual =
-        {
-            ("Restart Windows",
-                "1. Save your work and click Start > Power > Restart.\n" +
-                "2. Wait for Windows to finish. Driver and audio changes are not live until after this.\n" +
-                "3. Reopen Sonic Scout. Nothing else is needed - it remembers your choices."),
-
-            ("Leave your default playback device alone",
-                "1. Do NOT change your Windows default output. Leave it on your Realtek (or other\n" +
-                "   physical) device - Sonic Scout is designed to work with that unchanged.\n" +
-                "2. Games and apps join Sonic Scout individually, via the step below.\n" +
-                "Changing the system default here is not needed and will not improve the sound."),
-
-            ("Turn Spatial Sound off for that device",
-                "1. Still in Sound Settings, click your Sonic Scout device to open it.\n" +
-                "2. Under Spatial sound, set it to Off.\n" +
-                "3. Do the same for the device you will actually be playing through.\n" +
-                "Windows Sonic / Dolby Atmos / DTS:X silently block Equalizer APO when left on, and the " +
-                "equalizer will appear to do nothing."),
-
-            ("Point each game or app at the virtual input",
-                "1. In each game or app's audio settings, choose the Sonic Scout VIRTUAL INPUT as its output.\n" +
-                "2. Do NOT change your Windows default device for this - only the per-app setting.\n" +
-                "3. If a game has no output selector, Windows routing (Settings > System > Sound > " +
-                "Advanced sound settings > App volume and device preferences) works instead.\n" +
-                "This is per-app by design: Sonic Scout receives the app's audio, applies your tune, " +
-                "and passes it to your speakers. Leave the app on your speakers and it bypasses the tune."),
-        };
-
-        for (int i = 0; i < manual.Length; i++)
-        {
-            CheckList.Items.Add(CreateRow(new SetupCheckResult(
-                $"MANUAL STEP {i + 1} of {manual.Length}: {manual[i].Title}",
-                "READY",
-                manual[i].Steps)));
-        }
-
-        CheckList.Items.Add(CreateRow(new SetupCheckResult(
-            "Everything else was automatic",
-            allChecksPassed ? "READY" : "UPDATE",
-            allChecksPassed
-                ? "Drivers, routing, the equalizer, the tuned channel and SonicPass were all configured " +
-                  "for you. Only the steps above need you."
-                : "Some automatic steps did not complete - see the yellow and red rows above. Fix " +
-                  "those first, then rerun setup before doing the manual steps.")));
-
-        SummaryText.Text = "Setup finished.";
-        ActionHintText.Text = "Follow the numbered MANUAL STEP rows below, then click VERIFY SETTINGS.";
+        CheckList.Items.Add(CreateRow(new SetupCheckResult("NEXT: Choose your headphone profile", "INFO",
+            "Click DONE, then select your headphone/IEM profile. Select a game target to calculate a tune for that measured headphone. The generated tune is saved locally.")));
+        CheckList.Items.Add(CreateRow(new SetupCheckResult("NEXT: Route your game", "INFO",
+            "In the game audio settings choose the Sonic Scout VIRTUAL INPUT shown in the main window. Keep your Windows default output on your normal speakers/headphones. If SonicPass stops, switch the game back to that physical output.")));
+        SummaryText.Text = "Setup complete. The audio route is running.";
+        ActionHintText.Text = "Click VERIFY SETTINGS for output checks, or DONE to choose a profile and route your game.";
     }
-
     private string GetSelectedSetupStyle()
     {
         if (SetupStyleComboBox.SelectedItem is ComboBoxItem selectedStyle &&

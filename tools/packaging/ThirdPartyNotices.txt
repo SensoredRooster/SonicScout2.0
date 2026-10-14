@@ -1,0 +1,25 @@
+Sonic Scout third-party components
+
+7-Zip: Copyright Igor Pavlov. Unmodified 7z.exe and 7z.dll are included for
+extracting vendor packages without launching their interactive installers.
+7-Zip is licensed under the GNU LGPL, with additional BSD/unRAR terms detailed
+in tools/archive/License.txt. Source: https://www.7-zip.org/ and
+https://github.com/ip7z/7zip. No 7-Zip installation is required on the tester PC.
+
+VB-CABLE / Hi-Fi Cable: VB-Audio Software donationware. Driver packages and
+their original notices are retained. https://vb-audio.com/Cable/
+
+Equalizer APO and HeSuVi: GPL software. Original packages retain their notices.
+https://sourceforge.net/projects/equalizerapo/
+https://sourceforge.net/projects/hesuvi/
+
+ReaPlugs: Copyright Cockos Incorporated. Not bundled or redistributed.
+Setup downloads the original installer directly from https://www.reaper.fm/reaplugs/
+and extracts it locally. Installation/use is subject to its vendor license,
+retained as reaplugs_readme.txt. https://www.reaper.fm/reaplugs/
+
+AutoEq: https://github.com/jaakkopasanen/AutoEq
+Selecting a game target requests headphone measurement compensation from
+https://autoeq.app/ using the selected public headphone model and bundled game
+target. No account, audio recording, diagnostics or other personal files are sent.
+Generated EQ is saved locally and plays without an internet connection.

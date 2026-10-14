@@ -101,11 +101,15 @@ public partial class PostInstallVerifyDialog : Window
     ];
 
     private readonly List<WpfCheckBox> itemCheckBoxes = new();
+    private readonly bool engineRunning;
+    private readonly string? physicalOutputId;
 
     public bool AllConfirmed { get; private set; }
 
-    public PostInstallVerifyDialog()
+    public PostInstallVerifyDialog(bool engineRunning = false, string? physicalOutputId = null)
     {
+        this.engineRunning = engineRunning;
+        this.physicalOutputId = physicalOutputId;
         InitializeComponent();
         UpdateSummary();
         Loaded += BuildChecklistWhenLoaded;
@@ -140,6 +144,8 @@ public partial class PostInstallVerifyDialog : Window
                 FontWeight = FontWeights.SemiBold,
                 Foreground = ResolveBrush("PopupTextBrush", Colors.WhiteSmoke),
             };
+            if (i == 0 || i == 2) { checkBox.IsChecked = probes[i].State == "READY"; checkBox.IsEnabled = false; }
+            if (i == 3) { checkBox.IsChecked = engineRunning; checkBox.IsEnabled = false; }
             checkBox.Checked += (_, _) => UpdateSummary();
             checkBox.Unchecked += (_, _) => UpdateSummary();
 
@@ -178,7 +184,7 @@ public partial class PostInstallVerifyDialog : Window
         }
     }
 
-    private static VerificationResult[] RunMachineProbes()
+    private VerificationResult[] RunMachineProbes()
     {
         VerificationResult[] results = new VerificationResult[3];
 
@@ -191,7 +197,7 @@ public partial class PostInstallVerifyDialog : Window
                 ? new VerificationResult(Items[0].Question, "UPDATE", "Windows has no default multimedia render device.")
                 : new VerificationResult(
                     Items[0].Question,
-                    "READY",
+                    defaultOutput.FriendlyName.Contains("VB-Audio", StringComparison.OrdinalIgnoreCase) || defaultOutput.FriendlyName.Contains("SonicScout", StringComparison.OrdinalIgnoreCase) ? "UPDATE" : "READY",
                     $"Default is '{defaultOutput.FriendlyName}'. Leave it on your physical device; Sonic Scout is per-app.");
         }
         catch (Exception exception)
@@ -203,8 +209,8 @@ public partial class PostInstallVerifyDialog : Window
         try
         {
             using var enumerator = new MMDeviceEnumerator();
-            MMDevice? defaultOutput = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
-            string spatial = defaultOutput == null ? "UNKNOWN" : WindowsSpatialSoundProbe.Probe(defaultOutput.ID);
+            MMDevice? defaultOutput = physicalOutputId is null ? enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia) : enumerator.GetDevice(physicalOutputId);
+            string spatial = "UNKNOWN"; // Do not infer one device's state from other devices' registry keys.
             results[1] = spatial == "OFF"
                 ? new VerificationResult(Items[1].Question, "READY", "Spatial Sound is off for the default device.")
                 : spatial == "ON"
@@ -220,7 +226,7 @@ public partial class PostInstallVerifyDialog : Window
         try
         {
             using var enumerator = new MMDeviceEnumerator();
-            MMDevice? defaultOutput = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+            MMDevice? defaultOutput = physicalOutputId is null ? enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia) : enumerator.GetDevice(physicalOutputId);
             if (defaultOutput == null)
             {
                 results[2] = new VerificationResult(Items[2].Question, "UPDATE", "Windows has no default multimedia render device.");

@@ -21,11 +21,13 @@ VIAddVersionKey "LegalCopyright" "Sonic Scout contributors"
 !define MUI_WELCOMEPAGE_TEXT "This installs Sonic Scout and its audio setup wizard.$\r$\n$\r$\nAfter installation, choose your headphones or speakers in the app. Sonic Scout will guide audio component installation and configure Equalizer APO automatically.$\r$\n$\r$\nWindows may request permission to install audio drivers."
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "${LICENSE}"
+!insertmacro MUI_PAGE_LICENSE "${PAYLOAD}\ThirdPartyNotices.txt"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_FINISHPAGE_RUN "$INSTDIR\SonicScout.exe"
 !define MUI_FINISHPAGE_RUN_TEXT "Open Sonic Scout and complete audio setup"
 !insertmacro MUI_PAGE_FINISH
+!define MUI_UNCONFIRMPAGE_TEXT_TOP "This removes the Sonic Scout application and shortcuts. Your profiles and shared Equalizer APO / VB-Cable components remain.$\r$\n$\r$\nBefore uninstalling, select your physical headphones or speakers in any game routed through Sonic Scout."
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"

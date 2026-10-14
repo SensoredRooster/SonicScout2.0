@@ -65,6 +65,44 @@ function Set-SonicScoutApoSlots {
     }
 }
 
+function Get-SonicScoutRegistrySnapshot {
+    param([string]$Path)
+    $exists=Test-Path $Path
+    $values=@()
+    if($exists){
+        $key=Get-Item $Path
+        foreach($name in $key.GetValueNames()){
+            $value=$key.GetValue($name,$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+            $kind=$key.GetValueKind($name)
+            $data=switch($kind){
+                'String' {[Text.Encoding]::Unicode.GetBytes([string]$value+[char]0)}
+                'ExpandString' {[Text.Encoding]::Unicode.GetBytes([string]$value+[char]0)}
+                'MultiString' {[Text.Encoding]::Unicode.GetBytes((([string[]]$value)-join [char]0)+[char]0+[char]0)}
+                'DWord' {[BitConverter]::GetBytes([int]$value)}
+                'QWord' {[BitConverter]::GetBytes([long]$value)}
+                'Binary' {[byte[]]$value}
+                default {throw "Unsupported registry value kind $kind; stopped before changing audio."}
+            }
+            $values+=@{Name=$name;Type=[uint32]$kind;Data=[byte[]]$data}
+        }
+    }
+    [pscustomobject]@{Path=$Path;Exists=$exists;Values=$values}
+}
+
+function Restore-SonicScoutRegistrySnapshot {
+    param($Snapshot)
+    $path=$Snapshot.Path
+    if($path -notmatch '^HKLM:\\SOFTWARE\\(?:Microsoft\\Windows\\CurrentVersion\\MMDevices\\Audio\\Render\\\{[0-9a-f-]+\}\\(?:FxProperties|Properties)|EqualizerAPO\\Child APOs\\\{[0-9a-f-]+\})$') {throw 'Refused an unexpected audio rollback path.'}
+    if(-not(Test-Path $path)){New-Item $path -Force -ErrorAction Stop | Out-Null}
+    $subkey=$path -replace '^HKLM:\\',''
+    $originalNames=@($Snapshot.Values | ForEach-Object {$_.Name})
+    foreach($name in (Get-Item $path).GetValueNames()){
+        if($name -notin $originalNames){[AIWRegHelper]::DeleteValue($subkey,$name) | Out-Null}
+    }
+    if($Snapshot.Values.Count -gt 0 -and -not(Write-RegistryValues -Path $path -Values $Snapshot.Values)){throw "Audio rollback could not restore $path"}
+    if(-not $Snapshot.Exists -and $path -like '*\Child APOs\*'){Remove-Item -LiteralPath $path -ErrorAction Stop}
+}
+
 function Install-SonicScoutAutomaticApo {
     $engine=Join-Path $PSScriptRoot 'LEQ-Engine.ps1'
     if (-not (Test-Path $engine)) { throw 'The audio setup package is incomplete: LEQ engine is missing.' }
@@ -81,6 +119,13 @@ function Install-SonicScoutAutomaticApo {
             & reg.exe export $regPath (Join-Path $backup ($target.Guid+'.reg')) /y | Out-Null
             if ($LASTEXITCODE -ne 0) { throw 'Could not back up audio settings; setup stopped before making changes.' }
         }
+        $snapshots=@(foreach($target in $targets){
+            Get-SonicScoutRegistrySnapshot (Join-Path $target.Path 'FxProperties')
+            Get-SonicScoutRegistrySnapshot (Join-Path $target.Path 'Properties')
+            Get-SonicScoutRegistrySnapshot "HKLM:\SOFTWARE\EqualizerAPO\Child APOs\$($target.Guid)"
+        })
+        $snapshots | Export-Clixml (Join-Path $backup 'rollback-snapshots.xml')
+        try {
         Write-Stage 'Equalizer APO registration' 'RUNNING' 'Registering LFX/GFX processing on the SonicScout cable.'
         foreach($target in $targets) { Set-SonicScoutApoSlots $target }
         Restart-Service Audiosrv -Force -ErrorAction Stop
@@ -97,6 +142,12 @@ function Install-SonicScoutAutomaticApo {
         Write-Stage 'Audio configuration verification' 'RUNNING' 'Finalizing APO registration and restarting Windows audio.'
         foreach($target in $targets) { Set-SonicScoutApoSlots $target -ChainLeq:(-not $target.Is16) }
         Restart-Service Audiosrv -Force -ErrorAction Stop
+        $privateHeSuvi=Join-Path $env:ProgramFiles 'EqualizerAPO\config\SonicScout2.0\HeSuVi'
+        if(Test-Path (Join-Path $privateHeSuvi 'HeSuVi.exe')){
+            $ids=(@($targets | Where-Object {-not $_.Is16} | ForEach-Object {$_.Guid.Trim('{}')})) -join ';'
+            $init=Start-Process -FilePath (Join-Path $privateHeSuvi 'HeSuVi.exe') -WorkingDirectory $privateHeSuvi -ArgumentList @('-v','EAC_Default.wav','-l',$ids,'-d','0','-m','0') -WindowStyle Hidden -Wait -PassThru
+            if($init.ExitCode -ne 0 -or -not(Test-Path (Join-Path $privateHeSuvi 'conv.txt'))){throw 'Private surround configuration failed.'}
+        }
         $config=Join-Path $env:ProgramFiles 'EqualizerAPO\config\config.txt'
         $legacyProfile=Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'HAudioApp\active_profile.txt'
         if(Test-Path $config) {
@@ -116,5 +167,18 @@ function Install-SonicScoutAutomaticApo {
             Set-Acl $managed $acl
         }
         Write-Stage 'Audio configuration verification' 'READY' 'Automatic APO configuration completed; settings were backed up.'
+        } catch {
+            $failure=$_.Exception.Message
+            try {
+                foreach($snapshot in $snapshots){Restore-SonicScoutRegistrySnapshot $snapshot}
+                $savedConfig=Join-Path $backup 'config-before-profile-repair.txt'
+                if(Test-Path $savedConfig){Copy-Item $savedConfig (Join-Path $env:ProgramFiles 'EqualizerAPO\config\config.txt') -Force}
+                Restart-Service Audiosrv -Force -ErrorAction Stop
+                Write-Stage 'Audio rollback' 'READY' 'Prior cable effect values restored after a failed configuration. Audio setup can be retried.'
+            } catch {
+                Write-Stage 'Audio rollback' 'ERROR' "Automatic recovery failed. Backups are in $backup. $($_.Exception.Message)"
+            }
+            throw $failure
+        }
     }
 }

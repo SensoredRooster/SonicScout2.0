@@ -121,7 +121,7 @@
                                       Margin="0,0,0,5"
                                       Checked="ConsentCheckBox_Changed"
                                       Unchecked="ConsentCheckBox_Changed">
-                                <TextBlock TextWrapping="Wrap">I confirm this is my own system, and I authorise Sonic Scout to install audio drivers, configure the audio route, activate the Sonic Scout tuned channel with safe fallback to my physical output, and add VB-Cable / Voicemeeter if no compatible route is available."</TextBlock>
+                                <TextBlock TextWrapping="Wrap">I authorise Sonic Scout to install its audio components and configure the virtual cable on this system. My Windows default output stays unchanged. If routing stops, I can restore sound by selecting my physical output in the game.</TextBlock>
                             </CheckBox>
                         </StackPanel>
                     </Border>

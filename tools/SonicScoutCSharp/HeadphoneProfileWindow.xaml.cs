@@ -52,6 +52,7 @@ public partial class HeadphoneProfileWindow : Window
 
     private readonly List<HeadphoneProfileOption> allProfiles = new();
     private readonly List<HeadphoneProfileOption> visibleProfiles = new();
+    private bool profileRequestRunning;
 
     public string ProfileName { get; private set; } = string.Empty;
     public string Category { get; private set; } = string.Empty;
@@ -570,7 +571,7 @@ public partial class HeadphoneProfileWindow : Window
                 Score = ComputeMatchScore(profile, modelTokens, normalizedModelQuery),
                 SourcePriority = profile.Source.StartsWith(SonicScoutSource, StringComparison.OrdinalIgnoreCase) ? 2 : 1
             })
-            .Where(item => item.Score >= 0)
+            .Where(item => item.Score >= 0 && (!string.IsNullOrWhiteSpace(item.Profile.FilterUrl) || !string.IsNullOrWhiteSpace(item.Profile.InlineFilterContent)))
             .OrderByDescending(item => item.Score)
             .ThenByDescending(item => item.SourcePriority)
             .ThenBy(item => item.Profile.Name, StringComparer.OrdinalIgnoreCase)
@@ -632,12 +633,16 @@ public partial class HeadphoneProfileWindow : Window
 
     private async Task UseSelectedProfileAsync()
     {
+        if (profileRequestRunning) return;
         if (ProfileListBox.SelectedItem is not HeadphoneProfileOption selected)
         {
             StatusText.Text = "Select a headphone or IEM profile first.";
             return;
         }
 
+        profileRequestRunning = true;
+        TargetCurveName = null;
+        TargetCurveContent = null;
         try
         {
             string content;
@@ -676,6 +681,9 @@ public partial class HeadphoneProfileWindow : Window
                 }
                 TargetCurveContent = await File.ReadAllTextAsync(targetPath);
                 TargetCurveName = targetOption.Name;
+                StatusText.Text = $"AutoEq is calculating {targetOption.Name} online for {selected.Name}. No audio is sent.";
+                FilterContent = await GameTargetEq.GenerateAsync(httpClient, selected.Name, selected.FilterUrl, TargetCurveContent);
+                ProfileName = $"{selected.Name} · {TargetCurveName}";
             }
 
             DialogResult = true;
@@ -688,14 +696,19 @@ public partial class HeadphoneProfileWindow : Window
         {
             StatusText.Text = "Profile download timed out. Try again.";
         }
-        catch (InvalidDataException)
+        catch (InvalidDataException exception)
         {
-            StatusText.Text = "That profile did not contain valid Equalizer APO filters.";
+            StatusText.Text = exception.Message;
         }
         catch (JsonException)
         {
             StatusText.Text = "That profile could not be downloaded or did not contain valid EQ filters.";
         }
+        catch (Exception exception) when (exception is InvalidOperationException or KeyNotFoundException)
+        {
+            StatusText.Text = "The measurement service returned incomplete data. Retry or choose another measured profile.";
+        }
+        finally { profileRequestRunning = false; }
     }
 
     private static IEnumerable<JsonElement> EnumerateCatalogItems(JsonElement root)

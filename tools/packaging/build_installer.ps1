@@ -1,7 +1,8 @@
 param(
  [Parameter(Mandatory)][string]$CompilerPath,
  [Parameter(Mandatory)][string]$OutputDirectory,
- [string]$PayloadDirectory
+ [string]$PayloadDirectory,
+ [string]$ArchiveToolDirectory = "$env:ProgramFiles\7-Zip"
 )
 $ErrorActionPreference='Stop'
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
@@ -13,6 +14,14 @@ if(-not $PayloadDirectory){
  if($LASTEXITCODE -ne 0){throw 'Application publish failed.'}
 }
 $payload=[IO.Path]::GetFullPath($PayloadDirectory)
+$archiveDestination=Join-Path $payload 'tools\archive'
+New-Item $archiveDestination -ItemType Directory -Force | Out-Null
+foreach($archiveFile in @('7z.exe','7z.dll','License.txt')) {
+ $source=Join-Path $ArchiveToolDirectory $archiveFile
+ if(-not(Test-Path $source)){throw 'Supply -ArchiveToolDirectory containing the official unmodified 7-Zip 7z.exe, 7z.dll and License.txt. No user installation is needed.'}
+ Copy-Item -LiteralPath $source -Destination $archiveDestination -Force
+}
+Copy-Item -LiteralPath (Join-Path $repo 'tools\packaging\ThirdPartyNotices.txt') -Destination $payload -Force
 Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination (Join-Path $payload 'LICENSE') -Force
 foreach($name in @('SonicScout.exe','SonicScout.SonicPass.exe','setup_audio_stack.ps1','apo_automation.ps1','LEQ-Engine.ps1')){
  if(-not(Test-Path (Join-Path $payload $name))){throw "Incomplete application payload: $name"}

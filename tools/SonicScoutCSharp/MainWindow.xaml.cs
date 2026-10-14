@@ -254,7 +254,8 @@ public partial class MainWindow : Window
             routingConfiguration.SonicScoutEngaged = false;
         }
         RefreshWindowsLeqState();
-        SonicPassButton_Click(SonicPassButton, new RoutedEventArgs());
+        if (sonicPassProcess is null || sonicPassProcess.HasExited)
+            SonicPassButton_Click(SonicPassButton, new RoutedEventArgs());
         if (sonicPassProcess is not null && !sonicPassProcess.HasExited)
         {
             windowsLeqEnabled = true;
@@ -288,7 +289,8 @@ public partial class MainWindow : Window
         }
 
         int? preflightExitCode = await RunSetupPreflightExitCodeAsync(setupScriptPath, CancellationToken.None);
-        bool setupVerified = routingConfiguration.PostInstallVerified &&
+        bool setupVerified = routingConfiguration.SonicScoutProvisioned &&
+            !string.IsNullOrWhiteSpace(routingConfiguration.SelectedPhysicalOutputId) &&
             preflightExitCode.HasValue &&
             preflightExitCode.Value == 0;
         if (setupVerified)
@@ -792,6 +794,7 @@ public partial class MainWindow : Window
 
     private void LoadAudioDevices()
     {
+        loadingAudioDevices = true;
         try
         {
             // Release prior COM MMDevice instances before rebuilding lists.
@@ -844,7 +847,9 @@ public partial class MainWindow : Window
 
             if (InputDeviceComboBox.Items.Count > 0)
             {
-                InputDeviceComboBox.SelectedIndex = 0;
+                int cableCaptureIndex = InputDeviceComboBox.Items.Cast<string>().ToList().FindIndex(name =>
+                    name.StartsWith("SonicScout2.0 Unified Output", StringComparison.OrdinalIgnoreCase));
+                InputDeviceComboBox.SelectedIndex = cableCaptureIndex >= 0 ? cableCaptureIndex : 0;
             }
             if (OutputDeviceComboBox.Items.Count > 0)
             {
@@ -863,7 +868,10 @@ public partial class MainWindow : Window
             OutputDeviceComboBox.SelectedIndex = 0;
             RefreshWindowsLeqState();
         }
+        finally { loadingAudioDevices = false; }
     }
+
+    private bool loadingAudioDevices;
 
     private static void DisposeMmDevices(List<MMDevice> devices)
     {
@@ -1381,7 +1389,8 @@ public partial class MainWindow : Window
 
     private Task OpenPostInstallVerificationAsync(Window owner)
     {
-        PostInstallVerifyDialog dialog = new() { Owner = owner };
+        PostInstallVerifyDialog dialog = new(sonicPassProcess is not null && !sonicPassProcess.HasExited,
+            routingConfiguration.SelectedPhysicalOutputId) { Owner = owner };
         CopyThemeResourcesTo(dialog);
         bool? result = dialog.ShowDialog();
         if (result == true)
@@ -1640,7 +1649,8 @@ public partial class MainWindow : Window
                 {
                     if (error.Data.StartsWith("SonicPass startup failed", StringComparison.Ordinal))
                         sonicPassLastStartupError = error.Data;
-                    SupportService.Log("sonicpass_error", new { inputId, outputId, message = error.Data }, true);
+                    bool initializationInfo = error.Data.StartsWith("SonicPass playback initialization:", StringComparison.Ordinal);
+                    SupportService.Log(initializationInfo ? "sonicpass_format" : "sonicpass_error", new { inputId, outputId, message = error.Data }, !initializationInfo);
                 }
             };
             sonicPassProcess.OutputDataReceived += (_, output) =>
@@ -1683,6 +1693,7 @@ public partial class MainWindow : Window
     {
         Dispatcher.Invoke(() =>
         {
+            if (!ReferenceEquals(sender, sonicPassProcess)) return;
             bool unexpectedExit = !exitRequested && sonicPassProcess is not null && sonicPassProcess.ExitCode != 0;
             sonicPassStartedByLeqToggle = false;
             SonicPassButton.Content = "SONICPASS";
@@ -1718,6 +1729,7 @@ public partial class MainWindow : Window
 
         try
         {
+            processToStop.Exited -= SonicPassProcess_Exited;
             if (!processToStop.HasExited)
             {
                 _ = Task.Run(() =>
@@ -1773,6 +1785,7 @@ public partial class MainWindow : Window
 
     private void SonicPassDevice_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (loadingAudioDevices) return;
         if (SonicPassInputComboBox.SelectedIndex >= 0 && SonicPassInputComboBox.SelectedIndex < sonicPassInputReferences.Count)
         {
             MMDevice input = sonicPassInputReferences[SonicPassInputComboBox.SelectedIndex];
@@ -1788,7 +1801,16 @@ public partial class MainWindow : Window
         }
 
         SonicRoutingConfigurationStore.Save(routingConfigurationPath, routingConfiguration);
-        SonicPassStatusText.Text = "READY - choose gain and start SonicPass";
+        RestartRunningSonicPass();
+        if (sonicPassProcess is null || sonicPassProcess.HasExited)
+            SonicPassStatusText.Text = "READY - choose gain and start SonicPass";
+    }
+
+    private void RestartRunningSonicPass()
+    {
+        if (sonicPassProcess is null || sonicPassProcess.HasExited) return;
+        StopSonicPass();
+        SonicPassButton_Click(this, new RoutedEventArgs());
     }
 
     private static string GetComboValue(System.Windows.Controls.ComboBox comboBox, string fallback)
@@ -1800,6 +1822,7 @@ public partial class MainWindow : Window
     {
         if (IsLoaded)
         {
+            RestartRunningSonicPass();
             MessageText.Text = $"SonicPass boost changed: input {GetComboValue(SonicPassInputGainComboBox, "0")} dB, output {GetComboValue(SonicPassOutputGainComboBox, "0")} dB.";
         }
     }
@@ -1808,6 +1831,7 @@ public partial class MainWindow : Window
     {
         if (IsLoaded)
         {
+            RestartRunningSonicPass();
             MessageText.Text = $"SonicPass buffer set to {GetComboValue(SonicPassBufferComboBox, "20")} ms.";
         }
     }
@@ -2137,11 +2161,11 @@ public partial class MainWindow : Window
             bool soundBlasterEndpointAvailable = discoveredOutputs.Any(output => IsSoundBlasterEndpoint(output.DisplayName));
             bool voicemeeterEndpointAvailable = discoveredOutputs.Any(output => IsVoicemeeterEndpoint(output.DisplayName));
             bool likelyDedicatedDac = IsLikelyDedicatedDacOutput(selectedOutput.DisplayName);
-            if (request.UsesWaveLink || waveLinkEndpointAvailable)
+            if (request.UsesWaveLink)
             {
                 Report("Tuned channel prerequisites", "READY", "Elgato Wave Link detected. Sonic Scout will prioritize Wave Link routing before virtual-cable or Voicemeeter fallback.");
             }
-            else if (request.UsesSoundBlaster || soundBlasterEndpointAvailable)
+            else if (request.UsesSoundBlaster)
             {
                 Report("Tuned channel prerequisites", "READY", "Creative Sound Blaster native mixer detected. Voicemeeter fallback is not required.");
             }
@@ -2152,7 +2176,7 @@ public partial class MainWindow : Window
                     : "Dedicated DAC not detected; software routing support remains important.";
                 Report("Tuned channel prerequisites", "READY", $"{dacDetail} Compatible virtual route is available for Sonic Scout channel creation.");
             }
-            else if (request.UsesVoicemeeter || voicemeeterEndpointAvailable)
+            else if (request.UsesVoicemeeter)
             {
                 Report("Tuned channel prerequisites", "UPDATE", "No direct virtual endpoint detected yet. Voicemeeter fallback path is enabled; complete Voicemeeter bus mapping and rerun SETUP to engage Sonic Scout.");
             }
@@ -2169,8 +2193,8 @@ public partial class MainWindow : Window
             routingConfiguration.UseVoicemeeterCompatibility = request.UsesVoicemeeter ||
                 voicemeeterEndpointAvailable ||
                 (!virtualChannelCandidateAvailable && !waveLinkEndpointAvailable && !soundBlasterEndpointAvailable && request.ConfirmDependencyFallback);
-            routingConfiguration.UseWaveLinkCompatibility = request.UsesWaveLink || waveLinkEndpointAvailable;
-            routingConfiguration.UseSoundBlasterCompatibility = request.UsesSoundBlaster || soundBlasterEndpointAvailable;
+            routingConfiguration.UseWaveLinkCompatibility = request.UsesWaveLink;
+            routingConfiguration.UseSoundBlasterCompatibility = request.UsesSoundBlaster;
             routingConfiguration.UseOtherMixerCompatibility = request.UsesOtherMixer || compatibilityRouteStyle;
             routingConfiguration.SonicScoutAlias = "Sonic Scout";
             bool compatibilitySaved = SonicRoutingConfigurationStore.Save(routingConfigurationPath, routingConfiguration);
@@ -2214,9 +2238,7 @@ public partial class MainWindow : Window
                 ApplySafePhysicalOutputFallback();
             }
             RefreshWindowsLeqState();
-            string routingSafetyDetail = routingConfiguration.HasCompatibilityMixer
-                ? $"Compatibility-safe routing is active ({routingConfiguration.SetupStyle}). Sonic Scout will not auto-hijack third-party mixer chains."
-                : $"Safe fallback is active ({routingConfiguration.SetupStyle}). If Sonic Scout is unavailable, audio stays on the selected physical output.";
+            string routingSafetyDetail = "Your Windows default output is unchanged. If SonicPass stops, select your physical output in the game to restore sound.";
             if (!routingConfiguration.SonicScoutProvisioned && routingConfiguration.UseVoicemeeterCompatibility)
             {
                 routingSafetyDetail = "Fallback is active on your physical output while Voicemeeter-assisted tuned channel setup is pending.";
@@ -2235,6 +2257,16 @@ public partial class MainWindow : Window
             await Task.Delay(120);
             await Task.Delay(250);
             Report("Updates", "READY", "App checks complete. Driver installs and reboots require your approval.");
+            if (apoLinked && routingConfiguration.SonicScoutProvisioned && !string.IsNullOrWhiteSpace(routingConfiguration.SonicScoutEndpointId))
+            {
+                Report("SonicPass", "RUNNING", "Starting the configured audio route...");
+                bool started = TryStartSonicPass(routingConfiguration.SonicScoutEndpointId, selectedOutput.Id);
+                await Task.Delay(1000);
+                bool running = started && sonicPassProcess is not null && !sonicPassProcess.HasExited;
+                Report("SonicPass", running ? "READY" : "ERROR", running ? "Audio route is running. Verify settings here without leaving setup." : "Audio route could not start. Open Diagnostics for the recorded error.");
+                if (running) { SonicPassButton.Content = "STOP SONICPASS"; SonicPassStartButton.Content = "STOP SONICPASS"; }
+                UpdateTunedVirtualCableStatusIndicator();
+            }
         }
         catch (UnauthorizedAccessException)
         {
@@ -2686,7 +2718,7 @@ public partial class MainWindow : Window
             {
                 string targetPath = Path.Combine(profilesDirectory, $"{profileId}_target.txt");
                 File.WriteAllText(targetPath, dialog.TargetCurveContent);
-                subtitle = $"{subtitle} / Saved target: {dialog.TargetCurveName} (not applied)";
+                subtitle = $"{subtitle} / Target: {dialog.TargetCurveName}";
             }
             File.WriteAllText(profilePath + ".metadata.json", JsonSerializer.Serialize(new { Name = dialog.ProfileName, Subtitle = subtitle }));
             WpfButton profileButton = CreateProfileButton(profileId, dialog.ProfileName, subtitle);
@@ -2732,8 +2764,8 @@ public partial class MainWindow : Window
         }
 
         return apoLinked
-            ? ("ACTIVE · APO CONNECTED · SIGNAL / 48KHZ", (WpfBrush)FindResource("SuccessBrush"))
-            : ("ACTIVE · APO LINK REQUIRED · SIGNAL / 48KHZ", (WpfBrush)FindResource("ErrorBrush"));
+            ? ("ACTIVE · APO CONNECTED", (WpfBrush)FindResource("SuccessBrush"))
+            : ("ACTIVE · APO LINK REQUIRED", (WpfBrush)FindResource("ErrorBrush"));
     }
 
     private StackPanel BuildProfileApoIndicatorRow(string profileId)
@@ -2961,7 +2993,8 @@ public partial class MainWindow : Window
         string id = new string(profileName.Trim().ToLowerInvariant().Select(character => char.IsLetterOrDigit(character) ? character : '_').ToArray()).Trim('_');
         if (id.Length > 40)
         {
-            id = id[..40].Trim('_');
+            string suffix = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(id)))[..8].ToLowerInvariant();
+            id = id[..31].Trim('_') + "_" + suffix;
         }
         return string.IsNullOrWhiteSpace(id) ? $"custom_{DateTime.Now:yyyyMMddHHmmss}" : $"custom_{id}";
     }
