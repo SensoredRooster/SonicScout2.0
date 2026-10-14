@@ -83,6 +83,12 @@ public partial class MainWindow : Window
     private bool audioSignalSeen;
     private DateTime lastAudioDataAtUtc = DateTime.MinValue;
     private double fallbackMeterLevel;
+    // Dedicated meter endpoint, re-acquired by id after Windows invalidates it (0x88890010 etc.).
+    private MMDevice? meterDevice;
+    private string? meterDeviceId;
+    private readonly MeterBackoff meterBackoff = new();
+    private EapoInstallationFacts? apoFacts;
+    private DateTime lastEqStatusRefreshUtc = DateTime.MinValue;
     private readonly Random spectrumRandom = new();
     private readonly List<Ellipse> spectrumDots = new();
     private double spectrumDotsWidth;
@@ -279,6 +285,7 @@ public partial class MainWindow : Window
                 border.BorderBrush = brush;
             }
             RenderSpectrum();
+            RefreshHonestEqStatus();
             breathingPhase += 0.018;
         };
         breathingTimer.Start();
@@ -702,17 +709,38 @@ public partial class MainWindow : Window
             return;
         }
 
+        DateTime nowUtc = DateTime.UtcNow;
+        if (!meterBackoff.CanAttempt(nowUtc)) return;
+
         double peak;
         try
         {
-            MMDevice selectedOutput = outputDeviceReferences[OutputDeviceComboBox.SelectedIndex];
-            if (selectedOutput.State != DeviceState.Active) return;
-            peak = selectedOutput.AudioMeterInformation.MasterPeakValue;
+            string selectedId = outputDeviceReferences[OutputDeviceComboBox.SelectedIndex].ID;
+            if (meterDevice is null || !string.Equals(meterDeviceId, selectedId, StringComparison.OrdinalIgnoreCase))
+            {
+                ReleaseMeterDevice();
+                using MMDeviceEnumerator enumerator = new();
+                meterDevice = enumerator.GetDevice(selectedId);
+                meterDeviceId = selectedId;
+            }
+            if (meterDevice.State != DeviceState.Active)
+            {
+                ReleaseMeterDevice();
+                meterBackoff.RecordFailure(nowUtc);
+                fallbackMeterLevel = 0;
+                audioSignalSeen = false;
+                return;
+            }
+            peak = meterDevice.AudioMeterInformation.MasterPeakValue;
+            meterBackoff.RecordSuccess();
         }
-        catch (COMException exception) when (exception.HResult == unchecked((int)0x88890010) || exception.HResult == unchecked((int)0x88890004))
+        catch (Exception exception) when (exception is COMException or InvalidCastException or ArgumentException or ObjectDisposedException)
         {
-            // Windows can invalidate this endpoint during a driver or service restart.
-            // The next device refresh replaces it; a meter tick must not open an error dialog.
+            // Windows invalidates endpoints on device change / driver or service restart
+            // (AUDCLNT_E_DEVICE_INVALIDATED 0x88890004, 0x88890010, ...). Drop the stale
+            // meter and re-acquire it by id on a later tick with backoff. Never crash the UI.
+            ReleaseMeterDevice();
+            meterBackoff.RecordFailure(nowUtc);
             fallbackMeterLevel = 0;
             audioSignalSeen = false;
             return;
@@ -740,6 +768,37 @@ public partial class MainWindow : Window
         audioSignalSeen = true;
     }
 
+    private void ReleaseMeterDevice()
+    {
+        MMDevice? device = meterDevice;
+        meterDevice = null;
+        meterDeviceId = null;
+        try { device?.Dispose(); } catch (COMException) { } catch (InvalidCastException) { }
+    }
+
+    private void RefreshHonestEqStatus(bool force = false)
+    {
+        DateTime nowUtc = DateTime.UtcNow;
+        if (!force && (nowUtc - lastEqStatusRefreshUtc).TotalMilliseconds < 1000) return;
+        lastEqStatusRefreshUtc = nowUtc;
+        apoFacts ??= EapoInstallation.Probe();
+        EqRuntimeStatus status = EapoInstallation.EvaluateStatus(EapoInstallation.IsVerified(apoFacts), apoLinked, audioSignalSeen);
+        (string label, string guidance) = EapoInstallation.Describe(status);
+        WpfBrush color = (WpfBrush)FindResource(status == EqRuntimeStatus.Running ? "SuccessBrush" : "ErrorBrush");
+        if (EapoStatus.Text != label)
+        {
+            EapoStatus.Text = label;
+            EapoStatus.Foreground = color;
+            EapoStatus.ToolTip = guidance;
+        }
+        if (ChainEapoStateText.Text != label)
+        {
+            ChainEapoStateText.Text = label;
+            ChainEapoStateText.Foreground = color;
+            ChainEapoStateText.ToolTip = guidance;
+        }
+    }
+
     private void RefreshSpectrumColors()
     {
         for (int index = 0; index < spectrumDots.Count; index++)
@@ -757,6 +816,7 @@ public partial class MainWindow : Window
         clipGuardTimer.Stop();
         eqWriteTimer.Stop();
         breathingTimer.Stop();
+        ReleaseMeterDevice();
 
         WasapiLoopbackCapture? captureToDispose = loopbackCapture;
         loopbackCapture = null;
@@ -2154,7 +2214,13 @@ public partial class MainWindow : Window
             }
             else if (setupAutomationResult.State == ScriptExecutionState.Succeeded)
             {
-                Report("Audio components", "READY", "Installation completed and required assets were verified.");
+                EapoInstallationFacts installedFacts = EapoInstallation.Probe();
+                apoFacts = installedFacts;
+                IReadOnlyList<string> apoProblems = EapoInstallation.GetProblems(installedFacts);
+                if (apoProblems.Count == 0)
+                    Report("Audio components", "READY", "Installation completed; Equalizer APO registry key, Editor.exe, Configurator.exe and COM classes verified.");
+                else
+                    Report("Audio components", "ERROR", "Equalizer APO is NOT verified: " + string.Join(" ", apoProblems));
             }
             else
             {
@@ -2283,7 +2349,11 @@ public partial class MainWindow : Window
             Report("Equalizer APO", "RUNNING", "Checking the APO include and repairing it when Windows allows...");
             await Task.Delay(120);
             EnsureApoLink();
-            Report("Equalizer APO", apoLinked ? "READY" : "UPDATE", apoLinked ? "Sonic Scout link is active." : "Run SETUP to repair the Equalizer APO configuration and file access.");
+            Report("Equalizer APO", apoLinked ? "READY" : "UPDATE", apoLinked
+                ? "Equalizer APO is installed and config.txt includes Sonic Scout's EQ file."
+                : (apoFacts is not null && !EapoInstallation.IsVerified(apoFacts)
+                    ? "Equalizer APO is not installed: " + string.Join(" ", EapoInstallation.GetProblems(apoFacts))
+                    : $"config.txt does not include {EapoInstallation.UserIncludePath}. Run SETUP as administrator to add it."));
             Report("Live spectrum", "RUNNING", "Restarting loopback capture on the selected output...");
             await Task.Delay(120);
             StartAudioMonitor(OutputDeviceComboBox.SelectedIndex >= 0 && OutputDeviceComboBox.SelectedIndex < outputDeviceReferences.Count ? outputDeviceReferences[OutputDeviceComboBox.SelectedIndex] : null);
@@ -2635,59 +2705,49 @@ public partial class MainWindow : Window
 
     private void EnsureApoLink()
     {
-        string apoConfigPath = @"C:\Program Files\EqualizerAPO\config\config.txt";
-        string includeLine = $"Include: {activeProfilePath}";
-        if (!File.Exists(apoConfigPath))
+        // Runtime never writes under Program Files. Setup (admin, once) adds a single
+        // Include: line to config.txt pointing at the per-user file below; here we only
+        // (re)write that user-writable file and verify the include exists.
+        apoFacts = EapoInstallation.Probe();
+        string userInclude = EapoInstallation.UserIncludePath;
+        if (!EapoInstallation.IsVerified(apoFacts))
         {
             apoLinked = false;
-            EapoStatus.Text = "LINK ERROR";
-            EapoStatus.Foreground = (WpfBrush)FindResource("ErrorBrush");
             RefreshProfileApoIndicators();
+            RefreshHonestEqStatus(force: true);
+            MessageText.Text = "Equalizer APO is not installed: " + string.Join(" ", EapoInstallation.GetProblems(apoFacts));
             return;
         }
 
+        string apoConfigPath = Path.Combine(apoFacts.InstallPath, "config", "config.txt");
         try
         {
-            string managedEq = Path.Combine(Path.GetDirectoryName(apoConfigPath)!, "SonicScout2.0", "active-config", "eq.txt");
-            bool managedChain = File.ReadAllLines(apoConfigPath).Any(line =>
-                line.Trim().Equals(@"Include: SonicScout2.0\active-config\eq.txt", StringComparison.OrdinalIgnoreCase));
-            if (!managedChain)
+            Directory.CreateDirectory(Path.GetDirectoryName(userInclude)!);
+            string contents = EapoInstallation.BuildIncludeLine(activeProfilePath) + Environment.NewLine;
+            if (!File.Exists(userInclude) || File.ReadAllText(userInclude) != contents)
             {
-                apoLinked = false;
-                EapoStatus.Text = "SETUP REQUIRED";
-                RefreshProfileApoIndicators();
-                return;
+                string temp = userInclude + ".tmp";
+                File.WriteAllText(temp, contents);
+                File.Move(temp, userInclude, overwrite: true);
             }
-            // The shared EQ include is inside both correctly scoped cable chains.
-            // Never append an unscoped profile to the root APO configuration.
-            Directory.CreateDirectory(Path.GetDirectoryName(managedEq)!);
-            string contents = includeLine + Environment.NewLine;
-            if (!File.Exists(managedEq) || File.ReadAllText(managedEq) != contents)
-            {
-                if (File.Exists(managedEq)) File.Copy(managedEq, managedEq + ".sonicscout-backup", overwrite: true);
-                File.WriteAllText(managedEq, contents);
-            }
-            apoLinked = true;
-            EapoStatus.Text = "OK";
-            EapoStatus.Foreground = (WpfBrush)FindResource("SuccessBrush");
-            RefreshProfileApoIndicators();
+
+            apoLinked = File.Exists(apoConfigPath) &&
+                EapoInstallation.ConfigIncludesUserFile(File.ReadAllLines(apoConfigPath), userInclude);
+            if (!apoLinked)
+                MessageText.Text = $"Equalizer APO's config.txt does not include {userInclude}. Run SETUP once (administrator) to add it.";
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException exception)
         {
             apoLinked = false;
-            EapoStatus.Text = "LINK ERROR";
-            EapoStatus.Foreground = (WpfBrush)FindResource("ErrorBrush");
-            RefreshProfileApoIndicators();
-            MessageText.Text = "Windows denied access to the managed EQ files. Open SETUP to repair file access.";
+            MessageText.Text = $"Windows denied access to Sonic Scout's EQ file ({userInclude}): {exception.Message} Sonic Scout does not need administrator rights for this file; check its permissions.";
         }
-        catch (IOException)
+        catch (IOException exception)
         {
             apoLinked = false;
-            EapoStatus.Text = "LINK ERROR";
-            EapoStatus.Foreground = (WpfBrush)FindResource("ErrorBrush");
-            RefreshProfileApoIndicators();
-            MessageText.Text = "Equalizer APO's config is locked. Close the editor or APO manager and restart Sonic Scout.";
+            MessageText.Text = $"The EQ file is locked or unreadable: {exception.Message}";
         }
+        RefreshProfileApoIndicators();
+        RefreshHonestEqStatus(force: true);
     }
 
     private void CreateProfile_Click(object sender, RoutedEventArgs e)
@@ -3073,8 +3133,7 @@ public partial class MainWindow : Window
         bool usable = succeeded && apoLinked;
         WpfBrush color = (WpfBrush)FindResource(usable ? "SuccessBrush" : "ErrorBrush");
         RefreshProfileApoIndicators();
-        EapoStatus.Text = usable ? "OK" : "LINK ERROR";
-        EapoStatus.Foreground = color;
+        RefreshHonestEqStatus(force: true);
         MessageText.Text = message;
         MessageText.Foreground = color;
     }
