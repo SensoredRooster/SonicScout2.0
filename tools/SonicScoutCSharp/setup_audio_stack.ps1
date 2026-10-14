@@ -276,11 +276,51 @@ function Get-AudioEndpoints {
     }
 }
 
+function Test-EqualizerApoRegistration {
+    <#
+    .SYNOPSIS
+        Real Equalizer APO verification. Returns a list of problems; empty = verified.
+    .DESCRIPTION
+        File presence alone is never "installed". Requires:
+          - HKLM:\SOFTWARE\EqualizerAPO
+          - Editor.exe and Configurator.exe in the install folder
+          - the pre/post-mix APO COM classes registered under HKCR\CLSID to EqualizerAPO.dll
+        ({C18E2F7E-...} is AUDIO_SIGNALPROCESSINGMODE_DEFAULT, a processing-mode GUID, not a
+        COM class, so it is deliberately not used here.)
+    #>
+    $problems = @()
+    $key = 'HKLM:\SOFTWARE\EqualizerAPO'
+    $root = Join-Path $env:ProgramFiles 'EqualizerAPO'
+    if (-not (Test-Path -LiteralPath $key)) {
+        $problems += 'HKLM\SOFTWARE\EqualizerAPO is missing (Equalizer APO is not installed).'
+    } else {
+        $props = Get-ItemProperty -LiteralPath $key -ErrorAction SilentlyContinue
+        if ($props -and $props.PSObject.Properties['InstallPath'] -and "$($props.InstallPath)".Trim()) {
+            $root = "$($props.InstallPath)".Trim().Trim('"').TrimEnd('\')
+        }
+    }
+    foreach ($exe in @('Editor.exe', 'Configurator.exe')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $root $exe))) { $problems += "$exe was not found in $root." }
+    }
+    foreach ($clsid in @('{EACD2258-FCAC-4FF4-B36D-419E924A6D79}', '{EC1CC9CE-FAED-4822-828A-82A81A6F018F}')) {
+        $server = Get-Item -LiteralPath "Registry::HKEY_CLASSES_ROOT\CLSID\$clsid\InprocServer32" -ErrorAction SilentlyContinue
+        $dll = if ($server) { ([string]$server.GetValue('')).Trim().Trim('"') } else { '' }
+        if (-not $dll -or [IO.Path]::GetFileName($dll) -ine 'EqualizerAPO.dll') {
+            $problems += "APO class $clsid is not registered to EqualizerAPO.dll under HKCR\CLSID."
+        }
+    }
+    return ,$problems
+}
+
+function Get-SonicScoutUserIncludePath {
+    # Per-user, non-admin file the app rewrites at runtime. config.txt includes it once.
+    if ($env:SONICSCOUT_USER_EAPO_INCLUDE) { return $env:SONICSCOUT_USER_EAPO_INCLUDE }
+    return Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'SonicScout\eapo\sonicscout.txt'
+}
+
 function Test-EqualizerApoFiles {
-    $apoRoot = 'C:\Program Files\EqualizerAPO'
-    return (Test-Path (Join-Path $apoRoot 'config\config.txt')) -and
-        ((Test-Path (Join-Path $apoRoot 'EqualizerAPO.dll')) -or
-         (Test-Path (Join-Path $apoRoot 'Editor.exe')))
+    # Kept for callers; now means "registered and verified", not "files exist".
+    return (Test-EqualizerApoRegistration).Count -eq 0
 }
 
 function Get-EndpointDetail {
@@ -779,10 +819,12 @@ if ($DryRun -and $script:DryRunPlannedInstalls.ContainsKey('Equalizer APO') -and
     Write-DryRunTrace -Name 'Equalizer APO verification' -Action 'verify' -Detail 'Would verify Equalizer APO config.txt and runtime files after the planned installation; the dry run cannot verify files that were not installed.'
 }
 elseif (-not $finalState.EqualizerApoFilesReady) {
-    Write-Stage -Name 'Equalizer APO verification' -State 'UPDATE' -Detail 'Equalizer APO was not verified by its config.txt and runtime files.'
+    $apoProblems = Test-EqualizerApoRegistration
+    Write-Stage -Name 'Equalizer APO verification' -State 'ERROR' -Detail ("Equalizer APO is NOT installed/registered: " + ($apoProblems -join ' '))
+    $readyForTesting = $false
 }
 else {
-    Write-Stage -Name 'Equalizer APO verification' -State 'READY' -Detail 'Equalizer APO config.txt and runtime files are present.'
+    Write-Stage -Name 'Equalizer APO verification' -State 'READY' -Detail 'Equalizer APO verified: HKLM\SOFTWARE\EqualizerAPO, Editor.exe, Configurator.exe and APO COM classes registered.'
 }
 
 if (-not $finalState.AudioServiceRunning) {
