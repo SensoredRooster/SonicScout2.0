@@ -23,14 +23,14 @@ Check out [www.github.com/sensoredrooster](https://www.github.com/sensoredrooste
 ## Requirements
 
 - Windows 10 or 11, x64. ARM64 is not supported.
-- Windows PowerShell 5.1 (`powershell.exe`), included with Windows. Use it for the installer, rather than PowerShell 7.
+- Windows PowerShell 5.1, included with Windows and used internally by the app's setup.
 - Administrator access for audio drivers and configuration. The installer requests it through Windows UAC.
 - Internet access for audio components not already included in the package. The tune library, plugins and Default HRIR files are bundled.
 - **Source checkout only:** install the .NET 8 SDK before building. Published packages include the .NET runtime; destination PCs do not need an SDK or separate runtime.
 
 ## Install the Windows app
 
-The new installer is a **development build undergoing VM verification**, not yet a public tester release. Build and test details are in `docs/testing/professional-installer-2026-10-13/REPORT.md`.
+The Windows x64 direct-route build is **ready for testers** following clean EXE/VM qualification completed October 14. Use the supplied installer and [tester guide](docs/testing/tester-ready-2026-10-13/TESTER-GUIDE.md). The [qualification report](docs/testing/tester-ready-2026-10-13/REPORT.md) identifies the tested EXE and scope. Real-hardware latency and listening quality remain the owner's test; optional mixer configurations need additional coverage. The installer is distributed separately from this source repository.
 
 1. Open `SonicScout-Setup.exe` and accept the Windows permission prompt.
 2. Follow the installation wizard. Leave **Open Sonic Scout and complete audio setup** checked, then choose **Finish**.
@@ -44,7 +44,7 @@ Users do not need a terminal, Git, or the .NET SDK. The repository's source ZIP 
 
 1. Run `tools\SonicScoutCSharp\publish_sonic_scout.bat`. It creates a complete Windows x64 package in `Desktop\SonicScout`. An existing package is preserved until publishing succeeds, then kept as a dated backup.
 2. Open `SonicScout.exe` in that folder and complete its setup wizard. Equalizer APO cable registration is automatic.
-3. For a distributable EXE, run `tools/packaging/build_installer.ps1` with a local NSIS compiler, output directory, and optional published payload directory. See the packaging report for the tested command.
+3. For a distributable EXE, run `tools/packaging/build_installer.ps1` with `-CompilerPath` pointing to NSIS, an `-OutputDirectory`, and optionally a published `-PayloadDirectory`. Supply `-ArchiveToolDirectory` containing the official unmodified 7-Zip `7z.exe`, `7z.dll` and `License.txt` (defaults to `Program Files\7-Zip`). These are bundled extraction tools; testers do not install 7-Zip.
 4. If setup requests a restart, restart Windows, reopen Sonic Scout, and retry **SETUP**.
 
 `tools\SonicScoutCSharp\Install-SonicScout.bat` also publishes first when run from source. Developers can use `run_sonic_scout_csharp.bat` to build and launch the app; that path requires the SDK.

@@ -1,0 +1,159 @@
+﻿{
+    "mode":  "Install",
+    "createdAt":  "2026-10-13T23:15:37.6578466-05:00",
+    "installersDirectory":  "C:\\Program Files\\SonicScout\\installers",
+    "machineName":  "SONICSCOUT-QA",
+    "userName":  "scouttester",
+    "stages":  [
+                   {
+                       "timestamp":  "2026-10-13T23:13:31.2354881-05:00",
+                       "name":  "Ownership confirmation",
+                       "state":  "READY",
+                       "detail":  "Installation changes authorized."
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:13:33.8830394-05:00",
+                       "name":  "Baseline scan",
+                       "state":  "READY",
+                       "detail":  "Detected endpoints: 3. Microphone (High Definition Audio Device) [OK]; Speakers (High Definition Audio Device) [OK]"
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:13:37.4152620-05:00",
+                       "name":  "VB-Cable Base",
+                       "state":  "RUNNING",
+                       "detail":  "Launching installer: VBCABLE_Setup_x64.exe"
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:13:37.5610083-05:00",
+                       "name":  "VB-Cable Base",
+                       "state":  "RUNNING",
+                       "detail":  "Installing the VB-Audio driver automatically. Allow a Windows driver permission prompt if one appears."
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:14:00.8137446-05:00",
+                       "name":  "VB-Cable Base",
+                       "state":  "FIXED",
+                       "detail":  "VB-Cable Base detected after install."
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:14:01.9265278-05:00",
+                       "name":  "Equalizer APO",
+                       "state":  "RUNNING",
+                       "detail":  "Launching installer: EqualizerAPO_Setup.exe"
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:14:01.9442004-05:00",
+                       "name":  "Equalizer APO",
+                       "state":  "RUNNING",
+                       "detail":  "Installing Equalizer APO files. Sonic Scout will register its cable endpoints automatically."
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:14:10.0276778-05:00",
+                       "name":  "Equalizer APO",
+                       "state":  "FIXED",
+                       "detail":  "Equalizer APO detected after install."
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:14:11.3674483-05:00",
+                       "name":  "Dependency download",
+                       "state":  "RUNNING",
+                       "detail":  "Downloading required /reaplugs installer."
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:14:17.3228084-05:00",
+                       "name":  "ReaPlugs",
+                       "state":  "RUNNING",
+                       "detail":  "Installing verified audio component files automatically..."
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:14:22.6066347-05:00",
+                       "name":  "ReaPlugs",
+                       "state":  "FIXED",
+                       "detail":  "Audio component installed and verified without vendor dialogs."
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:14:22.6531688-05:00",
+                       "name":  "Dependency download",
+                       "state":  "RUNNING",
+                       "detail":  "Downloading required /hesuvi installer."
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:14:31.1548540-05:00",
+                       "name":  "HeSuVi",
+                       "state":  "RUNNING",
+                       "detail":  "Installing verified audio component files automatically..."
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:15:05.2882384-05:00",
+                       "name":  "HeSuVi",
+                       "state":  "FIXED",
+                       "detail":  "Audio component installed and verified without vendor dialogs."
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:15:06.6882114-05:00",
+                       "name":  "Equalizer APO verification",
+                       "state":  "READY",
+                       "detail":  "Equalizer APO config.txt and runtime files are present."
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:15:06.7404785-05:00",
+                       "name":  "Windows audio service",
+                       "state":  "READY",
+                       "detail":  "Windows Audio service is running."
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:15:22.3171303-05:00",
+                       "name":  "APO Configuration",
+                       "state":  "READY",
+                       "detail":  "Bundled library, plugins, HRIR and managed configuration verified."
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:15:25.4301076-05:00",
+                       "name":  "Equalizer APO registration",
+                       "state":  "RUNNING",
+                       "detail":  "Registering LFX/GFX processing on the SonicScout cable."
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:15:27.1551401-05:00",
+                       "name":  "Equalizer APO registration",
+                       "state":  "READY",
+                       "detail":  "Cable LFX/GFX slots registered and verified."
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:15:27.1781493-05:00",
+                       "name":  "Loudness equalization",
+                       "state":  "RUNNING",
+                       "detail":  "Configuring the 8-channel cable; the 16-channel path stays separate."
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:15:32.6542678-05:00",
+                       "name":  "Loudness equalization",
+                       "state":  "READY",
+                       "detail":  "Loudness configuration applied."
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:15:32.6984979-05:00",
+                       "name":  "Audio configuration verification",
+                       "state":  "RUNNING",
+                       "detail":  "Finalizing APO registration and restarting Windows audio."
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:15:36.5926064-05:00",
+                       "name":  "Audio configuration verification",
+                       "state":  "READY",
+                       "detail":  "Automatic APO configuration completed; settings were backed up."
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:15:37.5534891-05:00",
+                       "name":  "Restart Windows",
+                       "state":  "UPDATE",
+                       "detail":  "Drivers were installed. Restart Windows, reopen Sonic Scout, and run SETUP again to verify and finish."
+                   },
+                   {
+                       "timestamp":  "2026-10-13T23:15:37.6027129-05:00",
+                       "name":  "Final verification",
+                       "state":  "UPDATE",
+                       "detail":  "Installation changes are complete. Restart Windows, reopen Sonic Scout, and run SETUP again to finish verification."
+                   }
+               ]
+}

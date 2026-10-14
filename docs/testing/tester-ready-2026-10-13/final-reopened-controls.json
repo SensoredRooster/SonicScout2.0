@@ -1,0 +1,4 @@
+{
+    "ProcessId":  7664,
+    "CommandLine":  "\"C:\\Program Files\\SonicScout\\SonicScout.SonicPass.exe\" --input-id {0.0.0.00000000}.{d7a2a9b5-93ca-44d1-ab14-cb142b1bb53b} --output-id {0.0.0.00000000}.{53aac8e0-0949-4729-b54f-b828fc8e946d} --buffer-ms 50 --input-gain-db -3 --output-gain-db -6"
+}

@@ -1,0 +1,11 @@
+{
+  "Qualification": "READY FOR WINDOWS X64 DIRECT-ROUTE TESTERS",
+  "Completed": "2026-10-14",
+  "SourceCommit": "77baf2e",
+  "Installer": "SonicScout-Setup.exe",
+  "SizeBytes": 128049132,
+  "SHA256": "C489DF9A346C66B65FD7A354B962F262BEA975839E679B7F9254D6CCC4362B61",
+  "ApplicationDllSHA256": "9AF462DED90D20A3A9DB6E62576F1AC792ECB5D70C97BE6B895DB49037FA5620",
+  "HardwareLatency": "Owner testing pending",
+  "Signed": false
+}
