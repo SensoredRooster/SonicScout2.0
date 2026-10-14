@@ -36,43 +36,103 @@ internal static class Program
             return 0;
         }
 
-        using MMDeviceEnumerator enumerator = new();
-        MMDevice input = DeviceResolver.ResolveInput(enumerator, options.InputId, options.InputName);
-        MMDevice output = DeviceResolver.ResolveOutput(enumerator, options.OutputId, options.OutputName);
-        using SonicPassEngine scoutPass = new(input, output, options.BufferMilliseconds, options.InputGainDb, options.OutputGainDb);
+        string inputId;
+        string outputId;
+        using (MMDeviceEnumerator resolver = new())
+        {
+            using MMDevice resolvedInput = DeviceResolver.ResolveInput(resolver, options.InputId, options.InputName);
+            using MMDevice resolvedOutput = DeviceResolver.ResolveOutput(resolver, options.OutputId, options.OutputName);
+            inputId = resolvedInput.ID;
+            outputId = resolvedOutput.ID;
+        }
 
+        bool cancelRequested = false;
+        SonicPassEngine? current = null;
         Console.CancelKeyPress += (_, eventArgs) =>
         {
             eventArgs.Cancel = true;
-            scoutPass.Stop();
+            cancelRequested = true;
+            current?.Stop();
         };
 
-        try
+        // Supervisor: when Windows invalidates an endpoint (device change, driver
+        // install, Windows Audio restart -> AUDCLNT_E_* 0x8889xxxx) the engine is torn
+        // down and rebuilt from the same endpoint ids instead of exiting.
+        int rebuilds = 0;
+        bool announced = false;
+        while (true)
         {
-            scoutPass.Start();
-        }
-        catch (Exception exception)
-        {
-            Console.Error.WriteLine($"SonicPass startup failed (HRESULT 0x{exception.HResult:X8}): {exception}");
-            return 1;
-        }
-        Console.WriteLine($"SonicPass running: {input.FriendlyName} -> {output.FriendlyName}");
-        Console.WriteLine($"Format: {scoutPass.Format.SampleRate} Hz, {scoutPass.Format.Channels} channel(s), {scoutPass.Format.BitsPerSample}-bit");
-        Console.WriteLine("Press Ctrl+C to stop.");
+            Exception? failure;
+            try
+            {
+                using MMDeviceEnumerator enumerator = new();
+                MMDevice input = enumerator.GetDevice(inputId);
+                MMDevice output = enumerator.GetDevice(outputId);
+                using SonicPassEngine scoutPass = new(input, output, options.BufferMilliseconds, options.InputGainDb, options.OutputGainDb);
+                current = scoutPass;
+                scoutPass.Start();
+                if (!announced)
+                {
+                    Console.WriteLine($"SonicPass running: {input.FriendlyName} -> {output.FriendlyName}");
+                    Console.WriteLine($"Format: {scoutPass.Format.SampleRate} Hz, {scoutPass.Format.Channels} channel(s), {scoutPass.Format.BitsPerSample}-bit");
+                    Console.WriteLine("Press Ctrl+C to stop.");
+                    announced = true;
+                }
+                else
+                {
+                    Console.WriteLine($"SonicPass rebuilt after audio device invalidation (rebuild {rebuilds}).");
+                }
+                rebuilds = 0;
 
-        while (scoutPass.IsRunning)
-        {
-            Thread.Sleep(1000);
-            Console.WriteLine($"Packets: {scoutPass.PacketsReceived}, buffer drops: {scoutPass.BufferDrops}, buffered: {scoutPass.BufferedMilliseconds} ms");
-        }
+                while (scoutPass.IsRunning && !cancelRequested)
+                {
+                    Thread.Sleep(1000);
+                    Console.WriteLine($"Packets: {scoutPass.PacketsReceived}, buffer drops: {scoutPass.BufferDrops}, buffered: {scoutPass.BufferedMilliseconds} ms");
+                }
+                failure = scoutPass.LastError;
+                current = null;
+            }
+            catch (Exception exception)
+            {
+                current = null;
+                failure = exception;
+            }
 
-        if (scoutPass.LastError is not null)
-        {
-            Console.Error.WriteLine($"SonicPass stopped: {scoutPass.LastError}");
+            if (cancelRequested) return 0;
+            if (failure is null) return 0;
+            if (!SonicPassRecovery.IsRecoverable(failure) || rebuilds >= SonicPassRecovery.MaxRebuilds)
+            {
+                Console.Error.WriteLine($"SonicPass stopped (HRESULT 0x{failure.HResult:X8}): {failure}");
+                return 1;
+            }
+            rebuilds++;
+            TimeSpan delay = SonicPassRecovery.Delay(rebuilds);
+            Console.Error.WriteLine($"SonicPass: audio endpoint invalidated (HRESULT 0x{SonicPassRecovery.FindAudioHResult(failure):X8}); rebuilding in {delay.TotalMilliseconds:0} ms (attempt {rebuilds}/{SonicPassRecovery.MaxRebuilds}).");
+            Thread.Sleep(delay);
         }
-
-        return scoutPass.LastError is null ? 0 : 1;
     }
+}
+
+internal static class SonicPassRecovery
+{
+    public const int MaxRebuilds = 40;
+
+    public static TimeSpan Delay(int attempt) => TimeSpan.FromMilliseconds(Math.Min(5000, 250 * Math.Pow(2, Math.Min(attempt - 1, 10))));
+
+    public static int FindAudioHResult(Exception exception)
+    {
+        for (Exception? e = exception; e is not null; e = e.InnerException)
+        {
+            if (((uint)e.HResult & 0xFFFF0000u) == 0x88890000u) return e.HResult;
+            // AUDCLNT/MMDevice "not found" / RPC failure while Audiosrv restarts.
+            if ((uint)e.HResult is 0x80070490u or 0x800706BAu or 0x800706BEu or 0x80070002u) return e.HResult;
+        }
+        return 0;
+    }
+
+    public static bool IsRecoverable(Exception exception) =>
+        FindAudioHResult(exception) != 0 ||
+        (exception is InvalidOperationException && exception.Message.Contains("did not deliver audio packets", StringComparison.Ordinal));
 }
 
 internal sealed class SonicPassOptions

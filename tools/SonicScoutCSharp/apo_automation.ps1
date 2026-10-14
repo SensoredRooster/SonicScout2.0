@@ -103,6 +103,18 @@ function Restore-SonicScoutRegistrySnapshot {
     if(-not $Snapshot.Exists -and $path -like '*\Child APOs\*'){Remove-Item -LiteralPath $path -ErrorAction Stop}
 }
 
+function Restart-SonicScoutAudioService {
+    # Never restart Windows Audio underneath a running SonicPass relay: stop it first
+    # (the app restarts it after setup) so it cannot crash on device invalidation.
+    foreach($p in @(Get-Process -Name 'SonicScout.SonicPass' -ErrorAction SilentlyContinue)) {
+        try { $p.Kill(); [void]$p.WaitForExit(5000) } catch { }
+    }
+    Restart-Service Audiosrv -Force -ErrorAction Stop
+    $deadline=(Get-Date).AddSeconds(30)
+    while((Get-Service Audiosrv).Status -ne 'Running' -and (Get-Date) -lt $deadline){ Start-Sleep -Milliseconds 500 }
+    Start-Sleep -Seconds 2
+}
+
 function Install-SonicScoutAutomaticApo {
     $engine=Join-Path $PSScriptRoot 'LEQ-Engine.ps1'
     if (-not (Test-Path $engine)) { throw 'The audio setup package is incomplete: LEQ engine is missing.' }
@@ -128,7 +140,7 @@ function Install-SonicScoutAutomaticApo {
         try {
         Write-Stage 'Equalizer APO registration' 'RUNNING' 'Registering LFX/GFX processing on the SonicScout cable.'
         foreach($target in $targets) { Set-SonicScoutApoSlots $target }
-        Restart-Service Audiosrv -Force -ErrorAction Stop
+        Restart-SonicScoutAudioService
         Write-Stage 'Equalizer APO registration' 'READY' 'Cable LFX/GFX slots registered and verified.'
         Write-Stage 'Loudness equalization' 'RUNNING' 'Configuring the 8-channel cable; the 16-channel path stays separate.'
         foreach($target in $targets) {
@@ -137,11 +149,11 @@ function Install-SonicScoutAutomaticApo {
                 if ($result[-1] -ne $true) { throw ("Loudness setup failed for $($target.Name). " + (($result | Select-Object -Last 6) -join ' ')) }
             }
         }
-        Restart-Service Audiosrv -Force -ErrorAction Stop
+        Restart-SonicScoutAudioService
         Write-Stage 'Loudness equalization' 'READY' 'Loudness configuration applied.'
         Write-Stage 'Audio configuration verification' 'RUNNING' 'Finalizing APO registration and restarting Windows audio.'
         foreach($target in $targets) { Set-SonicScoutApoSlots $target -ChainLeq:(-not $target.Is16) }
-        Restart-Service Audiosrv -Force -ErrorAction Stop
+        Restart-SonicScoutAudioService
         $privateHeSuvi=Join-Path $env:ProgramFiles 'EqualizerAPO\config\SonicScout2.0\HeSuVi'
         if(Test-Path (Join-Path $privateHeSuvi 'HeSuVi.exe')){
             $ids=(@($targets | Where-Object {-not $_.Is16} | ForEach-Object {$_.Guid.Trim('{}')})) -join ';'
@@ -173,7 +185,7 @@ function Install-SonicScoutAutomaticApo {
                 foreach($snapshot in $snapshots){Restore-SonicScoutRegistrySnapshot $snapshot}
                 $savedConfig=Join-Path $backup 'config-before-profile-repair.txt'
                 if(Test-Path $savedConfig){Copy-Item $savedConfig (Join-Path $env:ProgramFiles 'EqualizerAPO\config\config.txt') -Force}
-                Restart-Service Audiosrv -Force -ErrorAction Stop
+                Restart-SonicScoutAudioService
                 Write-Stage 'Audio rollback' 'READY' 'Prior cable effect values restored after a failed configuration. Audio setup can be retried.'
             } catch {
                 Write-Stage 'Audio rollback' 'ERROR' "Automatic recovery failed. Backups are in $backup. $($_.Exception.Message)"

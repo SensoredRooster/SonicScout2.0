@@ -793,13 +793,17 @@ elseif ($state.VoicemeeterInstalled -or $state.VoicemeeterEndpointDetected) {
     Write-Stage -Name 'Voicemeeter Fallback' -State 'READY' -Detail 'Voicemeeter fallback support already detected.'
 }
 
-$reaplugsReady = $((Get-ChildItem "${env:ProgramFiles}\VSTPlugins\ReaPlugs\*.dll" -ErrorAction SilentlyContinue).Count -ge 5)
+# Leftover DLLs from an uninstalled copy are not an install: require the
+# uninstall registration plus the core plugin DLL actually used by the chain.
+function Test-ReaPlugsInstalled {
+    $registered = Test-Match -Values (Get-InstalledSoftwareNames) -Patterns @('ReaPlugs')
+    $core = Test-Path -LiteralPath "${env:ProgramFiles}\VSTPlugins\ReaPlugs\reajs.dll"
+    return ($registered -and $core)
+}
+$reaplugsReady = Test-ReaPlugsInstalled
 if (-not $reaplugsReady) {
     $reaplugsReady = Invoke-InstallerStage -StageName 'ReaPlugs' `
-        -IsInstalled {
-            $reaplugsDlls = @(Get-ChildItem "${env:ProgramFiles}\VSTPlugins\ReaPlugs\*.dll" -ErrorAction SilentlyContinue)
-            $reaplugsDlls.Count -ge 5
-        } `
+        -IsInstalled { Test-ReaPlugsInstalled } `
         -InstallerPatterns @('reaplugs*.exe', '*reaplugs*install*.exe') `
         -MissingDetail 'ReaPlugs VST effects are required for Sonic Scout.' `
         -DownloadComponent '/reaplugs'
