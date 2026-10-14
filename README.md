@@ -30,7 +30,7 @@ Check out [www.github.com/sensoredrooster](https://www.github.com/sensoredrooste
 
 ## Install the Windows app
 
-**Tester distribution is on hold:** an October 14 physical-PC run failed to install ReaPlugs and complete setup. See the [active follow-up](docs/testing/physical-followup-2026-10-14/REPORT.md). The earlier [VM qualification](docs/testing/tester-ready-2026-10-13/REPORT.md) identifies the tested EXE and scope, but does not establish success on the reporting PC. The installer is distributed separately from this source repository.
+**Tester distribution is on hold.** The October 14 owner-validation build fixes missing-prerequisite handling and the audio-client conflict during setup service restarts. Its packaged VM upgrade/repeated-setup test passed; physical-PC sound quality and latency remain unverified. See the [active follow-up and build hashes](docs/testing/physical-followup-2026-10-14/REPORT.md). The earlier [VM qualification](docs/testing/tester-ready-2026-10-13/REPORT.md) is historical evidence. Built installers are release assets, not files in the source ZIP; the corrected October 14 EXE is retained in a draft prerelease for owner validation.
 
 1. Open `SonicScout-Setup.exe` and accept the Windows permission prompt.
 2. Follow the installation wizard. Leave **Open Sonic Scout and complete audio setup** checked, then choose **Finish**.
@@ -467,3 +467,4 @@ SonicScout2.0 includes a native WPF support center and two isolated Cloudflare s
 Tester access is browse/download plus tester-folder uploads. Admin access also controls releases, **Latest**, deletes, and archived content.
 
 See [docs/SUPPORT.md](docs/SUPPORT.md) and [docs/TESTER_SHARE.md](docs/TESTER_SHARE.md).
+
