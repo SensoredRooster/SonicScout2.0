@@ -787,6 +787,7 @@ public partial class MainWindow : Window
         WpfBrush color = (WpfBrush)FindResource(status == EqRuntimeStatus.Running ? "SuccessBrush" : "ErrorBrush");
         if (EapoStatus.Text != label)
         {
+            WriteEqStatusSnapshot(label, status);
             EapoStatus.Text = label;
             EapoStatus.Foreground = color;
             EapoStatus.ToolTip = guidance;
@@ -797,6 +798,34 @@ public partial class MainWindow : Window
             ChainEapoStateText.Foreground = color;
             ChainEapoStateText.ToolTip = guidance;
         }
+    }
+
+    private void WriteEqStatusSnapshot(string label, EqRuntimeStatus status)
+    {
+        // Machine-readable mirror of the on-screen status for support and acceptance tests.
+        try
+        {
+            string directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SonicScout", "logs");
+            Directory.CreateDirectory(directory);
+            bool elevated;
+            using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
+                elevated = new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
+            string json = JsonSerializer.Serialize(new
+            {
+                status = label,
+                state = status.ToString(),
+                apoVerified = apoFacts is not null && EapoInstallation.IsVerified(apoFacts),
+                apoProblems = apoFacts is null ? Array.Empty<string>() : EapoInstallation.GetProblems(apoFacts).ToArray(),
+                linked = apoLinked,
+                audioArriving = audioSignalSeen,
+                elevated,
+                userInclude = EapoInstallation.UserIncludePath,
+                timeUtc = DateTime.UtcNow
+            });
+            File.WriteAllText(Path.Combine(directory, "eq-status.json"), json);
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
     private void RefreshSpectrumColors()
