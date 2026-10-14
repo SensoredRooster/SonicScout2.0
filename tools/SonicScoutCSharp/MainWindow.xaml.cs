@@ -41,6 +41,7 @@ internal sealed record ThemeDefinition(
 
 public partial class MainWindow : Window
 {
+    private bool audioConfigurationInProgress;
     private const int WmNclButtonDown = 0x00A1;
     private const int HtCaption = 0x0002;
     private static readonly Guid PcmSubFormatGuid = new("00000001-0000-0010-8000-00AA00389B71");
@@ -398,6 +399,7 @@ public partial class MainWindow : Window
 
     private void StartAudioMonitor(MMDevice? selectedOutput = null)
     {
+        if (audioConfigurationInProgress) return;
         try
         {
             StopAudioMonitor();
@@ -622,6 +624,7 @@ public partial class MainWindow : Window
 
     private void RenderSpectrum()
     {
+        if (audioConfigurationInProgress) return;
         if (SpectrumCanvas.ActualWidth <= 0 || SpectrumCanvas.ActualHeight <= 0)
         {
             return;
@@ -699,13 +702,21 @@ public partial class MainWindow : Window
             return;
         }
 
-        MMDevice selectedOutput = outputDeviceReferences[OutputDeviceComboBox.SelectedIndex];
-        if (selectedOutput.State != DeviceState.Active)
+        double peak;
+        try
         {
+            MMDevice selectedOutput = outputDeviceReferences[OutputDeviceComboBox.SelectedIndex];
+            if (selectedOutput.State != DeviceState.Active) return;
+            peak = selectedOutput.AudioMeterInformation.MasterPeakValue;
+        }
+        catch (COMException exception) when (exception.HResult == unchecked((int)0x88890010) || exception.HResult == unchecked((int)0x88890004))
+        {
+            // Windows can invalidate this endpoint during a driver or service restart.
+            // The next device refresh replaces it; a meter tick must not open an error dialog.
+            fallbackMeterLevel = 0;
+            audioSignalSeen = false;
             return;
         }
-
-        double peak = selectedOutput.AudioMeterInformation.MasterPeakValue;
         fallbackMeterLevel = (fallbackMeterLevel * 0.68) + (peak * 0.32);
         if (fallbackMeterLevel <= 0.001)
         {
@@ -1617,6 +1628,7 @@ public partial class MainWindow : Window
 
     private bool TryStartSonicPass(string inputId, string outputId)
     {
+        if (audioConfigurationInProgress) return false;
         string? sonicPassPath = ResolveSonicPassExecutablePath();
         if (sonicPassPath is null)
         {
@@ -2102,6 +2114,9 @@ public partial class MainWindow : Window
             }
 
             Report("Audio components", "RUNNING", "Installing and verifying audio components. Accept the Windows permission prompt if requested.");
+            audioConfigurationInProgress = true;
+            StopSonicPass();
+            StopAudioMonitor();
             DateTime setupStarted = DateTime.UtcNow;
             string? previousStage = null;
             Task<ScriptExecutionResult?> setupTask = RunSetupAutomationScriptAsync(request, CancellationToken.None);
@@ -2148,6 +2163,7 @@ public partial class MainWindow : Window
                 return results;
             }
 
+            audioConfigurationInProgress = false;
             Report("Profiles", "RUNNING", "Checking the profile folder and saved EQ assets...");
             await Task.Delay(120);
             bool folderReady = Directory.Exists(profilesDirectory);
@@ -2302,6 +2318,10 @@ public partial class MainWindow : Window
         catch (InvalidOperationException exception)
         {
             Report("Routing", "ERROR", exception.Message);
+        }
+        finally
+        {
+            audioConfigurationInProgress = false;
         }
         return results;
     }
