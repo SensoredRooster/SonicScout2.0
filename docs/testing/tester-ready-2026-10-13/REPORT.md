@@ -23,4 +23,12 @@ Device list refresh must not change a running route's status to READY. User chan
 
 The final EXE must still be installed and checked without test-script patches. Remaining qualification includes reopen/persistence, live control changes, local diagnostics, rollback, uninstall and a final clean installation. Real-hardware latency and subjective game sound quality are reserved for the owner, as requested. Third-party mixer compatibility has not been qualified by this direct-route test.
 
+## Packaged application follow-up
+
+The rebuilt EXE (SHA256 `67734E80EBE77EFFB097B1F3287EB65A7193C42DC0CB2DE0EB82DDF8C9F42B31`) installed successfully. Its installed application DLL hash matched the published payload. The active measured game-target profile survived upgrade and normal reopening, and SonicPass started automatically without the setup wizard. Selecting 50 ms in the GUI restarted the engine; its logs confirm buffer=50ms and running playback. Format initialization now has INFO severity.
+
+Diagnostics opened and created a local support ZIP containing installation reports and routing configuration. Nothing was sent. An injected failure immediately after cable APO mutation exercised automatic rollback: all captured render registry values (including physical endpoints) and the root configuration were unchanged afterward, and Windows Audio was running. GUI uninstall removed the executable, shortcut and Installed Apps entry while preserving the profile and shared APO configuration. See `rollback-result.json` and `qualified-uninstall-result.json`.
+
+Reopening revealed that boost/buffer choices were not persisted. Those controls now save and restore valid dropdown values. A newer candidate EXE (SHA256 `C489DF9A346C66B65FD7A354B962F262BEA975839E679B7F9254D6CCC4362B61`) contains that fix and is undergoing a fresh installation after archiving the VM's component and user state. It is not yet qualified for distribution.
+
 No `ready for testers` claim is supported until those remaining checks complete.

@@ -22,6 +22,9 @@ public sealed class SonicRoutingConfiguration
     public string? LastRoutingNote { get; set; }
     public bool PostInstallVerified { get; set; }
     public string? ActiveProfileId { get; set; }
+    public string SonicPassBufferMs { get; set; } = "20";
+    public string SonicPassInputGainDb { get; set; } = "0";
+    public string SonicPassOutputGainDb { get; set; } = "0";
     public DateTime? PostInstallVerifiedUtc { get; set; }
     public DateTime LastUpdatedUtc { get; set; } = DateTime.UtcNow;
 

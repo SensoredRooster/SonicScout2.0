@@ -134,6 +134,9 @@ public partial class MainWindow : Window
         trayIcon = CreateTrayIcon();
         profiles = new Dictionary<string, (string, string, WpfButton)>();
         routingConfiguration = SonicRoutingConfigurationStore.Load(routingConfigurationPath);
+        RestoreComboValue(SonicPassBufferComboBox, routingConfiguration.SonicPassBufferMs);
+        RestoreComboValue(SonicPassInputGainComboBox, routingConfiguration.SonicPassInputGainDb);
+        RestoreComboValue(SonicPassOutputGainComboBox, routingConfiguration.SonicPassOutputGainDb);
         scriptAudioController = new QueuedScoutAudioController(HotReloadAudioPipelineAsync, ActivateBypassModeAsync);
         scriptBridge = new ScriptOrchestrator(scriptAudioController, Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -1818,10 +1821,25 @@ public partial class MainWindow : Window
         return (comboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? fallback;
     }
 
+    private static void RestoreComboValue(System.Windows.Controls.ComboBox comboBox, string value)
+    {
+        ComboBoxItem? item = comboBox.Items.OfType<ComboBoxItem>().FirstOrDefault(candidate => candidate.Tag?.ToString() == value);
+        if (item is not null) comboBox.SelectedItem = item;
+    }
+
+    private void SaveSonicPassControls()
+    {
+        routingConfiguration.SonicPassBufferMs = GetComboValue(SonicPassBufferComboBox, "20");
+        routingConfiguration.SonicPassInputGainDb = GetComboValue(SonicPassInputGainComboBox, "0");
+        routingConfiguration.SonicPassOutputGainDb = GetComboValue(SonicPassOutputGainComboBox, "0");
+        SonicRoutingConfigurationStore.Save(routingConfigurationPath, routingConfiguration);
+    }
+
     private void SonicPassGain_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (IsLoaded)
         {
+            SaveSonicPassControls();
             RestartRunningSonicPass();
             MessageText.Text = $"SonicPass boost changed: input {GetComboValue(SonicPassInputGainComboBox, "0")} dB, output {GetComboValue(SonicPassOutputGainComboBox, "0")} dB.";
         }
@@ -1831,6 +1849,7 @@ public partial class MainWindow : Window
     {
         if (IsLoaded)
         {
+            SaveSonicPassControls();
             RestartRunningSonicPass();
             MessageText.Text = $"SonicPass buffer set to {GetComboValue(SonicPassBufferComboBox, "20")} ms.";
         }

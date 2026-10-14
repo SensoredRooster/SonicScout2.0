@@ -1,0 +1,8 @@
+{
+    "Status":  "PASS",
+    "InjectedFailure":  "QA injected failure after cable slot mutation.",
+    "RegistryRestored":  true,
+    "AllPhysicalEndpointsUnchanged":  true,
+    "RootConfigUnchanged":  true,
+    "AudioService":  "Running"
+}
