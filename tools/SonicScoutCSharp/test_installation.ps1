@@ -99,6 +99,22 @@ function Get-Item { param($Path,$ErrorAction)
     Invoke-FakeInstall Install
     if ($LASTEXITCODE -ne 2) { throw 'Missing main installer must fail, even with healthy dependencies.' }
     Write-Host 'PASS: failed configuration does not return success.'
+    $blockedDll=Join-Path $fakeProgramFiles 'VSTPlugins\ReaPlugs\reajs.dll'
+    Rename-Item -LiteralPath $blockedDll -NewName 'reajs.dll.unavailable'
+    Set-Content $fakeMain ("Set-Content '$importMarker' 'unexpected configuration'; throw 'Configuration ran with missing ReaPlugs'")
+    try {
+        Invoke-FakeInstall Install
+        if($LASTEXITCODE -ne 2){throw 'Missing ReaPlugs must block installation success.'}
+        if(Test-Path $importMarker){throw 'Missing ReaPlugs still ran APO configuration.'}
+        $latest=Get-ChildItem (Join-Path $fakeLogs 'SonicScout\logs') -Filter 'audio-setup-report*.json' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        $report=Get-Content $latest.FullName -Raw | ConvertFrom-Json
+        $configuration=$report.stages | Where-Object name -eq 'APO Configuration'
+        if($configuration.state -ne 'UPDATE' -or $configuration.detail -notmatch 'Waiting for'){throw 'Missing component was not reported as the configuration prerequisite.'}
+    } finally {
+        Rename-Item -LiteralPath ($blockedDll+'.unavailable') -NewName 'reajs.dll'
+        Remove-Item -LiteralPath $fakeMain
+    }
+    Write-Host 'PASS: missing ReaPlugs blocks APO configuration without a misleading JSFX failure.'
     # Function-only import must return without displaying a menu or requesting elevation.
     $main=Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'powershell\Install-SonicScout2.0.ps1'
     $module=New-Module -ArgumentList $main -ScriptBlock { param($path) . $path; Export-ModuleMember -Function @() }

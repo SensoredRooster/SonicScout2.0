@@ -30,7 +30,7 @@ Check out [www.github.com/sensoredrooster](https://www.github.com/sensoredrooste
 
 ## Install the Windows app
 
-The Windows x64 direct-route build is **ready for testers** following clean EXE/VM qualification completed October 14. Use the supplied installer and [tester guide](docs/testing/tester-ready-2026-10-13/TESTER-GUIDE.md). The [qualification report](docs/testing/tester-ready-2026-10-13/REPORT.md) identifies the tested EXE and scope. Real-hardware latency and listening quality remain the owner's test; optional mixer configurations need additional coverage. The installer is distributed separately from this source repository.
+**Tester distribution is on hold:** an October 14 physical-PC run failed to install ReaPlugs and complete setup. See the [active follow-up](docs/testing/physical-followup-2026-10-14/REPORT.md). The earlier [VM qualification](docs/testing/tester-ready-2026-10-13/REPORT.md) identifies the tested EXE and scope, but does not establish success on the reporting PC. The installer is distributed separately from this source repository.
 
 1. Open `SonicScout-Setup.exe` and accept the Windows permission prompt.
 2. Follow the installation wizard. Leave **Open Sonic Scout and complete audio setup** checked, then choose **Finish**.

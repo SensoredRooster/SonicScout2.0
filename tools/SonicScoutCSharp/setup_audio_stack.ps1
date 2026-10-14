@@ -423,7 +423,11 @@ function Invoke-InstallerStage {
         }
     }
     if ($null -eq $installer) {
-        Write-Stage -Name $StageName -State 'UPDATE' -Detail "$MissingDetail Place the installer in $($script:InstallersDirectory)."
+        if (-not [string]::IsNullOrWhiteSpace($DownloadComponent)) {
+            Write-Stage -Name $StageName -State 'UPDATE' -Detail "The automatic $StageName download did not finish. Review the Dependency download result and retry SETUP. If it fails again, create a Diagnostics support bundle; the download error is included."
+        } else {
+            Write-Stage -Name $StageName -State 'UPDATE' -Detail "$MissingDetail The application package is incomplete. Reinstall Sonic Scout using the current EXE."
+        }
         return $false
     }
 
@@ -749,20 +753,21 @@ elseif ($state.VoicemeeterInstalled -or $state.VoicemeeterEndpointDetected) {
     Write-Stage -Name 'Voicemeeter Fallback' -State 'READY' -Detail 'Voicemeeter fallback support already detected.'
 }
 
-if (-not $((Get-ChildItem "${env:ProgramFiles}\VSTPlugins\ReaPlugs\*.dll" -ErrorAction SilentlyContinue).Count -ge 5)) {
-    [void](Invoke-InstallerStage -StageName 'ReaPlugs' `
+$reaplugsReady = $((Get-ChildItem "${env:ProgramFiles}\VSTPlugins\ReaPlugs\*.dll" -ErrorAction SilentlyContinue).Count -ge 5)
+if (-not $reaplugsReady) {
+    $reaplugsReady = Invoke-InstallerStage -StageName 'ReaPlugs' `
         -IsInstalled {
             $reaplugsDlls = @(Get-ChildItem "${env:ProgramFiles}\VSTPlugins\ReaPlugs\*.dll" -ErrorAction SilentlyContinue)
             $reaplugsDlls.Count -ge 5
         } `
         -InstallerPatterns @('reaplugs*.exe', '*reaplugs*install*.exe') `
         -MissingDetail 'ReaPlugs VST effects are required for Sonic Scout.' `
-        -DownloadComponent '/reaplugs')
+        -DownloadComponent '/reaplugs'
 }
 
-[void](Invoke-InstallerStage -StageName 'HeSuVi' `
+$hesuviReady = Invoke-InstallerStage -StageName 'HeSuVi' `
     -IsInstalled { (Test-Path "${env:ProgramFiles}\EqualizerAPO\config\SonicScout2.0\HeSuVi\hesuvi.txt") -and (Test-Path "${env:ProgramFiles}\EqualizerAPO\config\SonicScout2.0\HeSuVi\conv.txt") } `
-    -InstallerPatterns @('HeSuVi*.exe') -MissingDetail 'HeSuVi is not installed.' -DownloadComponent '/hesuvi')
+    -InstallerPatterns @('HeSuVi*.exe') -MissingDetail 'HeSuVi is not installed.' -DownloadComponent '/hesuvi'
 
 $finalState = Get-SystemState
 $equalizerApoWouldBeInstalled = $finalState.EqualizerApoInstalled -or (
@@ -789,6 +794,12 @@ else {
 }
 
 # Startup preflight never imports configuration helpers or writes files.
+if ($readyForTesting -and $Mode -eq 'Install' -and -not $DryRun) {
+    if (-not $reaplugsReady -or -not $hesuviReady) {
+        $readyForTesting = $false
+        Write-Stage -Name 'APO Configuration' -State 'UPDATE' -Detail 'Waiting for the required ReaPlugs and HeSuVi components. Resolve the component download/install result above, then retry SETUP; audio configuration has not been attempted.'
+    }
+}
 if ($readyForTesting -and $Mode -eq 'Install') {
     if ($DryRun) {
         Write-DryRunTrace -Name 'APO Configuration' -Action 'configure' -Detail 'Would install bundled library/plugins/HRIR and configure endpoints; no changes made.'

@@ -1,5 +1,7 @@
 # Tester qualification — completed 2026-10-14
 
+**Current distribution hold:** a subsequent physical-PC installation failed to obtain ReaPlugs and complete setup. The VM results below remain valid historical evidence. Broader tester readiness is paused pending the [physical-PC follow-up](../physical-followup-2026-10-14/REPORT.md).
+
 Status: **READY FOR TESTERS — Windows x64 direct route.** Clean EXE installation, automatic component/APO setup, restart recovery, profile activation, saved controls and audio delivery passed. Real-hardware latency and subjective listening quality remain the owner's test, as explicitly agreed. This is an unsigned tester build, not a production certification or a qualification of every mixer/hardware combination.
 
 Qualified EXE: `tester-installer\SonicScout-Setup.exe`, retained in the local QA directory below. Size: **128,049,132 bytes**. SHA256: **C489DF9A346C66B65FD7A354B962F262BEA975839E679B7F9254D6CCC4362B61**. Application source: commit `77baf2e`. Final installed DLL matches the published payload: **9AF462DED90D20A3A9DB6E62576F1AC792ECB5D70C97BE6B895DB49037FA5620**.
