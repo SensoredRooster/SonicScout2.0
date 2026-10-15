@@ -302,7 +302,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        int? preflightExitCode = await RunSetupPreflightExitCodeAsync(setupScriptPath, CancellationToken.None);
+        int? preflightExitCode = await RunSetupPreflightExitCodeAsync(setupScriptPath, CancellationToken.None,
+            // Right after logon (RunOnce resume) Windows is busy and the check can take far longer.
+            App.ResumeSetupRequested ? TimeSpan.FromSeconds(180) : TimeSpan.FromSeconds(45));
         bool setupVerified = routingConfiguration.SonicScoutProvisioned &&
             !string.IsNullOrWhiteSpace(routingConfiguration.SelectedPhysicalOutputId) &&
             preflightExitCode.HasValue &&
@@ -314,7 +316,9 @@ public partial class MainWindow : Window
 
         // After the driver-install reboot, if the non-admin preflight already passes there is
         // nothing left to install: finish SETUP with a verification-only run (no UAC prompt).
-        resumeVerifyOnly = App.ResumeSetupRequested && preflightExitCode == 0;
+        // A timed-out check (null) is also tried as verification first; if that verification fails
+        // the dialog reports it and RETRY INSTALLATION runs the full (elevated) install.
+        resumeVerifyOnly = App.ResumeSetupRequested && (preflightExitCode == 0 || preflightExitCode is null);
 
         if (App.ResumeSetupRequested)
         {
@@ -344,7 +348,7 @@ public partial class MainWindow : Window
         // App stays open regardless — user can finish setup later from the main window
     }
 
-    private static async Task<int?> RunSetupPreflightExitCodeAsync(string setupScriptPath, CancellationToken cancellationToken)
+    private static async Task<int?> RunSetupPreflightExitCodeAsync(string setupScriptPath, CancellationToken cancellationToken, TimeSpan? timeout = null)
     {
         try
         {
@@ -388,7 +392,7 @@ public partial class MainWindow : Window
             // which is the safe direction to be wrong in.
             Task<string> preflightOutput = process.StandardOutput.ReadToEndAsync();
             Task<string> preflightErrors = process.StandardError.ReadToEndAsync();
-            using CancellationTokenSource timeoutSource = new(TimeSpan.FromSeconds(45));
+            using CancellationTokenSource timeoutSource = new(timeout ?? TimeSpan.FromSeconds(45));
             using CancellationTokenSource linked =
                 CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource.Token);
 
