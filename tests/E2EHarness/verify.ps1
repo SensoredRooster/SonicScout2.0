@@ -30,7 +30,9 @@ $r.statusBefore = if (Test-Path $statusFile) { [string](Get-Content $statusFile 
 & $Probe --list | Set-Content (Join-Path $Out 'devices.txt')
 $job = Start-Job { param($p) & $p --game 'SonicScout2.0' --output 'Speakers' --seconds 15 } -ArgumentList $Probe
 $seen = @()
-for ($i = 0; $i -lt 14; $i++) { Start-Sleep 1; if (Test-Path $statusFile) { $seen += ([string](Get-Content $statusFile -Raw) | ConvertFrom-Json).status } }
+# Sample for the whole time the tone is playing (job start-up is slow in the VM).
+for ($i = 0; $i -lt 60 -and -not (Get-Process SonicScout.E2EProbe -EA SilentlyContinue); $i++) { Start-Sleep 1 }
+while ($job.State -eq 'Running') { Start-Sleep 1; if (Test-Path $statusFile) { $seen += ([string](Get-Content $statusFile -Raw) | ConvertFrom-Json).status } }
 $r.probe = (Receive-Job $job -Wait -AutoRemoveJob) -join ''
 $r.statusesDuringTone = ($seen | Select -Unique)
 $r.statusDuringTone = if (Test-Path $statusFile) { [string](Get-Content $statusFile -Raw) } else { '<missing>' }
@@ -38,4 +40,5 @@ $logs = @(Get-ChildItem (Join-Path $env:LOCALAPPDATA 'SonicScout') -Recurse -Fil
 $r.hresultHits = @($logs | Select-String -Pattern '0x8889[0-9A-Fa-f]{4}|88890010|88890004' | % { "$($_.Path):$($_.LineNumber): $($_.Line)" } | Select -First 30)
 $r.isAdminShell = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole('Administrators')
 $r | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $Out 'verify.json')
+
 
