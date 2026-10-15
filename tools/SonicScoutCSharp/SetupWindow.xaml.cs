@@ -166,6 +166,15 @@ public partial class SetupWindow : Window
                 StepText.Text = "RESUMING SETUP AFTER RESTART";
                 SummaryText.Text = "Windows restarted. Continuing setup automatically...";
                 await RunChecksAsync();
+                // The main window finishes starting (device list, live meter, EQ status) only after
+                // this startup dialog closes. On a successful resume nobody is there to click CLOSE,
+                // so close it ourselves after a short pause; otherwise the status stays frozen.
+                if (StepText.Text.Contains("AUDIO STACK READY", StringComparison.OrdinalIgnoreCase))
+                {
+                    ActionHintText.Text = "Setup finished. Returning to Sonic Scout...";
+                    await Task.Delay(TimeSpan.FromSeconds(5));
+                    Close();
+                }
             }
         }
         catch (COMException exception)
