@@ -64,7 +64,8 @@ public static class EapoInstallation
             keyPresent,
             installPath,
             File.Exists(Path.Combine(installPath, "Editor.exe")),
-            File.Exists(Path.Combine(installPath, "Configurator.exe")),
+            // Equalizer APO 1.3+ renamed Configurator.exe to DeviceSelector.exe.
+            File.Exists(Path.Combine(installPath, "Configurator.exe")) || File.Exists(Path.Combine(installPath, "DeviceSelector.exe")),
             pre,
             post);
     }
@@ -82,7 +83,7 @@ public static class EapoInstallation
         List<string> problems = new();
         if (!facts.RegistryKeyPresent) problems.Add(@"HKLM\SOFTWARE\EqualizerAPO is missing (Equalizer APO is not installed).");
         if (!facts.EditorPresent) problems.Add($"Editor.exe was not found in {facts.InstallPath}.");
-        if (!facts.ConfiguratorPresent) problems.Add($"Configurator.exe was not found in {facts.InstallPath}.");
+        if (!facts.ConfiguratorPresent) problems.Add($"Neither DeviceSelector.exe nor Configurator.exe was found in {facts.InstallPath}.");
         if (!facts.PreMixClsidRegistered || !facts.PostMixClsidRegistered)
             problems.Add($"The Equalizer APO COM classes ({PreMixClsid} / {PostMixClsid}) are not registered to EqualizerAPO.dll under HKCR\\CLSID.");
         return problems;

@@ -4105,8 +4105,10 @@ function Test-EqualizerApoRegistration {
             $root = "$($props.InstallPath)".Trim().Trim('"').TrimEnd('\')
         }
     }
-    foreach ($exe in @('Editor.exe', 'Configurator.exe')) {
-        if (-not (Test-Path -LiteralPath (Join-Path $root $exe))) { $problems += "$exe was not found in $root." }
+    if (-not (Test-Path -LiteralPath (Join-Path $root 'Editor.exe'))) { $problems += "Editor.exe was not found in $root." }
+    # Equalizer APO 1.3+ ships DeviceSelector.exe (formerly Configurator.exe).
+    if (-not ((Test-Path -LiteralPath (Join-Path $root 'DeviceSelector.exe')) -or (Test-Path -LiteralPath (Join-Path $root 'Configurator.exe')))) {
+        $problems += "Neither DeviceSelector.exe nor Configurator.exe was found in $root."
     }
     foreach ($clsid in @('{EACD2258-FCAC-4FF4-B36D-419E924A6D79}', '{EC1CC9CE-FAED-4822-828A-82A81A6F018F}')) {
         $server = Get-Item -LiteralPath "Registry::HKEY_CLASSES_ROOT\CLSID\$clsid\InprocServer32" -ErrorAction SilentlyContinue
