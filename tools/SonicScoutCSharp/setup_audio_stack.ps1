@@ -976,7 +976,7 @@ if ($readyForTesting) {
     }
 }
 else {
-    $detail = if (-not $DryRun -and $pendingRestart) { 'Installation changes are complete. Restart Windows, reopen Sonic Scout, and run SETUP again to finish verification.' } else { 'Installation is incomplete. Review the reported items, correct them and retry installation.' }
+    $detail = if (-not $DryRun -and $pendingRestart) { 'Installation changes are complete. Restart Windows; Sonic Scout reopens and finishes verification automatically.' } else { 'Installation is incomplete. Review the reported items, correct them and retry installation.' }
     Write-Stage -Name 'Final verification' -State 'UPDATE' -Detail $detail
 }
 

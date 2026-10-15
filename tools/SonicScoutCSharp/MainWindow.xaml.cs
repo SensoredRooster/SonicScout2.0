@@ -138,11 +138,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         SupportService.Initialize();
-        if (App.ResumeSetupRequested)
-        {
-            // Relaunched by RunOnce after the driver-install reboot: reopen SETUP and continue it.
-            ContentRendered += (_, _) => Dispatcher.BeginInvoke(() => OpenSetupWindow(autoResume: true));
-        }
+
         trayIcon = CreateTrayIcon();
         profiles = new Dictionary<string, (string, string, WpfButton)>();
         routingConfiguration = SonicRoutingConfigurationStore.Load(routingConfigurationPath);
@@ -314,7 +310,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        SetupWindow dialog = new(DiscoverOutputEndpointsAsync, RunSetupChecks, OpenPostInstallVerificationAsync) { Owner = this };
+        // Relaunched by RunOnce after the driver-install reboot: this single startup SETUP window
+        // continues the previous run automatically (one window only, so only one elevation prompt).
+        SetupWindow dialog = new(DiscoverOutputEndpointsAsync, RunSetupChecks, OpenPostInstallVerificationAsync) { Owner = this, AutoResume = App.ResumeSetupRequested };
         CopyThemeResourcesTo(dialog);
         dialog.ShowDialog();
 
