@@ -4082,6 +4082,50 @@ public class WinHelper2 {
     return $true
 }
 
+function Test-EqualizerApoRegistration {
+    <#
+    .SYNOPSIS
+        Real Equalizer APO verification. Returns a list of problems; empty = verified.
+    .DESCRIPTION
+        File presence alone is never "installed". Requires:
+          - HKLM:\SOFTWARE\EqualizerAPO
+          - Editor.exe and Configurator.exe in the install folder
+          - the pre/post-mix APO COM classes registered under HKCR\CLSID to EqualizerAPO.dll
+        ({C18E2F7E-...} is AUDIO_SIGNALPROCESSINGMODE_DEFAULT, a processing-mode GUID, not a
+        COM class, so it is deliberately not used here.)
+    #>
+    $problems = @()
+    $key = 'HKLM:\SOFTWARE\EqualizerAPO'
+    $root = Join-Path $env:ProgramFiles 'EqualizerAPO'
+    if (-not (Test-Path -LiteralPath $key)) {
+        $problems += 'HKLM\SOFTWARE\EqualizerAPO is missing (Equalizer APO is not installed).'
+    } else {
+        $props = Get-ItemProperty -LiteralPath $key -ErrorAction SilentlyContinue
+        if ($props -and $props.PSObject.Properties['InstallPath'] -and "$($props.InstallPath)".Trim()) {
+            $root = "$($props.InstallPath)".Trim().Trim('"').TrimEnd('\')
+        }
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $root 'Editor.exe'))) { $problems += "Editor.exe was not found in $root." }
+    # Equalizer APO 1.3+ ships DeviceSelector.exe (formerly Configurator.exe).
+    if (-not ((Test-Path -LiteralPath (Join-Path $root 'DeviceSelector.exe')) -or (Test-Path -LiteralPath (Join-Path $root 'Configurator.exe')))) {
+        $problems += "Neither DeviceSelector.exe nor Configurator.exe was found in $root."
+    }
+    foreach ($clsid in @('{EACD2258-FCAC-4FF4-B36D-419E924A6D79}', '{EC1CC9CE-FAED-4822-828A-82A81A6F018F}')) {
+        $server = Get-Item -LiteralPath "Registry::HKEY_CLASSES_ROOT\CLSID\$clsid\InprocServer32" -ErrorAction SilentlyContinue
+        $dll = if ($server) { ([string]$server.GetValue('')).Trim().Trim('"') } else { '' }
+        if (-not $dll -or [IO.Path]::GetFileName($dll) -ine 'EqualizerAPO.dll') {
+            $problems += "APO class $clsid is not registered to EqualizerAPO.dll under HKCR\CLSID."
+        }
+    }
+    return ,$problems
+}
+
+function Get-SonicScoutUserIncludePath {
+    # Per-user, non-admin file the app rewrites at runtime. config.txt includes it once.
+    if ($env:SONICSCOUT_USER_EAPO_INCLUDE) { return $env:SONICSCOUT_USER_EAPO_INCLUDE }
+    return Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'SonicScout\eapo\sonicscout.txt'
+}
+
 function Get-EapoInstallPath {
     <#
     .SYNOPSIS
@@ -4227,6 +4271,12 @@ public class WinHelper {
     # key before it is called a failure. "Installed, but somewhere this script cannot
     # drive" is a different problem with a different fix, and saying so is the whole
     # reason Get-EapoInstallPath exists.
+    $eapoRegistrationProblems = Test-EqualizerApoRegistration
+    if ((Test-Path $eapoConfig) -and $eapoRegistrationProblems.Count -gt 0) {
+        Write-Host "$($script:BoxMargin)ERROR: Equalizer APO files exist but it is NOT registered:" -ForegroundColor Red
+        foreach ($problem in $eapoRegistrationProblems) { Write-Host "$($script:BoxMargin)  - $problem" -ForegroundColor Red }
+        return $false
+    }
     if (-not (Test-Path $eapoConfig)) {
         Write-Host "$($script:BoxMargin)WARNING: Equalizer APO verification failed." -ForegroundColor Yellow
         $nowRoot = Get-EapoInstallPath
@@ -5815,6 +5865,19 @@ function Write-InitialConfig {
     $device16Line = if ($g16) { "Device: SonicScout2.0 + VB-Audio Virtual Cable $g16" } else { $null }
     $emit16 = [bool]($device8Line -and $device16Line)
 
+    # Runtime EQ writes go to a per-user file so the app never needs admin. Setup (admin,
+    # once) creates it and adds an Include: line for it inside each device-scoped chain.
+    $userInclude = Get-SonicScoutUserIncludePath
+    $userIncludeLine = "Include: $userInclude"
+    try {
+        New-Item -ItemType Directory -Path (Split-Path -Parent $userInclude) -Force | Out-Null
+        if (-not (Test-Path -LiteralPath $userInclude)) {
+            Set-Content -LiteralPath $userInclude -Value '# Sonic Scout runtime EQ (written by the app, no admin needed)' -Force
+        }
+    } catch {
+        Write-Host "$($script:BoxMargin)WARNING: Could not create $userInclude : $_" -ForegroundColor Yellow
+    }
+
     try {
         $lines = @()
         $lines += "# SonicScout2.0 config.txt"
@@ -5831,6 +5894,7 @@ function Write-InitialConfig {
         $lines += "Include: SonicScout2.0\active-config\prehesuvi.txt"
         $lines += "Include: HeSuVi\hesuvi.txt"
         $lines += "Include: SonicScout2.0\active-config\eq.txt"
+        $lines += $userIncludeLine
         $lines += "Include: SonicScout2.0\active-config\posthesuvi.txt"
         $lines += "Include: SonicScout2.0\active-config\boost.txt"
 
@@ -5840,6 +5904,7 @@ function Write-InitialConfig {
             $lines += $device16Line
             $lines += "Include: SonicScout2.0\active-config\16chConfig.txt"
             $lines += "Include: SonicScout2.0\active-config\eq.txt"
+            $lines += $userIncludeLine
             $lines += "Include: SonicScout2.0\active-config\boost.txt"
         }
 

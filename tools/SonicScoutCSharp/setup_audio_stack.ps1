@@ -276,11 +276,53 @@ function Get-AudioEndpoints {
     }
 }
 
+function Test-EqualizerApoRegistration {
+    <#
+    .SYNOPSIS
+        Real Equalizer APO verification. Returns a list of problems; empty = verified.
+    .DESCRIPTION
+        File presence alone is never "installed". Requires:
+          - HKLM:\SOFTWARE\EqualizerAPO
+          - Editor.exe and Configurator.exe in the install folder
+          - the pre/post-mix APO COM classes registered under HKCR\CLSID to EqualizerAPO.dll
+        ({C18E2F7E-...} is AUDIO_SIGNALPROCESSINGMODE_DEFAULT, a processing-mode GUID, not a
+        COM class, so it is deliberately not used here.)
+    #>
+    $problems = @()
+    $key = 'HKLM:\SOFTWARE\EqualizerAPO'
+    $root = Join-Path $env:ProgramFiles 'EqualizerAPO'
+    if (-not (Test-Path -LiteralPath $key)) {
+        $problems += 'HKLM\SOFTWARE\EqualizerAPO is missing (Equalizer APO is not installed).'
+    } else {
+        $props = Get-ItemProperty -LiteralPath $key -ErrorAction SilentlyContinue
+        if ($props -and $props.PSObject.Properties['InstallPath'] -and "$($props.InstallPath)".Trim()) {
+            $root = "$($props.InstallPath)".Trim().Trim('"').TrimEnd('\')
+        }
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $root 'Editor.exe'))) { $problems += "Editor.exe was not found in $root." }
+    # Equalizer APO 1.3+ ships DeviceSelector.exe (formerly Configurator.exe).
+    if (-not ((Test-Path -LiteralPath (Join-Path $root 'DeviceSelector.exe')) -or (Test-Path -LiteralPath (Join-Path $root 'Configurator.exe')))) {
+        $problems += "Neither DeviceSelector.exe nor Configurator.exe was found in $root."
+    }
+    foreach ($clsid in @('{EACD2258-FCAC-4FF4-B36D-419E924A6D79}', '{EC1CC9CE-FAED-4822-828A-82A81A6F018F}')) {
+        $server = Get-Item -LiteralPath "Registry::HKEY_CLASSES_ROOT\CLSID\$clsid\InprocServer32" -ErrorAction SilentlyContinue
+        $dll = if ($server) { ([string]$server.GetValue('')).Trim().Trim('"') } else { '' }
+        if (-not $dll -or [IO.Path]::GetFileName($dll) -ine 'EqualizerAPO.dll') {
+            $problems += "APO class $clsid is not registered to EqualizerAPO.dll under HKCR\CLSID."
+        }
+    }
+    return ,$problems
+}
+
+function Get-SonicScoutUserIncludePath {
+    # Per-user, non-admin file the app rewrites at runtime. config.txt includes it once.
+    if ($env:SONICSCOUT_USER_EAPO_INCLUDE) { return $env:SONICSCOUT_USER_EAPO_INCLUDE }
+    return Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'SonicScout\eapo\sonicscout.txt'
+}
+
 function Test-EqualizerApoFiles {
-    $apoRoot = 'C:\Program Files\EqualizerAPO'
-    return (Test-Path (Join-Path $apoRoot 'config\config.txt')) -and
-        ((Test-Path (Join-Path $apoRoot 'EqualizerAPO.dll')) -or
-         (Test-Path (Join-Path $apoRoot 'Editor.exe')))
+    # Kept for callers; now means "registered and verified", not "files exist".
+    return (Test-EqualizerApoRegistration).Count -eq 0
 }
 
 function Get-EndpointDetail {
@@ -753,13 +795,34 @@ elseif ($state.VoicemeeterInstalled -or $state.VoicemeeterEndpointDetected) {
     Write-Stage -Name 'Voicemeeter Fallback' -State 'READY' -Detail 'Voicemeeter fallback support already detected.'
 }
 
-$reaplugsReady = $((Get-ChildItem "${env:ProgramFiles}\VSTPlugins\ReaPlugs\*.dll" -ErrorAction SilentlyContinue).Count -ge 5)
+# Leftover DLLs from an uninstalled copy are not an install: require the
+# uninstall registration plus the core plugin DLL actually used by the chain.
+function Register-SonicScoutResumeAfterRestart {
+    # Per-user RunOnce: Explorer runs it at next logon with the user's normal (non-elevated) token,
+    # so the app reopens and continues SETUP by itself after the driver-install reboot.
+    if ($DryRun) { Write-DryRunTrace -Name 'Resume after restart' -Action 'registry' -Detail 'Would register HKCU RunOnce SonicScoutResumeSetup.'; return }
+    $exe = Join-Path $script:ScriptRootPath 'SonicScout.exe'
+    if (-not (Test-Path -LiteralPath $exe)) { $exe = Join-Path $env:ProgramFiles 'SonicScout\SonicScout.exe' }
+    if (-not (Test-Path -LiteralPath $exe)) { return }
+    try {
+        $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce'
+        New-Item -Path $key -Force | Out-Null
+        Set-ItemProperty -Path $key -Name 'SonicScoutResumeSetup' -Value ('"{0}" --resume-setup' -f $exe)
+    }
+    catch { Write-Warning "Could not register resume-after-restart: $($_.Exception.Message)" }
+}
+
+function Test-ReaPlugsInstalled {
+    $registered = Test-Match -Values (Get-InstalledSoftwareNames) -Patterns @('ReaPlugs')
+    $core = Test-Path -LiteralPath "${env:ProgramFiles}\VSTPlugins\ReaPlugs\reajs.dll"
+    # Sonic Scout extracts the vendor ReaPlugs installer itself (no uninstall entry); that path leaves extract.log.
+    $extractedBySetup = Test-Path -LiteralPath "${env:ProgramFiles}\VSTPlugins\ReaPlugs\extract.log"
+    return ($core -and ($registered -or $extractedBySetup))
+}
+$reaplugsReady = Test-ReaPlugsInstalled
 if (-not $reaplugsReady) {
     $reaplugsReady = Invoke-InstallerStage -StageName 'ReaPlugs' `
-        -IsInstalled {
-            $reaplugsDlls = @(Get-ChildItem "${env:ProgramFiles}\VSTPlugins\ReaPlugs\*.dll" -ErrorAction SilentlyContinue)
-            $reaplugsDlls.Count -ge 5
-        } `
+        -IsInstalled { Test-ReaPlugsInstalled } `
         -InstallerPatterns @('reaplugs*.exe', '*reaplugs*install*.exe') `
         -MissingDetail 'ReaPlugs VST effects are required for Sonic Scout.' `
         -DownloadComponent '/reaplugs'
@@ -779,10 +842,12 @@ if ($DryRun -and $script:DryRunPlannedInstalls.ContainsKey('Equalizer APO') -and
     Write-DryRunTrace -Name 'Equalizer APO verification' -Action 'verify' -Detail 'Would verify Equalizer APO config.txt and runtime files after the planned installation; the dry run cannot verify files that were not installed.'
 }
 elseif (-not $finalState.EqualizerApoFilesReady) {
-    Write-Stage -Name 'Equalizer APO verification' -State 'UPDATE' -Detail 'Equalizer APO was not verified by its config.txt and runtime files.'
+    $apoProblems = Test-EqualizerApoRegistration
+    Write-Stage -Name 'Equalizer APO verification' -State 'ERROR' -Detail ("Equalizer APO is NOT installed/registered: " + ($apoProblems -join ' '))
+    $readyForTesting = $false
 }
 else {
-    Write-Stage -Name 'Equalizer APO verification' -State 'READY' -Detail 'Equalizer APO config.txt and runtime files are present.'
+    Write-Stage -Name 'Equalizer APO verification' -State 'READY' -Detail 'Equalizer APO verified: HKLM\SOFTWARE\EqualizerAPO, Editor.exe, DeviceSelector.exe and APO COM classes registered.'
 }
 
 if (-not $finalState.AudioServiceRunning) {
@@ -888,6 +953,7 @@ if (-not $DryRun) {
         $boot = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime().ToString('o')
         New-Item (Split-Path $script:RestartMarker -Parent) -ItemType Directory -Force | Out-Null
         Set-Content -LiteralPath $script:RestartMarker -Value $boot -Encoding UTF8
+        Register-SonicScoutResumeAfterRestart
     }
     $pendingRestart = $false
     if (Test-Path -LiteralPath $script:RestartMarker) {
@@ -896,7 +962,7 @@ if (-not $DryRun) {
         if (-not $pendingRestart -and $Mode -eq 'Install') { Remove-Item -LiteralPath $script:RestartMarker }
     }
     if ($pendingRestart) {
-        Write-Stage -Name 'Restart Windows' -State 'UPDATE' -Detail 'Drivers were installed. Restart Windows, reopen Sonic Scout, and run SETUP again to verify and finish.'
+        Write-Stage -Name 'Restart Windows' -State 'UPDATE' -Detail 'Drivers were installed. Restart Windows; Sonic Scout reopens and finishes SETUP automatically after you sign in.'
         $readyForTesting = $false
     }
 }
@@ -910,7 +976,7 @@ if ($readyForTesting) {
     }
 }
 else {
-    $detail = if (-not $DryRun -and $pendingRestart) { 'Installation changes are complete. Restart Windows, reopen Sonic Scout, and run SETUP again to finish verification.' } else { 'Installation is incomplete. Review the reported items, correct them and retry installation.' }
+    $detail = if (-not $DryRun -and $pendingRestart) { 'Installation changes are complete. Restart Windows; Sonic Scout reopens and finishes verification automatically.' } else { 'Installation is incomplete. Review the reported items, correct them and retry installation.' }
     Write-Stage -Name 'Final verification' -State 'UPDATE' -Detail $detail
 }
 

@@ -33,6 +33,9 @@ public partial class SetupWindow : Window
     private readonly Dictionary<string, (Ellipse Indicator, TextBlock Heading, TextBlock Detail)> rows = new();
     private readonly List<AudioEndpointOption> discoveredOutputs = new();
 
+    /// <summary>Continue the pre-reboot SETUP run without user input (consent was already given).</summary>
+    public bool AutoResume { get; init; }
+
     public SetupWindow(
         Func<Task<IReadOnlyList<AudioEndpointOption>>> discoverOutputs,
         Func<IProgress<SetupCheckResult>, SetupInstallRequest, Task<IReadOnlyList<SetupCheckResult>>> runChecks,
@@ -153,6 +156,17 @@ public partial class SetupWindow : Window
             SetInstallerInputEnabled(true);
             DoneButton.IsEnabled = true;
             DoneButton.Content = "CLOSE";
+
+            if (AutoResume)
+            {
+                string? previousOutput = SetupResume.LoadSelectedOutput();
+                int previousIndex = previousOutput is null ? -1 : discoveredOutputs.FindIndex(o => o.DisplayName == previousOutput);
+                if (previousIndex >= 0) DefaultOutputComboBox.SelectedIndex = previousIndex;
+                OwnershipConsentCheckBox.IsChecked = true;
+                StepText.Text = "RESUMING SETUP AFTER RESTART";
+                SummaryText.Text = "Windows restarted. Continuing setup automatically...";
+                await RunChecksAsync();
+            }
         }
         catch (COMException exception)
         {
@@ -415,6 +429,7 @@ OwnershipConsentCheckBox.IsChecked == true,
         }
 
         SetupInstallRequest request = BuildInstallRequest();
+        SetupResume.SaveSelectedOutput(discoveredOutputs[DefaultOutputComboBox.SelectedIndex].DisplayName);
         Progress<SetupCheckResult> progress = new(result =>
         {
             if (rows.TryGetValue(result.Name, out var row))
@@ -452,7 +467,7 @@ OwnershipConsentCheckBox.IsChecked == true,
             ActionHintText.Text = problems == 0
                 ? "Great. Click VERIFY SETTINGS, then DONE."
                 : results.Any(result => result.Name == "Restart Windows" && result.State == "UPDATE")
-                ? "Restart Windows, reopen Sonic Scout, and run SETUP again to finish verification."
+                ? "Restart Windows. Sonic Scout reopens after you sign in and finishes SETUP automatically."
                 : "Review the yellow/red rows, then expand Installation choices to retry. If you declined Windows permission, retry and choose Yes.";
             DoneButton.Content = problems == 0 ? "DONE" : "CLOSE AND REVIEW";
             VerifySettingsButton.IsEnabled = problems == 0;

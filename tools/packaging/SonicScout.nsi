@@ -24,13 +24,19 @@ VIAddVersionKey "LegalCopyright" "Sonic Scout contributors"
 !insertmacro MUI_PAGE_LICENSE "${PAYLOAD}\ThirdPartyNotices.txt"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
-!define MUI_FINISHPAGE_RUN "$INSTDIR\SonicScout.exe"
+!define MUI_FINISHPAGE_RUN
+!define MUI_FINISHPAGE_RUN_FUNCTION LaunchSonicScoutAsUser
 !define MUI_FINISHPAGE_RUN_TEXT "Open Sonic Scout and complete audio setup"
 !insertmacro MUI_PAGE_FINISH
 !define MUI_UNCONFIRMPAGE_TEXT_TOP "This removes the Sonic Scout application and shortcuts. Your profiles and shared Equalizer APO / VB-Cable components remain.$\r$\n$\r$\nBefore uninstalling, select your physical headphones or speakers in any game routed through Sonic Scout."
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
+; The installer is elevated; launching the app directly would make it run as admin.
+; Explorer starts it with the signed-in user's normal (non-admin) token.
+Function LaunchSonicScoutAsUser
+ Exec '"$WINDIR\explorer.exe" "$INSTDIR\SonicScout.exe"'
+FunctionEnd
 Function .onInit
  ${IfNot} ${IsNativeAMD64}
   MessageBox MB_ICONSTOP "Sonic Scout requires Windows x64."
