@@ -832,7 +832,7 @@ elseif (-not $finalState.EqualizerApoFilesReady) {
     $readyForTesting = $false
 }
 else {
-    Write-Stage -Name 'Equalizer APO verification' -State 'READY' -Detail 'Equalizer APO verified: HKLM\SOFTWARE\EqualizerAPO, Editor.exe, Configurator.exe and APO COM classes registered.'
+    Write-Stage -Name 'Equalizer APO verification' -State 'READY' -Detail 'Equalizer APO verified: HKLM\SOFTWARE\EqualizerAPO, Editor.exe, DeviceSelector.exe and APO COM classes registered.'
 }
 
 if (-not $finalState.AudioServiceRunning) {
