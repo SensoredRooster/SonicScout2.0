@@ -166,6 +166,7 @@ public partial class SetupWindow : Window
                 StepText.Text = "RESUMING SETUP AFTER RESTART";
                 SummaryText.Text = "Windows restarted. Continuing setup automatically...";
                 await RunChecksAsync();
+
             }
         }
         catch (COMException exception)
