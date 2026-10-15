@@ -791,7 +791,8 @@ public partial class MainWindow : Window
         if (!force && (nowUtc - lastEqStatusRefreshUtc).TotalMilliseconds < 1000) return;
         lastEqStatusRefreshUtc = nowUtc;
         apoFacts ??= EapoInstallation.Probe();
-        EqRuntimeStatus status = EapoInstallation.EvaluateStatus(EapoInstallation.IsVerified(apoFacts), apoLinked, audioSignalSeen);
+        bool audioArriving = audioSignalSeen || PhysicalOutputHasSignal(nowUtc);
+        EqRuntimeStatus status = EapoInstallation.EvaluateStatus(EapoInstallation.IsVerified(apoFacts), apoLinked, audioArriving);
         (string label, string guidance) = EapoInstallation.Describe(status);
         WpfBrush color = (WpfBrush)FindResource(status == EqRuntimeStatus.Running ? "SuccessBrush" : "ErrorBrush");
         if (EapoStatus.Text != label)
@@ -806,6 +807,42 @@ public partial class MainWindow : Window
             ChainEapoStateText.Text = label;
             ChainEapoStateText.Foreground = color;
             ChainEapoStateText.ToolTip = guidance;
+        }
+    }
+
+    private MMDevice? physicalMeterDevice;
+    private string? physicalMeterDeviceId;
+    private readonly MeterBackoff physicalMeterBackoff = new();
+
+    // The spectrum meter watches whichever device is selected in the main window (often the
+    // virtual cable) and only runs while the canvas is rendered. For the honest status, also
+    // count processed audio reaching the user's physical output, read via the endpoint peak
+    // meter, with the same dispose-and-backoff handling for invalidated devices.
+    private bool PhysicalOutputHasSignal(DateTime nowUtc)
+    {
+        string? id = routingConfiguration.SelectedPhysicalOutputId;
+        if (string.IsNullOrWhiteSpace(id) || !physicalMeterBackoff.CanAttempt(nowUtc)) return false;
+        try
+        {
+            if (physicalMeterDevice is null || !string.Equals(physicalMeterDeviceId, id, StringComparison.OrdinalIgnoreCase))
+            {
+                physicalMeterDevice?.Dispose();
+                using MMDeviceEnumerator enumerator = new();
+                physicalMeterDevice = enumerator.GetDevice(id);
+                physicalMeterDeviceId = id;
+            }
+            if (physicalMeterDevice.State != DeviceState.Active) throw new InvalidOperationException("inactive");
+            float peak = physicalMeterDevice.AudioMeterInformation.MasterPeakValue;
+            physicalMeterBackoff.RecordSuccess();
+            return peak > 0.01f;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException or ArgumentException or ObjectDisposedException or InvalidOperationException)
+        {
+            try { physicalMeterDevice?.Dispose(); } catch { }
+            physicalMeterDevice = null;
+            physicalMeterDeviceId = null;
+            physicalMeterBackoff.RecordFailure(nowUtc);
+            return false;
         }
     }
 
