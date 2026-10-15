@@ -138,6 +138,11 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         SupportService.Initialize();
+        if (App.ResumeSetupRequested)
+        {
+            // Relaunched by RunOnce after the driver-install reboot: reopen SETUP and continue it.
+            ContentRendered += (_, _) => Dispatcher.BeginInvoke(() => OpenSetupWindow(autoResume: true));
+        }
         trayIcon = CreateTrayIcon();
         profiles = new Dictionary<string, (string, string, WpfButton)>();
         routingConfiguration = SonicRoutingConfigurationStore.Load(routingConfigurationPath);
@@ -1483,9 +1488,11 @@ public partial class MainWindow : Window
         Close();
     }
 
-    private void SetupButton_Click(object sender, RoutedEventArgs e)
+    private void SetupButton_Click(object sender, RoutedEventArgs e) => OpenSetupWindow(autoResume: false);
+
+    private void OpenSetupWindow(bool autoResume)
     {
-        SetupWindow dialog = new(DiscoverOutputEndpointsAsync, RunSetupChecks, OpenPostInstallVerificationAsync) { Owner = this };
+        SetupWindow dialog = new(DiscoverOutputEndpointsAsync, RunSetupChecks, OpenPostInstallVerificationAsync) { Owner = this, AutoResume = autoResume };
         CopyThemeResourcesTo(dialog);
         dialog.ShowDialog();
     }

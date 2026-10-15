@@ -797,6 +797,21 @@ elseif ($state.VoicemeeterInstalled -or $state.VoicemeeterEndpointDetected) {
 
 # Leftover DLLs from an uninstalled copy are not an install: require the
 # uninstall registration plus the core plugin DLL actually used by the chain.
+function Register-SonicScoutResumeAfterRestart {
+    # Per-user RunOnce: Explorer runs it at next logon with the user's normal (non-elevated) token,
+    # so the app reopens and continues SETUP by itself after the driver-install reboot.
+    if ($DryRun) { Write-DryRunTrace -Name 'Resume after restart' -Action 'registry' -Detail 'Would register HKCU RunOnce SonicScoutResumeSetup.'; return }
+    $exe = Join-Path $script:ScriptRootPath 'SonicScout.exe'
+    if (-not (Test-Path -LiteralPath $exe)) { $exe = Join-Path $env:ProgramFiles 'SonicScout\SonicScout.exe' }
+    if (-not (Test-Path -LiteralPath $exe)) { return }
+    try {
+        $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce'
+        New-Item -Path $key -Force | Out-Null
+        Set-ItemProperty -Path $key -Name 'SonicScoutResumeSetup' -Value ('"{0}" --resume-setup' -f $exe)
+    }
+    catch { Write-Warning "Could not register resume-after-restart: $($_.Exception.Message)" }
+}
+
 function Test-ReaPlugsInstalled {
     $registered = Test-Match -Values (Get-InstalledSoftwareNames) -Patterns @('ReaPlugs')
     $core = Test-Path -LiteralPath "${env:ProgramFiles}\VSTPlugins\ReaPlugs\reajs.dll"
@@ -938,6 +953,7 @@ if (-not $DryRun) {
         $boot = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime().ToString('o')
         New-Item (Split-Path $script:RestartMarker -Parent) -ItemType Directory -Force | Out-Null
         Set-Content -LiteralPath $script:RestartMarker -Value $boot -Encoding UTF8
+        Register-SonicScoutResumeAfterRestart
     }
     $pendingRestart = $false
     if (Test-Path -LiteralPath $script:RestartMarker) {
@@ -946,7 +962,7 @@ if (-not $DryRun) {
         if (-not $pendingRestart -and $Mode -eq 'Install') { Remove-Item -LiteralPath $script:RestartMarker }
     }
     if ($pendingRestart) {
-        Write-Stage -Name 'Restart Windows' -State 'UPDATE' -Detail 'Drivers were installed. Restart Windows, reopen Sonic Scout, and run SETUP again to verify and finish.'
+        Write-Stage -Name 'Restart Windows' -State 'UPDATE' -Detail 'Drivers were installed. Restart Windows; Sonic Scout reopens and finishes SETUP automatically after you sign in.'
         $readyForTesting = $false
     }
 }

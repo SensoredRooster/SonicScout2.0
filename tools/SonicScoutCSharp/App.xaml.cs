@@ -6,8 +6,12 @@ namespace SonicScout;
 
 public partial class App : System.Windows.Application
 {
+    /// <summary>Set when Windows relaunched us after a driver-install reboot (RunOnce) to continue SETUP.</summary>
+    public static bool ResumeSetupRequested { get; private set; }
+
     protected override void OnStartup(StartupEventArgs e)
     {
+        ResumeSetupRequested = e.Args.Any(a => string.Equals(a, SetupResume.CommandLineFlag, StringComparison.OrdinalIgnoreCase));
         base.OnStartup(e);
         SupportService.Initialize();
 
