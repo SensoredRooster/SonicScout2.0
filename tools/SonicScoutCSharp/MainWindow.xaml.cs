@@ -316,9 +316,23 @@ public partial class MainWindow : Window
         // nothing left to install: finish SETUP with a verification-only run (no UAC prompt).
         resumeVerifyOnly = App.ResumeSetupRequested && preflightExitCode == 0;
 
-        // Relaunched by RunOnce after the driver-install reboot: this single startup SETUP window
-        // continues the previous run automatically (one window only, so only one elevation prompt).
-        SetupWindow dialog = new(DiscoverOutputEndpointsAsync, RunSetupChecks, OpenPostInstallVerificationAsync) { Owner = this, AutoResume = App.ResumeSetupRequested };
+        if (App.ResumeSetupRequested)
+        {
+            // Relaunched by RunOnce after the driver-install reboot. Do NOT block Window_Loaded on
+            // this dialog: the device list, live meter and EQ status timer must start now, and the
+            // resume dialog stays open (with its next steps) until the user closes it. Shown once
+            // the window is idle, i.e. after Window_Loaded has finished its startup work.
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => ShowStartupSetupDialog(autoResume: true)));
+            return;
+        }
+
+        ShowStartupSetupDialog(autoResume: false);
+    }
+
+    private void ShowStartupSetupDialog(bool autoResume)
+    {
+        // Single startup SETUP window (one window only, so only one elevation prompt).
+        SetupWindow dialog = new(DiscoverOutputEndpointsAsync, RunSetupChecks, OpenPostInstallVerificationAsync) { Owner = this, AutoResume = autoResume };
         CopyThemeResourcesTo(dialog);
         dialog.ShowDialog();
 
