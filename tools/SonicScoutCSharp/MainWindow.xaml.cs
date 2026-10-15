@@ -292,6 +292,8 @@ public partial class MainWindow : Window
         breathingTimer.Start();
     }
 
+    private bool resumeVerifyOnly;
+
     private async Task EnsureTurnkeyStartupSetupAsync()
     {
         string? setupScriptPath = ResolveSetupAutomationScriptPath();
@@ -309,6 +311,10 @@ public partial class MainWindow : Window
         {
             return;
         }
+
+        // After the driver-install reboot, if the non-admin preflight already passes there is
+        // nothing left to install: finish SETUP with a verification-only run (no UAC prompt).
+        resumeVerifyOnly = App.ResumeSetupRequested && preflightExitCode == 0;
 
         // Relaunched by RunOnce after the driver-install reboot: this single startup SETUP window
         // continues the previous run automatically (one window only, so only one elevation prompt).
@@ -1606,7 +1612,8 @@ public partial class MainWindow : Window
             return null;
         }
 
-        string mode = "Install";
+        string mode = resumeVerifyOnly ? "Preflight" : "Install";
+        resumeVerifyOnly = false;
         UiAudioProfileSnapshot snapshot = BuildUiProfileSnapshot();
         Dictionary<string, string> metadata = new(StringComparer.OrdinalIgnoreCase);
         if (snapshot.Metadata is not null)
@@ -2252,7 +2259,7 @@ public partial class MainWindow : Window
                 apoFacts = installedFacts;
                 IReadOnlyList<string> apoProblems = EapoInstallation.GetProblems(installedFacts);
                 if (apoProblems.Count == 0)
-                    Report("Audio components", "READY", "Installation completed; Equalizer APO registry key, Editor.exe, Configurator.exe and COM classes verified.");
+                    Report("Audio components", "READY", "Installation completed; Equalizer APO registry key, Editor.exe, DeviceSelector.exe and COM classes verified.");
                 else
                     Report("Audio components", "ERROR", "Equalizer APO is NOT verified: " + string.Join(" ", apoProblems));
             }
