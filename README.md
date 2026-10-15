@@ -30,22 +30,38 @@ Check out [www.github.com/sensoredrooster](https://www.github.com/sensoredrooste
 
 ## Install the Windows app
 
-**Tester distribution is on hold.** The October 14 owner-validation build fixes missing-prerequisite handling and the audio-client conflict during setup service restarts. Its packaged VM upgrade/repeated-setup test passed; physical-PC sound quality and latency remain unverified. See the [active follow-up and build hashes](docs/testing/physical-followup-2026-10-14/REPORT.md). The earlier [VM qualification](docs/testing/tester-ready-2026-10-13/REPORT.md) is historical evidence. Built installers are release assets, not files in the source ZIP; the corrected October 14 EXE is retained in a draft prerelease for owner validation.
+**Current tester build: build11** (`main` at the PR #6 merge, October 15 2026). It passed a full brand-new-user VM run with UAC on: install, two UAC prompts, reboot, automatic resume, verification, and the in-app user flow. Physical-PC sound quality and latency are still being validated. Built installers are release assets, not files in the source ZIP.
 
-1. Open `SonicScout-Setup.exe` and accept the Windows permission prompt.
-2. Follow the installation wizard. Leave **Open Sonic Scout and complete audio setup** checked, then choose **Finish**.
-3. In Sonic Scout's setup window, select the physical headphones or speakers you listen through, authorise the audio changes, and choose **Run install setup**.
-4. Sonic Scout registers Equalizer APO on its virtual cable automatically. If a vendor driver window appears, follow its instructions. If setup requests a restart, restart Windows, reopen Sonic Scout from its shortcut, and run **SETUP** again.
-5. Complete **Verify settings** before assigning a game to the virtual cable. Select your headphone profile and confirm SonicPass is running before routing game audio.
+1. Run `SonicScout-Setup.exe`. **UAC prompt 1** is for the installer itself. Follow the wizard and leave **Open Sonic Scout and complete audio setup** checked.
+2. In Sonic Scout's setup window, select the headphones or speakers you listen through, tick the authorisation box and choose **Run install setup**. **UAC prompt 2** covers the audio drivers, Equalizer APO and routing changes. Equalizer APO 1.4.2 ships `DeviceSelector.exe` (older releases ship `Configurator.exe`); setup registers the SonicScout cable endpoints itself.
+3. When setup asks, restart Windows. Setup registers a per-user RunOnce entry, so after you sign in again Sonic Scout reopens automatically with `--resume-setup`. It restores your chosen output and finishes the checks without a third UAC prompt. The main window starts at once; the setup dialog stays open so you can read the result.
+4. Pick a profile (**PROFILES +** opens the AutoEq headphone/IEM catalog with an optional game target) and point your game at the **SonicScout2.0** device.
 
-Users do not need a terminal, Git, or the .NET SDK. The repository's source ZIP does not contain the built installer. Development builds are currently unsigned. Uninstalling the app preserves user profiles and shared audio components/configuration.
+How it works for a normal (non-admin) user:
+
+- **EQ changes need no admin rights.** The app writes them to `%LOCALAPPDATA%\SonicScout\eapo\sonicscout.txt`. Equalizer APO's `config.txt` reaches that file through one `Include:` line added during setup, and it chains to the active profile under `Documents\HAudioApp`. Saved profiles live in `%LOCALAPPDATA%\SonicScout\profiles`.
+- **The status is honest.** The status bar reads the real Equalizer APO state and the measured signal. It shows **NO AUDIO** when nothing is playing through the chain and **RUNNING** only when processed audio is detected. It never claims to be active when it isn't.
+- **Support & Diagnostics** (the **DIAGNOSTICS** button) shows the session ID and a diagnostics summary, and can upload a redacted bundle after you confirm.
+- Logs: `%LOCALAPPDATA%\SonicScout\logs`. Uninstalling keeps user profiles and the shared audio components.
+
+Users do not need a terminal, Git, or the .NET SDK.
+
+### Known risks
+
+- **Unsigned builds.** Installers stay unsigned until Azure Artifact Signing is set up, so Windows SmartScreen may warn on first run.
+- **Admin account.** The installer and the setup step need an account that can approve UAC. Run the whole flow, including the post-reboot resume, from the same Windows account that started it, because the RunOnce entry is per-user.
+- Physical-hardware audio quality and latency are not yet signed off.
+
+## Testing (VM end-to-end harness)
+
+`tests/E2EHarness/` drives a clean VirtualBox VM through the whole tester flow: install, both UAC prompts, reboot, auto-resume, `verify.ps1`, then the user-flow exercise (profile, device, tone/status, non-admin EQ write, diagnostics, close/reopen). It is started with `run-full.ps1 -Build <buildN>`. See [tests/E2EHarness/README.md](tests/E2EHarness/README.md). Drivers and audio devices are only ever changed inside the VM.
 
 ## Build from this source checkout (developers)
 
 1. Run `tools\SonicScoutCSharp\publish_sonic_scout.bat`. It creates a complete Windows x64 package in `Desktop\SonicScout`. An existing package is preserved until publishing succeeds, then kept as a dated backup.
 2. Open `SonicScout.exe` in that folder and complete its setup wizard. Equalizer APO cable registration is automatic.
 3. For a distributable EXE, run `tools/packaging/build_installer.ps1` with `-CompilerPath` pointing to NSIS, an `-OutputDirectory`, and optionally a published `-PayloadDirectory`. Supply `-ArchiveToolDirectory` containing the official unmodified 7-Zip `7z.exe`, `7z.dll` and `License.txt` (defaults to `Program Files\7-Zip`). These are bundled extraction tools; testers do not install 7-Zip.
-4. If setup requests a restart, restart Windows, reopen Sonic Scout, and retry **SETUP**.
+4. If setup requests a restart, restart Windows and sign in; Sonic Scout resumes setup automatically.
 
 `tools\SonicScoutCSharp\Install-SonicScout.bat` also publishes first when run from source. Developers can use `run_sonic_scout_csharp.bat` to build and launch the app; that path requires the SDK.
 
@@ -78,7 +94,7 @@ The main menu offers:
 | `[b] SonicScout2.0` | Opens the page for the automated, auto-updating app |
 | `[Q] Quit` | Exit |
 
-The script writes the Equalizer APO starter chain and `[5] Setup Profile` activates real library files. Complete Equalizer APO's Device Selector if it opens during installation, selecting SonicScout2.0 and SonicScout2.0 + when listed (CABLE Input / CABLE In 16ch before renaming).
+The script writes the Equalizer APO starter chain and `[5] Setup Profile` activates real library files. Complete Equalizer APO's Device Selector (`DeviceSelector.exe`; `Configurator.exe` in older releases) if it opens during installation, selecting SonicScout2.0 and SonicScout2.0 + when listed (CABLE Input / CABLE In 16ch before renaming).
 
 ## What is automated
 
@@ -97,7 +113,7 @@ Most of the chain needs no manual steps. These are all handled for you:
 
 Four things no installer can do for you. The setup wizard prints these as numbered steps at the end of every run:
 
-1. **Restart Windows.** Driver and audio changes are not live until after a reboot.
+1. **Restart Windows when asked.** Driver and audio changes are not live until after a reboot; setup resumes by itself when you sign back in.
 2. **Leave your default playback device alone.** Keep it on your physical device (Realtek or similar). Sonic Scout is opt-in per app, so nothing needs to change here.
 3. **Turn Spatial Sound off** for the devices you listen through. Windows Sonic, Dolby Atmos and DTS:X silently block Equalizer APO when left on, and the equalizer will appear to do nothing.
 4. **Point each game or app at the SonicScout2.0 virtual input.** This is per-app by design: Sonic Scout receives the app's audio, applies your tune, and passes it to your speakers. Apps left on your speakers bypass the tune.
@@ -117,11 +133,12 @@ Behavior:
 - If setup is incomplete, the setup wizard opens first and guides install/routing.
 - The wizard is four steps: confirm output and authorise, run install/checks, audio stack ready, verify Windows settings.
 - Setup actions run through the backend script bridge and request administrator access when needed using the user's wizard choices. One authorisation checkbox covers driver installation, routing changes, and dependency fallback.
-- When setup passes, the main app UI opens for profile/live use.
+- After a required restart, a per-user RunOnce entry relaunches the app with `--resume-setup` to finish verification.
+- The main app UI opens immediately; EQ edits are written without admin rights to `%LOCALAPPDATA%\SonicScout\eapo\sonicscout.txt`.
 
 ### What is automated
 
-See [What is automated](#what-is-automated) and [What you still have to do](#what-you-still-have-to-do) above. Setup checks components and installs the bundled assets. Complete any vendor dialogs, restart when requested, and rerun installation to verify completion. The wizard also lists the Windows settings to check.
+See [What is automated](#what-is-automated) and [What you still have to do](#what-you-still-have-to-do) above. Setup checks components and installs the bundled assets. Complete any vendor dialogs and restart when requested; setup resumes and verifies on next sign-in. The wizard also lists the Windows settings to check.
 
 ## What the installer does
 

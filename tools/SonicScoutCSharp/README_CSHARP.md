@@ -6,10 +6,16 @@ Source builds require the .NET 8 SDK. Run `publish_sonic_scout.bat` to create a 
 .\publish_sonic_scout.ps1 -OutputPath C:\Exports\SonicScout
 ```
 
-Existing output is preserved on failure and kept as a dated backup after successful publishing. The package includes SonicScout, SonicPass, the LEQ companion, installer scripts, the tune library, plugins and Default HRIR files. Destination PCs do not need .NET installed separately.
+Existing output is kept if publishing fails, and kept as a dated backup after it succeeds. The package includes SonicScout, SonicPass, the LEQ companion, installer scripts, the tune library, plugins and Default HRIR files. Destination PCs do not need .NET installed separately. The tester EXE is built from this package with `tools/packaging/build_installer.ps1` (NSIS).
 
-Extract the complete package, then run `Install-SonicScout.bat`. Accept administrator elevation and confirm installation. Complete vendor dialogs; choose both SonicScout2.0 playback entries in Equalizer APO Device Selector when the + entry is listed (CABLE Input / CABLE In 16ch before renaming). If a restart is required, reboot and run the same batch again. The app starts after verification passes. Missing audio components require internet access; failed downloads remain incomplete and can be retried.
+## Tester flow (build11)
 
-For source development, `run_sonic_scout_csharp.bat` builds and launches using the SDK. First-run checks are read-only. Use the installation wizard to install components and review failures. The wizard's single authorisation checkbox covers the requested installation changes.
+1. `SonicScout-Setup.exe` → **UAC prompt 1** (installer).
+2. Setup window: choose the output, tick authorisation, **Run install setup** → **UAC prompt 2** (`setup_audio_stack.ps1`: VB-CABLE, ReaPlugs, Equalizer APO, routing). Equalizer APO is verified by `DeviceSelector.exe` (E-APO 1.4.2) or `Configurator.exe` (older).
+3. Restart when asked. `Register-SonicScoutResumeAfterRestart` writes `HKCU\...\RunOnce\SonicScoutResumeSetup`, which relaunches `SonicScout.exe --resume-setup` at the next sign-in. The resume runs a read-only preflight (up to 180 s) without elevation. The main window starts at once, and the setup dialog stays open.
+4. EQ changes are written without admin rights to `%LOCALAPPDATA%\SonicScout\eapo\sonicscout.txt`, which is included from `config.txt`. Saved profiles go in `%LOCALAPPDATA%\SonicScout\profiles`, and the active filter is in `Documents\HAudioApp\active_profile.txt`.
+5. The status (`%LOCALAPPDATA%\SonicScout\logs\eq-status.json`) is honest: **NO AUDIO** until processed signal is measured, then **RUNNING**. The meter survives `0x8889xxxx` device errors with dispose and backoff.
 
-Installation logs: `%LOCALAPPDATA%\SonicScout\logs`. Preserve that folder when reporting a problem.
+`run_sonic_scout_csharp.bat` builds and launches from source using the SDK. Known risks: builds are unsigned until Azure Artifact Signing is set up, and the post-reboot resume must happen on the same Windows account that started setup.
+
+Installation logs: `%LOCALAPPDATA%\SonicScout\logs`. Keep that folder when reporting a problem. The VM end-to-end harness is in `tests/E2EHarness`.

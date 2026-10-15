@@ -18,10 +18,11 @@ The diagnostics bucket is only for redacted support bundles. The Tester Share bu
 
 ## Documentation map
 
-- [README.md](README.md) — Main project overview and setup.
+- [../README.md](../README.md) — Main project overview, tester install flow and known risks.
 - [SUPPORT.md](SUPPORT.md) — WPF support diagnostics, privacy, and production support service.
 - [TESTER_SHARE.md](TESTER_SHARE.md) — Authenticated tester/admin file portal behavior and maintenance.
-- [../tools/SonicScoutCSharp/README_CSHARP.md](../tools/SonicScoutCSharp/README_CSHARP.md) — C# desktop app build/run notes.
+- [../tools/SonicScoutCSharp/README_CSHARP.md](../tools/SonicScoutCSharp/README_CSHARP.md) — C# desktop app build/run notes and the build11 tester flow.
+- [../tests/E2EHarness/README.md](../tests/E2EHarness/README.md) — VirtualBox end-to-end harness (install, UAC, reboot/resume, verify, user flow).
 
 ## Deployment workflows
 
