@@ -800,7 +800,9 @@ elseif ($state.VoicemeeterInstalled -or $state.VoicemeeterEndpointDetected) {
 function Test-ReaPlugsInstalled {
     $registered = Test-Match -Values (Get-InstalledSoftwareNames) -Patterns @('ReaPlugs')
     $core = Test-Path -LiteralPath "${env:ProgramFiles}\VSTPlugins\ReaPlugs\reajs.dll"
-    return ($registered -and $core)
+    # Sonic Scout extracts the vendor ReaPlugs installer itself (no uninstall entry); that path leaves extract.log.
+    $extractedBySetup = Test-Path -LiteralPath "${env:ProgramFiles}\VSTPlugins\ReaPlugs\extract.log"
+    return ($core -and ($registered -or $extractedBySetup))
 }
 $reaplugsReady = Test-ReaPlugsInstalled
 if (-not $reaplugsReady) {
