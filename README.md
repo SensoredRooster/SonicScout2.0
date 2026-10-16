@@ -48,7 +48,7 @@ Users do not need a terminal, Git, or the .NET SDK.
 
 ### Known risks
 
-- **Unsigned builds.** Installers stay unsigned until Azure Artifact Signing is set up, so Windows SmartScreen may warn on first run.
+- **Code signing.** Release installers are signed with Azure Artifact Signing (publisher **Branden Nail**). Unsigned developer builds may still trigger a SmartScreen warning.
 - **Admin account.** The installer and the setup step need an account that can approve UAC. Run the whole flow, including the post-reboot resume, from the same Windows account that started it, because the RunOnce entry is per-user.
 - Physical-hardware audio quality and latency are not yet signed off.
 
@@ -64,6 +64,14 @@ Users do not need a terminal, Git, or the .NET SDK.
 4. If setup requests a restart, restart Windows and sign in; Sonic Scout resumes setup automatically.
 
 `tools\SonicScoutCSharp\Install-SonicScout.bat` also publishes first when run from source. Developers can use `run_sonic_scout_csharp.bat` to build and launch the app; that path requires the SDK.
+
+### Code signing (Azure Artifact Signing)
+
+`build_installer.ps1` signs when you pass `-Sign` (or set `SONICSCOUT_SIGN=1`). Without it, builds are unsigned exactly as before.
+
+- Prerequisites: `winget install Microsoft.Azure.ArtifactSigningClientTools` (signtool x64 10.0.22621+ and `Azure.CodeSigning.Dlib.dll`) and `winget install Microsoft.AzureCLI`, then `az login` as an account with the **Artifact Signing Certificate Profile Signer** role.
+- Account settings are in `tools/packaging/signing/metadata.json` (endpoint `https://eus.codesigning.azure.net`, account `SensoredRooster`, profile `Sensoredrooster`).
+- The script signs the `SonicScout*.exe`/`.dll` files it builds, then `SonicScout-Setup.exe`, with `signtool sign /v /fd SHA256 /tr http://timestamp.acs.microsoft.com /td SHA256 /dlib <dll> /dmdf metadata.json`, and checks each one with `signtool verify /pa /v`. Override tool paths with `-SignToolPath`, `-DlibPath`, `-SigningMetadataPath` (or `SONICSCOUT_SIGNTOOL`, `SONICSCOUT_SIGN_DLIB`).
 
 ## Install a published package
 
