@@ -313,13 +313,26 @@ public partial class MainWindow : Window
 
         int? preflightExitCode = await RunSetupPreflightExitCodeAsync(setupScriptPath, CancellationToken.None,
             // Right after logon (RunOnce resume) Windows is busy and the check can take far longer.
-            App.ResumeSetupRequested ? TimeSpan.FromSeconds(180) : TimeSpan.FromSeconds(45));
+            App.ResumeSetupRequested ? TimeSpan.FromSeconds(180) : App.AutoStartLaunch ? TimeSpan.FromSeconds(60) : TimeSpan.FromSeconds(45));
         bool setupVerified = routingConfiguration.SonicScoutProvisioned &&
             !string.IsNullOrWhiteSpace(routingConfiguration.SelectedPhysicalOutputId) &&
             preflightExitCode.HasValue &&
             preflightExitCode.Value == 0;
         if (setupVerified)
         {
+            return;
+        }
+
+        // Right after sign-in (start with Windows) the read-only check often times out while
+        // Windows is still busy. A timeout is not a failure: with a completed setup, start
+        // routing from the saved configuration instead of blocking on the SETUP dialog
+        // (which, behind a minimized window, also kept SonicPass from ever starting).
+        bool provisioned = routingConfiguration.SonicScoutProvisioned &&
+            !string.IsNullOrWhiteSpace(routingConfiguration.SelectedPhysicalOutputId);
+        if (provisioned && preflightExitCode is null && !App.ResumeSetupRequested)
+        {
+            SupportService.Log("startup_preflight_timeout", new { autostart = App.AutoStartLaunch });
+            MessageText.Text = "The startup audio check timed out (Windows was still busy); using your saved setup. Run SETUP if audio is missing.";
             return;
         }
 
@@ -336,6 +349,14 @@ public partial class MainWindow : Window
             // resume dialog stays open (with its next steps) until the user closes it. Shown once
             // the window is idle, i.e. after Window_Loaded has finished its startup work.
             _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => ShowStartupSetupDialog(autoResume: true)));
+            return;
+        }
+
+        if (App.AutoStartLaunch)
+        {
+            // Started minimized at sign-in and setup genuinely needs attention: show the window
+            // first and open the dialog once startup work is done, never a modal behind an icon.
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => { ShowFromTray(); ShowStartupSetupDialog(autoResume: false); }));
             return;
         }
 
