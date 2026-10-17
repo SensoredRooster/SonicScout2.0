@@ -19,3 +19,5 @@ jobs:
         run: dotnet restore tools/SonicScoutCSharp/SonicScout.CSharp.csproj
       - name: Build
         run: dotnet build tools/SonicScoutCSharp/SonicScout.CSharp.csproj -c Release --no-restore
+      - name: Unit tests
+        run: dotnet test tests/SonicScout.Tests -c Release

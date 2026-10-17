@@ -87,7 +87,7 @@ internal static class Program
                 while (scoutPass.IsRunning && !cancelRequested)
                 {
                     Thread.Sleep(1000);
-                    Console.WriteLine($"Packets: {scoutPass.PacketsReceived}, buffer drops: {scoutPass.BufferDrops}, buffered: {scoutPass.BufferedMilliseconds} ms");
+                    Console.WriteLine($"Packets: {scoutPass.PacketsReceived}, buffer drops: {scoutPass.BufferDrops}, buffered: {scoutPass.BufferedMilliseconds} ms, target: {scoutPass.TargetMilliseconds} ms, underruns: {scoutPass.Underruns}, rate: {scoutPass.DriftRatio:F4}");
                 }
                 failure = scoutPass.LastError;
                 current = null;
@@ -298,10 +298,11 @@ internal sealed class SonicPassEngine : IDisposable
     private readonly object stateLock = new();
     private IWaveIn? capture;
     private WasapiOut? output;
-    private MediaFoundationResampler? outputFormatConverter;
     private BufferedWaveProvider? buffer;
     private long packetsReceived;
     private long bufferDrops;
+    private JitterBuffer? jitter;
+    private DriftCompensatingSampleProvider? drift;
     private bool stopped;
 
     public SonicPassEngine(MMDevice inputDevice, MMDevice outputDevice, int bufferMilliseconds, double inputGainDb, double outputGainDb)
@@ -318,6 +319,9 @@ internal sealed class SonicPassEngine : IDisposable
     public long PacketsReceived => Interlocked.Read(ref packetsReceived);
     public long BufferDrops => Interlocked.Read(ref bufferDrops);
     public int BufferedMilliseconds => buffer is null ? 0 : (int)buffer.BufferedDuration.TotalMilliseconds;
+    public long Underruns => jitter?.Underruns ?? 0;
+    public double DriftRatio => drift?.Ratio ?? 1.0;
+    public int TargetMilliseconds => jitter?.TargetMilliseconds ?? 0;
 
     public void Start()
     {
@@ -335,15 +339,21 @@ internal sealed class SonicPassEngine : IDisposable
             capture = new WasapiCapture(inputDevice);
             buffer = new BufferedWaveProvider(capture.WaveFormat)
             {
-                BufferDuration = TimeSpan.FromMilliseconds(Math.Max(bufferMilliseconds * 4, 200)),
+                BufferDuration = TimeSpan.FromSeconds(1),
                 DiscardOnBufferOverflow = true,
-                ReadFully = true
+                ReadFully = false
             };
             WaveFormat outputFormat = outputDevice.AudioClient.MixFormat;
-            IWaveProvider playbackProvider = buffer;
-            if (!AreCompatibleFormats(capture.WaveFormat, outputFormat))
+            jitter = new JitterBuffer(buffer, bufferMilliseconds);
+            // Gentle drift compensation (at most +/-0.5 %): the capture and render clocks are
+            // never exactly equal, so play slightly faster/slower to keep the queue at target
+            // instead of periodically dropping or underrunning a chunk of audio.
+            JitterBuffer jitterRef = jitter;
+            drift = new DriftCompensatingSampleProvider(jitter.ToSampleProvider(), () => jitterRef.FillError);
+            IWaveProvider playbackProvider = drift.ToWaveProvider();
+            ISampleProvider? convertedSamples = drift;
             {
-                ISampleProvider sampleProvider = buffer.ToSampleProvider();
+                ISampleProvider sampleProvider = drift;
                 if (sampleProvider.WaveFormat.Channels != outputFormat.Channels)
                 {
                     sampleProvider = new StereoOutputSampleProvider(sampleProvider, outputFormat.Channels);
@@ -352,14 +362,18 @@ internal sealed class SonicPassEngine : IDisposable
                 {
                     sampleProvider = new WdlResamplingSampleProvider(sampleProvider, outputFormat.SampleRate);
                 }
+                convertedSamples = sampleProvider;
                 playbackProvider = sampleProvider.ToWaveProvider();
             }
-            // Sample conversion above emits float samples. Preserve the physical
-            // device's full native descriptor, including PCM depth/subformat/mask.
+            // Never use MediaFoundationResampler here: NAudio's MF transform pulls a full
+            // second (AverageBytesPerSecond) from the source per read. With a ReadFully
+            // BufferedWaveProvider that is ~buffer-ms of real audio followed by ~1 s of zero
+            // padding, which played as "a blip of sound, then silence" once per second.
+            // Convert per render callback straight into the device's native mix format.
             if (!HaveIdenticalFormatDescriptors(playbackProvider.WaveFormat, outputFormat))
             {
-                outputFormatConverter = new MediaFoundationResampler(playbackProvider, outputFormat);
-                playbackProvider = outputFormatConverter;
+                ISampleProvider samples = convertedSamples;
+                playbackProvider = new NativeFormatWaveProvider(samples, outputFormat);
             }
             Console.Error.WriteLine($"SonicPass playback initialization: capture={capture.WaveFormat}; native={outputFormat}; playback={playbackProvider.WaveFormat}; buffer={bufferMilliseconds}ms; shared/event mode.");
             output = new WasapiOut(outputDevice, AudioClientShareMode.Shared, true, bufferMilliseconds);
@@ -416,7 +430,6 @@ internal sealed class SonicPassEngine : IDisposable
         Stop();
         capture?.Dispose();
         output?.Dispose();
-        outputFormatConverter?.Dispose();
         inputDevice.Dispose();
         outputDevice.Dispose();
     }
@@ -429,12 +442,8 @@ internal sealed class SonicPassEngine : IDisposable
         }
 
         ApplyGain(eventArgs.Buffer, eventArgs.BytesRecorded);
-        // Drop stale queued audio instead of preserving an ever-growing game delay.
-        if (buffer.BufferedDuration.TotalMilliseconds > Math.Max(bufferMilliseconds * 2, 40))
-        {
-            buffer.ClearBuffer();
-            Interlocked.Increment(ref bufferDrops);
-        }
+        // Latency control lives in JitterBuffer: trim only far above the adaptive target.
+        if (jitter is not null && jitter.TrimBeforeAdd(eventArgs.BytesRecorded)) Interlocked.Increment(ref bufferDrops);
         int before = buffer.BufferedBytes;
         buffer.AddSamples(eventArgs.Buffer, 0, eventArgs.BytesRecorded);
         if (buffer.BufferedBytes == before && eventArgs.BytesRecorded > 0)
@@ -535,5 +544,198 @@ internal sealed class StereoOutputSampleProvider : ISampleProvider
             buffer[offset + frame * WaveFormat.Channels + 1] = sourceBuffer[frame * 2 + 1];
         }
         return framesRead * WaveFormat.Channels;
+    }
+}
+
+/// <summary>
+/// Float samples -> the render endpoint's exact native mix format (IEEE float or 16/24/32-bit PCM,
+/// Extensible descriptors preserved). Reads only what each WASAPI callback asks for.
+/// </summary>
+internal sealed class NativeFormatWaveProvider : IWaveProvider
+{
+    private static readonly Guid FloatSubFormat = new("00000003-0000-0010-8000-00aa00389b71");
+    private readonly ISampleProvider source;
+    private readonly bool isFloat;
+    private readonly int bytesPerSample;
+    private float[] scratch = [];
+
+    public NativeFormatWaveProvider(ISampleProvider source, WaveFormat nativeFormat)
+    {
+        if (source.WaveFormat.SampleRate != nativeFormat.SampleRate || source.WaveFormat.Channels != nativeFormat.Channels)
+            throw new ArgumentException($"Converter expects {nativeFormat.SampleRate} Hz / {nativeFormat.Channels} ch samples, got {source.WaveFormat.SampleRate} Hz / {source.WaveFormat.Channels} ch.");
+        this.source = source;
+        WaveFormat = nativeFormat;
+        isFloat = nativeFormat.Encoding == WaveFormatEncoding.IeeeFloat ||
+                  (nativeFormat is WaveFormatExtensible ext && ext.SubFormat == FloatSubFormat);
+        bytesPerSample = nativeFormat.BitsPerSample / 8;
+        if (isFloat ? bytesPerSample != 4 : bytesPerSample is not (2 or 3 or 4))
+            throw new NotSupportedException($"Unsupported output format: {nativeFormat}");
+        if (nativeFormat.BlockAlign != bytesPerSample * nativeFormat.Channels)
+            throw new NotSupportedException($"Unsupported container size in output format: {nativeFormat}");
+    }
+
+    public WaveFormat WaveFormat { get; }
+
+    public int Read(byte[] buffer, int offset, int count)
+    {
+        int samplesWanted = count / bytesPerSample;
+        samplesWanted -= samplesWanted % WaveFormat.Channels;
+        if (scratch.Length < samplesWanted) scratch = new float[samplesWanted];
+        int read = source.Read(scratch, 0, samplesWanted);
+        int o = offset;
+        for (int i = 0; i < read; i++)
+        {
+            float v = Math.Clamp(scratch[i], -1f, 1f);
+            if (isFloat) { BitConverter.TryWriteBytes(buffer.AsSpan(o, 4), v); }
+            else if (bytesPerSample == 2) { BitConverter.TryWriteBytes(buffer.AsSpan(o, 2), (short)Math.Round(v * 32767f)); }
+            else if (bytesPerSample == 3)
+            {
+                int x = (int)Math.Round(v * 8388607f);
+                buffer[o] = (byte)x; buffer[o + 1] = (byte)(x >> 8); buffer[o + 2] = (byte)(x >> 16);
+            }
+            else { BitConverter.TryWriteBytes(buffer.AsSpan(o, 4), (int)Math.Round(v * 2147483647.0)); }
+            o += bytesPerSample;
+        }
+        return read * bytesPerSample;
+    }
+}
+
+/// <summary>
+/// Adaptive jitter buffer between the cable capture and the render callback. VB-CABLE delivers
+/// packets in bursts, so a fixed 20 ms queue underran several times per second (each underrun
+/// played zeros = audible gap). On underrun it re-primes to a slightly larger target (+10 ms,
+/// up to 200 ms) instead of stuttering; it trims (dropping the oldest audio) only when the queue
+/// grows well past the target, so clock drift cannot build up delay.
+/// </summary>
+internal sealed class JitterBuffer : IWaveProvider
+{
+    private readonly BufferedWaveProvider source;
+    private readonly int maxTargetMs;
+    private byte[] scratch = Array.Empty<byte>();
+    private bool priming = true;
+    private long underruns;
+    private int targetMs;
+
+    public JitterBuffer(BufferedWaveProvider source, int bufferMilliseconds, int maxTargetMilliseconds = 200)
+    {
+        this.source = source;
+        source.ReadFully = false;
+        targetMs = Math.Clamp(bufferMilliseconds * 2, 30, maxTargetMilliseconds);
+        maxTargetMs = maxTargetMilliseconds;
+    }
+
+    public WaveFormat WaveFormat => source.WaveFormat;
+    public long Underruns => Interlocked.Read(ref underruns);
+    public int TargetMilliseconds => Volatile.Read(ref targetMs);
+    /// <summary>(queued - target) / target; positive when audio is piling up.</summary>
+    public double FillError => (source.BufferedDuration.TotalMilliseconds - TargetMilliseconds) / TargetMilliseconds;
+    private int TargetBytes => source.WaveFormat.ConvertLatencyToByteSize(TargetMilliseconds);
+
+    public int Read(byte[] buffer, int offset, int count)
+    {
+        if (priming)
+        {
+            if (source.BufferedBytes < TargetBytes)
+            {
+                Array.Clear(buffer, offset, count);
+                return count; // keep the render stream alive; never return 0 (end of stream)
+            }
+            priming = false;
+        }
+        int read = source.Read(buffer, offset, count);
+        if (read < count)
+        {
+            Array.Clear(buffer, offset + read, count - read);
+            Interlocked.Increment(ref underruns);
+            Volatile.Write(ref targetMs, Math.Min(maxTargetMs, TargetMilliseconds + 10));
+            priming = true;
+        }
+        return count;
+    }
+
+    /// <summary>Called by the capture thread before adding a packet. Returns true when audio was dropped.</summary>
+    public bool TrimBeforeAdd(int incomingBytes)
+    {
+        int target = TargetBytes;
+        int ceiling = target + Math.Max(target, source.WaveFormat.ConvertLatencyToByteSize(60));
+        int queued = source.BufferedBytes + incomingBytes;
+        if (queued <= ceiling) return false;
+        int excess = queued - target;
+        excess -= excess % source.WaveFormat.BlockAlign;
+        excess = Math.Min(excess, source.BufferedBytes);
+        if (excess <= 0) return false;
+        if (scratch.Length < excess) scratch = new byte[excess];
+        source.Read(scratch, 0, excess);
+        return true;
+    }
+}
+
+/// <summary>
+/// Plays the source at a ratio within +/-0.5 % of 1.0 (linear interpolation) steered by the
+/// jitter-buffer fill level, absorbing ordinary capture/render clock drift (typically &lt;0.1 %).
+/// It deliberately cannot hide gross rate mismatches.
+/// </summary>
+internal sealed class DriftCompensatingSampleProvider : ISampleProvider
+{
+    public const double MaxCorrection = 0.005;
+    private const double Smoothing = 0.02;
+    private readonly ISampleProvider source;
+    private readonly Func<double> fillError;
+    private readonly int channels;
+    private readonly float[] previous;
+    private float[] input = Array.Empty<float>();
+    private double position;
+    private double ratio = 1.0;
+
+    public DriftCompensatingSampleProvider(ISampleProvider source, Func<double> fillError)
+    {
+        this.source = source;
+        this.fillError = fillError;
+        channels = source.WaveFormat.Channels;
+        previous = new float[channels];
+    }
+
+    public WaveFormat WaveFormat => source.WaveFormat;
+    public double Ratio => Volatile.Read(ref ratio);
+
+    public int Read(float[] buffer, int offset, int count)
+    {
+        int frames = count / channels;
+        if (frames <= 0) return 0;
+        double error = Math.Clamp(fillError(), -1.0, 1.0);
+        if (double.IsNaN(error)) error = 0;
+        double r = ratio + ((1.0 + MaxCorrection * error) - ratio) * Smoothing;
+        r = Math.Clamp(r, 1.0 - MaxCorrection, 1.0 + MaxCorrection);
+        Volatile.Write(ref ratio, r);
+
+        // Virtual stream: index 0 = last frame of the previous call, index k>=1 = input[k-1].
+        int need = (int)Math.Floor(position + (frames - 1) * r) + 1;
+        int samplesNeeded = need * channels;
+        if (input.Length < samplesNeeded) input = new float[samplesNeeded];
+        int got = 0;
+        while (got < samplesNeeded)
+        {
+            int n = source.Read(input, got, samplesNeeded - got);
+            if (n <= 0) break;
+            got += n;
+        }
+        if (got < samplesNeeded) Array.Clear(input, got, samplesNeeded - got);
+
+        for (int i = 0; i < frames; i++)
+        {
+            double p = position + i * r;
+            int i0 = (int)Math.Floor(p);
+            float f = (float)(p - i0);
+            int a = (i0 - 1) * channels, b = i0 * channels;
+            for (int c = 0; c < channels; c++)
+            {
+                float va = i0 == 0 ? previous[c] : input[a + c];
+                float vb = input[b + c];
+                buffer[offset + i * channels + c] = va + (vb - va) * f;
+            }
+        }
+        position = Math.Max(0.0, position + frames * r - need);
+        Array.Copy(input, (need - 1) * channels, previous, 0, channels);
+        return frames * channels;
     }
 }

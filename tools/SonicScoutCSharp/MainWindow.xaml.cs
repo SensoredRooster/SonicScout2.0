@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Text.Json;
 using Path = System.IO.Path;
 using System.Diagnostics;
@@ -70,16 +70,19 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer eqWriteTimer = new() { Interval = TimeSpan.FromMilliseconds(180) };
     private WasapiLoopbackCapture? loopbackCapture;
     private readonly object spectrumLock = new();
-    private const int SpectrumSampleWindow = 512;
-    private readonly float[] sampleRing = new float[1024];
+    private const int SpectrumSampleWindow = 4096;
+    private const int SpectrumBandCount = 48;
+    private const int SpectrumHopFrames = 1024;
+    private readonly float[] sampleRing = new float[8192];
+    private int framesSinceSpectrum;
     private int sampleRingWrite;
     private int sampleRingCount;
     private readonly float[] spectrumSampleScratch = new float[SpectrumSampleWindow];
     private readonly Complex[] fftScratch = new Complex[SpectrumSampleWindow];
-    private readonly double[] spectrumBandScratch = new double[32];
-    private readonly double[] spectrumRenderCopy = new double[32];
-    private double[] spectrumLevels = new double[32];
-    private readonly double[] smoothedSpectrum = new double[32];
+    private readonly double[] spectrumBandScratch = new double[SpectrumBandCount];
+    private readonly double[] spectrumRenderCopy = new double[SpectrumBandCount];
+    private double[] spectrumLevels = new double[SpectrumBandCount];
+    private readonly double[] smoothedSpectrum = new double[SpectrumBandCount];
     private bool audioSignalSeen;
     private DateTime lastAudioDataAtUtc = DateTime.MinValue;
     private double fallbackMeterLevel;
@@ -89,10 +92,6 @@ public partial class MainWindow : Window
     private readonly MeterBackoff meterBackoff = new();
     private EapoInstallationFacts? apoFacts;
     private DateTime lastEqStatusRefreshUtc = DateTime.MinValue;
-    private readonly Random spectrumRandom = new();
-    private readonly List<Ellipse> spectrumDots = new();
-    private double spectrumDotsWidth;
-    private double spectrumDotsHeight;
     private string? activeProfileId;
     private readonly Dictionary<string, double> eqValues = new(StringComparer.OrdinalIgnoreCase);
     private static readonly int[] EqFrequencies = { 60, 150, 400, 1000, 2500, 6000, 12000 };
@@ -140,6 +139,9 @@ public partial class MainWindow : Window
         SupportService.Initialize();
 
         trayIcon = CreateTrayIcon();
+        if (App.AutoStartLaunch && !App.ResumeSetupRequested) WindowState = WindowState.Minimized;
+        StateChanged += (_, _) => UpdateRenderActivity();
+        IsVisibleChanged += (_, _) => UpdateRenderActivity();
         profiles = new Dictionary<string, (string, string, WpfButton)>();
         routingConfiguration = SonicRoutingConfigurationStore.Load(routingConfigurationPath);
         RestoreComboValue(SonicPassBufferComboBox, routingConfiguration.SonicPassBufferMs);
@@ -278,23 +280,51 @@ public partial class MainWindow : Window
 
         breathingTimer.Tick += (_, _) =>
         {
-            double amount = (Math.Sin(breathingPhase) + 1) / 2;
-            WpfColor pulseColor = BlendColors(ParseColor(activeTheme.Primary), ParseColor(activeTheme.Highlight), amount);
-            foreach ((Border border, SolidColorBrush brush) in racingBorders)
+            if (!renderActive) { RefreshHonestEqStatus(); return; }
+            // The window is layered (AllowsTransparency), so any visual change repaints the whole
+            // window in software (~14% of a VM core at 3 updates/s). The slow pulse (same periods as
+            // before: ~17 s border colour, ~5.6 s frame opacity) now steps ~1.7x per second, and only while
+            // Sonic Scout is the active window; behind a game it holds still. The spectrum only repaints
+            // when its levels actually change.
+            if (++breathingTick % PulseEveryTicks == 0 && IsActive && !PerfOff("pulse"))
             {
-                brush.Color = pulseColor;
-                border.BorderBrush = brush;
+                double amount = (Math.Sin(breathingPhase) + 1) / 2;
+                WpfColor pulseColor = BlendColors(ParseColor(activeTheme.Primary), ParseColor(activeTheme.Highlight), amount);
+                foreach ((Border border, SolidColorBrush brush) in racingBorders)
+                {
+                    brush.Color = pulseColor;
+                    border.BorderBrush = brush;
+                }
+                // Same look as the old 2.8 s AutoReverse storyboard (opacity 0.78..1), ~3 updates/s.
+                SpectrumFrame.Opacity = 0.78 + 0.22 * ((Math.Sin(breathingPhase * 3.1) + 1) / 2);
+                breathingPhase += 0.018 * PulseEveryTicks;
             }
-            RenderSpectrum();
+            if (!PerfOff("spectrum")) RenderSpectrum();
             RefreshHonestEqStatus();
-            breathingPhase += 0.018;
         };
-        breathingTimer.Start();
+        if (!PerfOff("timer")) breathingTimer.Start();
     }
+
+    // Diagnostics only: SONICSCOUT_PERF_OFF=pulse,spectrum,timer disables visual components one at a time so idle CPU can be attributed.
+    private static readonly string[] perfOff = (Environment.GetEnvironmentVariable("SONICSCOUT_PERF_OFF") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    private static bool PerfOff(string component) => perfOff.Contains(component, StringComparer.OrdinalIgnoreCase);
 
     private bool resumeVerifyOnly;
 
+    // True while this instance owns the startup/resume SETUP flow (preflight running or dialog queued/open),
+    // so a second launch (RunOnce --resume-setup next to the Run --autostart entry) cannot open a second
+    // dialog whose run would escalate to an unprompted elevated Install.
+    private bool startupSetupFlowActive;
+    private bool startupSetupDialogQueued;
+
     private async Task EnsureTurnkeyStartupSetupAsync()
+    {
+        startupSetupFlowActive = true;
+        try { await EnsureTurnkeyStartupSetupCoreAsync(); }
+        finally { if (!startupSetupDialogQueued && !OwnedWindows.OfType<SetupWindow>().Any()) startupSetupFlowActive = false; }
+    }
+
+    private async Task EnsureTurnkeyStartupSetupCoreAsync()
     {
         string? setupScriptPath = ResolveSetupAutomationScriptPath();
         if (setupScriptPath is null)
@@ -304,13 +334,26 @@ public partial class MainWindow : Window
 
         int? preflightExitCode = await RunSetupPreflightExitCodeAsync(setupScriptPath, CancellationToken.None,
             // Right after logon (RunOnce resume) Windows is busy and the check can take far longer.
-            App.ResumeSetupRequested ? TimeSpan.FromSeconds(180) : TimeSpan.FromSeconds(45));
+            App.ResumeSetupRequested ? TimeSpan.FromSeconds(180) : App.AutoStartLaunch ? TimeSpan.FromSeconds(60) : TimeSpan.FromSeconds(45));
         bool setupVerified = routingConfiguration.SonicScoutProvisioned &&
             !string.IsNullOrWhiteSpace(routingConfiguration.SelectedPhysicalOutputId) &&
             preflightExitCode.HasValue &&
             preflightExitCode.Value == 0;
         if (setupVerified)
         {
+            return;
+        }
+
+        // Right after sign-in (start with Windows) the read-only check often times out while
+        // Windows is still busy. A timeout is not a failure: with a completed setup, start
+        // routing from the saved configuration instead of blocking on the SETUP dialog
+        // (which, behind a minimized window, also kept SonicPass from ever starting).
+        bool provisioned = routingConfiguration.SonicScoutProvisioned &&
+            !string.IsNullOrWhiteSpace(routingConfiguration.SelectedPhysicalOutputId);
+        if (provisioned && preflightExitCode is null && !App.ResumeSetupRequested)
+        {
+            SupportService.Log("startup_preflight_timeout", new { autostart = App.AutoStartLaunch });
+            MessageText.Text = "The startup audio check timed out (Windows was still busy); using your saved setup. Run SETUP if audio is missing.";
             return;
         }
 
@@ -326,7 +369,17 @@ public partial class MainWindow : Window
             // this dialog: the device list, live meter and EQ status timer must start now, and the
             // resume dialog stays open (with its next steps) until the user closes it. Shown once
             // the window is idle, i.e. after Window_Loaded has finished its startup work.
+            startupSetupDialogQueued = true;
             _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => ShowStartupSetupDialog(autoResume: true)));
+            return;
+        }
+
+        if (App.AutoStartLaunch)
+        {
+            // Started minimized at sign-in and setup genuinely needs attention: show the window
+            // first and open the dialog once startup work is done, never a modal behind an icon.
+            startupSetupDialogQueued = true;
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => { ShowFromTray(); ShowStartupSetupDialog(autoResume: false); }));
             return;
         }
 
@@ -338,7 +391,9 @@ public partial class MainWindow : Window
         // Single startup SETUP window (one window only, so only one elevation prompt).
         SetupWindow dialog = new(DiscoverOutputEndpointsAsync, RunSetupChecks, OpenPostInstallVerificationAsync) { Owner = this, AutoResume = autoResume };
         CopyThemeResourcesTo(dialog);
-        dialog.ShowDialog();
+        startupSetupFlowActive = true;
+        try { dialog.ShowDialog(); }
+        finally { startupSetupDialogQueued = false; startupSetupFlowActive = false; }
 
         if (string.IsNullOrWhiteSpace(routingConfiguration.SonicScoutEndpointId) || string.IsNullOrWhiteSpace(routingConfiguration.SelectedPhysicalOutputId))
         {
@@ -496,9 +551,15 @@ public partial class MainWindow : Window
         bool observedSample = false;
         lock (spectrumLock)
         {
+            int channels = Math.Max(1, format.Channels);
             for (int offset = 0; offset + frameSize <= e.BytesRecorded; offset += frameSize)
             {
-                float sample = ReadNormalizedSample(format, e.Buffer, offset, bytesPerSample);
+                // Mono mix of all channels (the old meter only watched channel 1).
+                float sample = 0;
+                for (int ch = 0; ch < channels; ch++)
+                    sample += ReadNormalizedSample(format, e.Buffer, offset + (ch * bytesPerSample), bytesPerSample);
+                sample /= channels;
+                framesSinceSpectrum++;
                 sampleRing[sampleRingWrite] = sample;
                 sampleRingWrite = (sampleRingWrite + 1) % sampleRing.Length;
                 if (sampleRingCount < sampleRing.Length)
@@ -508,17 +569,18 @@ public partial class MainWindow : Window
                 observedSample = true;
             }
 
-            if (sampleRingCount >= SpectrumSampleWindow)
+            if (sampleRingCount >= SpectrumSampleWindow && framesSinceSpectrum >= (renderActive ? SpectrumHopFrames : SpectrumHopFrames * 8))
             {
+                framesSinceSpectrum = 0;
                 CopyLatestSamples(spectrumSampleScratch);
-                CalculateSpectrum(spectrumSampleScratch, spectrumBandScratch, fftScratch);
+                SpectrumAnalyzer.Compute(spectrumSampleScratch, format.SampleRate, spectrumBandScratch, fftScratch);
                 bool signalSeen = false;
                 for (int index = 0; index < spectrumBandScratch.Length; index++)
                 {
                     double response = spectrumBandScratch[index] > smoothedSpectrum[index] ? 0.42 : 0.12;
                     smoothedSpectrum[index] += (spectrumBandScratch[index] - smoothedSpectrum[index]) * response;
                     spectrumLevels[index] = smoothedSpectrum[index];
-                    if (smoothedSpectrum[index] > 0.025)
+                    if (smoothedSpectrum[index] > 0.22) // above -70 dBFS
                     {
                         signalSeen = true;
                     }
@@ -592,142 +654,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private static void CalculateSpectrum(float[] samples, double[] bands, Complex[] values)
-    {
-        int length = samples.Length;
-        if (values.Length < length || bands.Length < 32)
-        {
-            throw new ArgumentException("Reusable spectrum buffers are too small.");
-        }
-
-        for (int i = 0; i < length; i++)
-        {
-            double window = 0.5 * (1 - Math.Cos((2 * Math.PI * i) / (length - 1)));
-            values[i] = new Complex(samples[i] * window, 0);
-        }
-
-        for (int i = 1, j = 0; i < length; i++)
-        {
-            int bit = length >> 1;
-            for (; (j & bit) != 0; bit >>= 1)
-            {
-                j ^= bit;
-            }
-            j ^= bit;
-            if (i < j)
-            {
-                (values[i], values[j]) = (values[j], values[i]);
-            }
-        }
-
-        for (int width = 2; width <= length; width <<= 1)
-        {
-            double angle = -2 * Math.PI / width;
-            Complex step = Complex.FromPolarCoordinates(1, angle);
-            for (int start = 0; start < length; start += width)
-            {
-                Complex factor = Complex.One;
-                for (int index = 0; index < width / 2; index++)
-                {
-                    Complex even = values[start + index];
-                    Complex odd = factor * values[start + index + width / 2];
-                    values[start + index] = even + odd;
-                    values[start + index + width / 2] = even - odd;
-                    factor *= step;
-                }
-            }
-        }
-
-        int maxBin = length / 2;
-        for (int band = 0; band < 32; band++)
-        {
-            int startBin = Math.Max(1, (int)(Math.Pow(maxBin, band / 32.0)));
-            int endBin = Math.Max(startBin + 1, (int)(Math.Pow(maxBin, (band + 1) / 32.0)));
-            double total = 0;
-            int count = 0;
-            for (int bin = startBin; bin < Math.Min(endBin, maxBin); bin++)
-            {
-                total += values[bin].Magnitude;
-                count++;
-            }
-            double magnitude = total / Math.Max(1, count);
-            double normalized = Math.Clamp((Math.Log10(1 + (magnitude * 40)) / 2.2), 0, 1);
-            bands[band] = normalized;
-        }
-    }
-
-    private void RenderSpectrum()
-    {
-        if (audioConfigurationInProgress) return;
-        if (SpectrumCanvas.ActualWidth <= 0 || SpectrumCanvas.ActualHeight <= 0)
-        {
-            return;
-        }
-
-        if ((DateTime.UtcNow - lastAudioDataAtUtc).TotalMilliseconds > 900)
-        {
-            TryRefreshSpectrumFromAudioMeter();
-        }
-
-        double[] levels = spectrumRenderCopy;
-        lock (spectrumLock)
-        {
-            Array.Copy(spectrumLevels, levels, spectrumLevels.Length);
-        }
-
-        for (int index = 0; index < levels.Length; index++)
-        {
-            if (!double.IsFinite(levels[index]))
-            {
-                levels[index] = 0;
-            }
-        }
-
-        SpectrumStatusText.Visibility = audioSignalSeen ? Visibility.Collapsed : Visibility.Visible;
-        const int pointCount = 32;
-        if (spectrumDots.Count != pointCount || Math.Abs(spectrumDotsWidth - SpectrumCanvas.ActualWidth) > 1 || Math.Abs(spectrumDotsHeight - SpectrumCanvas.ActualHeight) > 1)
-        {
-            SpectrumCanvas.Children.Clear();
-            spectrumDots.Clear();
-            spectrumDotsWidth = SpectrumCanvas.ActualWidth;
-            spectrumDotsHeight = SpectrumCanvas.ActualHeight;
-            double spacing = SpectrumCanvas.ActualWidth / (pointCount - 1);
-            for (int index = 0; index < pointCount; index++)
-            {
-                Ellipse dot = new()
-                {
-                    Width = 9,
-                    Height = 9,
-                    Fill = new SolidColorBrush(ParseColor(index % 2 == 0 ? activeTheme.Secondary : activeTheme.Highlight)),
-                    Opacity = 0.95
-                };
-                Canvas.SetLeft(dot, index * spacing - 3.5);
-                SpectrumCanvas.Children.Add(dot);
-                spectrumDots.Add(dot);
-            }
-        }
-
-        double dotSpacing = SpectrumCanvas.ActualWidth / (pointCount - 1);
-        for (int pointIndex = 0; pointIndex < pointCount; pointIndex++)
-        {
-            double sourcePosition = pointIndex * (levels.Length - 1) / (double)(pointCount - 1);
-            int lower = Math.Min(levels.Length - 1, (int)sourcePosition);
-            int upper = Math.Min(levels.Length - 1, lower + 1);
-            double interpolated = levels[lower] + ((levels[upper] - levels[lower]) * (sourcePosition - lower));
-            if (!double.IsFinite(interpolated))
-            {
-                interpolated = 0.035;
-            }
-            interpolated = Math.Max(0.035, interpolated);
-            double x = pointIndex * dotSpacing - 3.5;
-            double baseline = SpectrumCanvas.ActualHeight * 0.82;
-            double travelHeight = SpectrumCanvas.ActualHeight * 0.64;
-            double y = baseline - Math.Clamp(interpolated, 0.035, 1) * travelHeight;
-            Canvas.SetLeft(spectrumDots[pointIndex], x);
-            Canvas.SetTop(spectrumDots[pointIndex], Math.Max(4, y));
-            spectrumDots[pointIndex].Opacity = 0.55 + (Math.Clamp(interpolated, 0, 1) * 0.45);
-        }
-    }
+    // RenderSpectrum and the target-curve editor live in MainWindow.TargetGraph.cs.
 
     private void TryRefreshSpectrumFromAudioMeter()
     {
@@ -779,16 +706,11 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Loopback is not delivering samples but the endpoint peak meter shows audio: report
+        // signal presence only. Never synthesize spectrum bars (beta.1 drew random "wobble").
         lock (spectrumLock)
         {
-            for (int index = 0; index < smoothedSpectrum.Length; index++)
-            {
-                double shape = 1.0 - ((index / (double)smoothedSpectrum.Length) * 0.55);
-                double wobble = (spectrumRandom.NextDouble() - 0.5) * 0.16;
-                double target = Math.Clamp((fallbackMeterLevel * 1.9 * shape) + wobble, 0.01, 1);
-                smoothedSpectrum[index] += (target - smoothedSpectrum[index]) * 0.35;
-            }
-
+            for (int index = 0; index < smoothedSpectrum.Length; index++) smoothedSpectrum[index] *= 0.85;
             Array.Copy(smoothedSpectrum, spectrumLevels, spectrumLevels.Length);
         }
 
@@ -892,16 +814,7 @@ public partial class MainWindow : Window
         catch (UnauthorizedAccessException) { }
     }
 
-    private void RefreshSpectrumColors()
-    {
-        for (int index = 0; index < spectrumDots.Count; index++)
-        {
-            if (spectrumDots[index].Fill is SolidColorBrush brush)
-            {
-                brush.Color = ParseColor(index % 2 == 0 ? activeTheme.Secondary : activeTheme.Highlight);
-            }
-        }
-    }
+    private void RefreshSpectrumColors() => ResetTargetGraphVisuals();
 
     private void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
@@ -1508,6 +1421,14 @@ public partial class MainWindow : Window
     {
         Forms.ContextMenuStrip menu = new();
         menu.Items.Add("Show Sonic Scout", null, (_, _) => ShowFromTray());
+        Forms.ToolStripMenuItem startWithWindows = new("Start with Windows") { CheckOnClick = true, Checked = AutoStart.LoadEnabled(), ToolTipText = "Start Sonic Scout minimized when you sign in, so SonicPass audio routing comes back after a restart." };
+        startWithWindows.CheckedChanged += (_, _) =>
+        {
+            try { AutoStart.SaveEnabled(startWithWindows.Checked); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            AutoStart.ApplyForCurrentUser(startWithWindows.Checked);
+            MessageText.Text = startWithWindows.Checked ? "Sonic Scout will start minimized when you sign in." : "Sonic Scout will no longer start with Windows.";
+        };
+        menu.Items.Add(startWithWindows);
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Exit Sonic Scout", null, (_, _) => ExitFromTray());
 
@@ -1532,6 +1453,30 @@ public partial class MainWindow : Window
         }
 
         return Drawing.SystemIcons.Application;
+    }
+
+    /// <summary>Another launch of SonicScout.exe was started; bring this instance forward (and resume SETUP if asked).</summary>
+    public void ActivateFromSecondInstance(bool resume)
+    {
+        ShowFromTray();
+        if (resume && (startupSetupFlowActive || App.ResumeSetupRequested))
+        {
+            SupportService.Log("second_instance_resume_ignored", new { startupSetupFlowActive, ownResume = App.ResumeSetupRequested });
+            return;
+        }
+        if (resume && !OwnedWindows.OfType<SetupWindow>().Any())
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => ShowStartupSetupDialog(autoResume: true)));
+    }
+
+    private volatile bool renderActive = true;
+    private int breathingTick;
+    private const int PulseEveryTicks = 12; // 50 ms timer -> pulse step every 600 ms
+
+    /// <summary>Animations and the 20 Hz spectrum only run while the window can be seen.</summary>
+    private void UpdateRenderActivity()
+    {
+        renderActive = IsVisible && WindowState != WindowState.Minimized;
+        breathingTimer.Interval = TimeSpan.FromMilliseconds(renderActive ? 50 : 1000);
     }
 
     private void ShowFromTray()
@@ -1667,7 +1612,8 @@ public partial class MainWindow : Window
             return null;
         }
 
-        string mode = resumeVerifyOnly ? "Preflight" : "Install";
+        string mode = SetupRunModePolicy.Choose(resumeVerifyOnly, request.AutomaticRun);
+        SupportService.Log("setup_run", new { mode, automatic = request.AutomaticRun });
         resumeVerifyOnly = false;
         UiAudioProfileSnapshot snapshot = BuildUiProfileSnapshot();
         Dictionary<string, string> metadata = new(StringComparer.OrdinalIgnoreCase);
@@ -1801,6 +1747,11 @@ public partial class MainWindow : Window
                 RedirectStandardError = true,
                 WorkingDirectory = Path.GetDirectoryName(sonicPassPath)!
             };
+            // Never run two engines: a second SonicPass on the same cable doubles the audio
+            // (comb filtering) and fights for the endpoint. Stop ours and any orphan left by a
+            // previous SonicScout instance in this session (seen in the beta.2 VM run).
+            if (sonicPassProcess is not null) StopSonicPass();
+            KillOrphanSonicPassProcesses();
             startInfo.ArgumentList.Add("--input-id");
             startInfo.ArgumentList.Add(inputId);
             startInfo.ArgumentList.Add("--output-id");
@@ -1860,11 +1811,97 @@ public partial class MainWindow : Window
         }
     }
 
+    private static void KillOrphanSonicPassProcesses()
+    {
+        int session = Process.GetCurrentProcess().SessionId;
+        foreach (Process orphan in Process.GetProcessesByName("SonicScout.SonicPass"))
+        {
+            try
+            {
+                if (orphan.SessionId != session) continue;
+                SupportService.Log("sonicpass_orphan_stopped", new { pid = orphan.Id });
+                orphan.Kill();
+                orphan.WaitForExit(3000);
+            }
+            catch (Exception exception) when (exception is InvalidOperationException or Win32Exception or NotSupportedException) { }
+            finally { orphan.Dispose(); }
+        }
+    }
+    private readonly SonicPassRestartPolicy sonicPassRestartPolicy = new();
+
+    /// <summary>
+    /// SonicPass is supervised: StopSonicPass detaches this handler, so it only runs when the engine
+    /// exited without Sonic Scout asking it to. That is always logged and the route is restarted
+    /// (with back-off); after repeated crashes the user is told loudly instead of losing audio silently.
+    /// </summary>
     private void SonicPassProcess_Exited(object? sender, EventArgs e)
     {
         Dispatcher.Invoke(() =>
         {
             if (!ReferenceEquals(sender, sonicPassProcess)) return;
+            int? exitCode = null;
+            try { exitCode = sonicPassProcess?.ExitCode; } catch (InvalidOperationException) { }
+            bool leqWasEnabled = windowsLeqEnabled;
+            // Always in the main event log (timeline next to sonicpass_started/restarted); unexpected exits also go to the error log.
+            var exitInfo = new { exitCode, exitRequested, audioConfigurationInProgress, leqWasEnabled, unexpected = !exitRequested };
+            SupportService.Log("sonicpass_exited", exitInfo);
+            if (!exitRequested) SupportService.Log("sonicpass_exited", exitInfo, error: true);
+            HandleSonicPassExitUi();
+            if (exitRequested || audioConfigurationInProgress) return;
+            TimeSpan? delay = sonicPassRestartPolicy.OnUnexpectedExit(DateTime.UtcNow);
+            if (delay is null)
+            {
+                SupportService.Log("sonicpass_restart_giving_up", new { recentExits = sonicPassRestartPolicy.RecentExitCount }, true);
+                SonicPassStatusText.Text = "ERROR - SonicPass keeps stopping; audio is NOT being routed";
+                MessageText.Text = "SonicPass stopped repeatedly and was not restarted again. Press START SONICPASS or open Diagnostics.";
+                try { trayIcon.ShowBalloonTip(5000, "Sonic Scout", "SonicPass stopped repeatedly - audio is not being routed. Open Sonic Scout.", Forms.ToolTipIcon.Warning); } catch (InvalidOperationException) { }
+                return;
+            }
+            SonicPassStatusText.Text = $"RESTARTING - SonicPass stopped unexpectedly; restarting in {delay.Value.TotalSeconds:0} s";
+            DispatcherTimer restartTimer = new() { Interval = delay.Value };
+            restartTimer.Tick += (_, _) =>
+            {
+                restartTimer.Stop();
+                if (exitRequested || audioConfigurationInProgress || (sonicPassProcess is not null && !sonicPassProcess.HasExited)) return;
+                if (RestoreSonicPass("unexpected_exit") && leqWasEnabled)
+                {
+                    WindowsLeqToggle.IsChecked = true;
+                    WindowsLeqToggle_Click(WindowsLeqToggle, new RoutedEventArgs());
+                }
+            };
+            restartTimer.Start();
+        });
+    }
+
+    /// <summary>Restart the configured route (after a crash or a setup run that ended without it). Logged either way.</summary>
+    private bool RestoreSonicPass(string reason)
+    {
+        string? input = routingConfiguration.SonicScoutEndpointId;
+        string? output = routingConfiguration.SelectedPhysicalOutputId;
+        if (exitRequested || string.IsNullOrWhiteSpace(input) || string.IsNullOrWhiteSpace(output))
+        {
+            SupportService.Log("sonicpass_restore_skipped", new { reason, exitRequested }, true);
+            return false;
+        }
+        bool ok = TryStartSonicPass(input, output);
+        SupportService.Log(ok ? "sonicpass_restarted" : "sonicpass_restart_failed", new { reason }, !ok);
+        if (ok)
+        {
+            SonicPassButton.Content = "STOP SONICPASS";
+            SonicPassStartButton.Content = "STOP SONICPASS";
+            SonicPassStatusText.Text = "RUNNING - SonicPass was restarted automatically";
+        }
+        else
+        {
+            SonicPassStatusText.Text = "ERROR - SonicPass stopped and could not be restarted; audio is NOT being routed";
+        }
+        UpdateTunedVirtualCableStatusIndicator();
+        return ok;
+    }
+
+    private void HandleSonicPassExitUi()
+    {
+        {
             bool unexpectedExit = !exitRequested && sonicPassProcess is not null && sonicPassProcess.ExitCode != 0;
             sonicPassStartedByLeqToggle = false;
             SonicPassButton.Content = "SONICPASS";
@@ -1883,12 +1920,18 @@ public partial class MainWindow : Window
                 MessageText.Text = sonicPassLastStartupError ?? "SonicPass stopped unexpectedly. Check diagnostics for the audio-engine error.";
             }
             UpdateTunedVirtualCableStatusIndicator();
-        });
+        }
     }
 
-    private void StopSonicPass()
+    private void StopSonicPass([System.Runtime.CompilerServices.CallerMemberName] string reason = "")
     {
         Process? processToStop = sonicPassProcess;
+        if (processToStop is not null)
+        {
+            bool wasRunning = false;
+            try { wasRunning = !processToStop.HasExited; } catch (InvalidOperationException) { }
+            if (wasRunning) SupportService.Log("sonicpass_stopped", new { reason });
+        }
         sonicPassProcess = null;
         if (processToStop is null)
         {
@@ -2262,6 +2305,7 @@ public partial class MainWindow : Window
             return result;
         }
 
+        bool sonicPassWasRunning = false;
         try
         {
             if (!request.ConfirmOwnership || !request.ConfirmRoutingApply || !request.ConfirmDependencyFallback)
@@ -2271,6 +2315,7 @@ public partial class MainWindow : Window
 
             Report("Audio components", "RUNNING", "Installing and verifying audio components. Accept the Windows permission prompt if requested.");
             audioConfigurationInProgress = true;
+            sonicPassWasRunning = sonicPassProcess is not null && !sonicPassProcess.HasExited;
             StopSonicPass();
             StopAudioMonitor();
             DateTime setupStarted = DateTime.UtcNow;
@@ -2488,6 +2533,10 @@ public partial class MainWindow : Window
         finally
         {
             audioConfigurationInProgress = false;
+            // A setup run that was cancelled or failed (e.g. the UAC prompt was declined) must not leave the
+            // tester without audio: put the route back exactly as it was.
+            if (sonicPassWasRunning && (sonicPassProcess is null || sonicPassProcess.HasExited))
+                RestoreSonicPass("setup_run_ended_without_route");
         }
         return results;
     }
@@ -2761,6 +2810,7 @@ public partial class MainWindow : Window
             File.WriteAllText(sourcePath, string.Join(Environment.NewLine, lines) + Environment.NewLine);
             Directory.CreateDirectory(Path.GetDirectoryName(activeProfilePath)!);
             File.Copy(sourcePath, activeProfilePath, overwrite: true);
+            SyncActiveProfileMirror();
             FilterText.Text = string.Join(Environment.NewLine, lines);
             MessageText.Text = "EQ change written live to Equalizer APO.";
         }
@@ -2799,6 +2849,27 @@ public partial class MainWindow : Window
         MessageText.Text = "Adjusting EQ... release the slider to write to Equalizer APO.";
     }
 
+    /// <summary>Copy of the active profile inside the eapo folder that audiodg (LOCAL SERVICE) can read.</summary>
+    private static string ActiveProfileMirrorPath => Path.Combine(Path.GetDirectoryName(EapoInstallation.UserIncludePath)!, "active_profile.txt");
+
+    /// <summary>Must run after every write to activeProfilePath, or Equalizer APO keeps playing the old profile.</summary>
+    private void SyncActiveProfileMirror()
+    {
+        try
+        {
+            string mirror = ActiveProfileMirrorPath;
+            Directory.CreateDirectory(Path.GetDirectoryName(mirror)!);
+            string text = File.Exists(activeProfilePath) ? File.ReadAllText(activeProfilePath) : string.Empty;
+            if (File.Exists(mirror) && File.ReadAllText(mirror) == text) return;
+            File.WriteAllText(mirror + ".tmp", text);
+            File.Move(mirror + ".tmp", mirror, overwrite: true);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            MessageText.Text = $"Could not update the EQ copy Equalizer APO reads: {exception.Message}";
+        }
+    }
+
     private void EnsureApoLink()
     {
         // Runtime never writes under Program Files. Setup (admin, once) adds a single
@@ -2819,7 +2890,18 @@ public partial class MainWindow : Window
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(userInclude)!);
-            string contents = EapoInstallation.BuildIncludeLine(activeProfilePath) + Environment.NewLine;
+            // Headphone/game profile first, then the user's graph target on top of it.
+            EnsureUserTargetFileExists();
+            // Equalizer APO runs inside audiodg.exe as LOCAL SERVICE, which cannot read files in
+            // the user's profile by default: without this grant every include below was silently
+            // skipped. Grant read-only access to our own eapo folder, and mirror the active
+            // profile into it rather than including it from Documents.
+            EapoInstallation.GrantAudioServiceRead(Path.GetDirectoryName(userInclude)!);
+            string profileMirror = ActiveProfileMirrorPath;
+            SyncActiveProfileMirror();
+
+            string contents = EapoInstallation.BuildIncludeLine(profileMirror) + Environment.NewLine +
+                EapoInstallation.BuildIncludeLine(TargetCurveStore.DefaultLiveApoPath) + Environment.NewLine;
             if (!File.Exists(userInclude) || File.ReadAllText(userInclude) != contents)
             {
                 string temp = userInclude + ".tmp";
@@ -3124,6 +3206,7 @@ public partial class MainWindow : Window
                 {
                     EnsureFileIsWritable(activeProfilePath);
                     File.WriteAllText(activeProfilePath, string.Empty);
+                    SyncActiveProfileMirror();
                 }
                 catch (IOException)
                 {
@@ -3210,6 +3293,7 @@ public partial class MainWindow : Window
             string tempPath = activeProfilePath + ".tmp";
             File.Copy(sourcePath, tempPath, overwrite: true);
             File.Move(tempPath, activeProfilePath, overwrite: true);
+            SyncActiveProfileMirror();
             return true;
         }
         catch (IOException exception)

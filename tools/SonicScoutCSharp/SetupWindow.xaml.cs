@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -19,7 +19,11 @@ public sealed record SetupInstallRequest(
     bool UsesVoicemeeter,
     bool UsesWaveLink,
     bool UsesSoundBlaster,
-    bool UsesOtherMixer);
+    bool UsesOtherMixer)
+{
+    /// <summary>True for runs Sonic Scout started on its own (resume after restart); these never run the elevated Install.</summary>
+    public bool AutomaticRun { get; init; }
+}
 
 public partial class SetupWindow : Window
 {
@@ -165,7 +169,7 @@ public partial class SetupWindow : Window
                 OwnershipConsentCheckBox.IsChecked = true;
                 StepText.Text = "RESUMING SETUP AFTER RESTART";
                 SummaryText.Text = "Windows restarted. Continuing setup automatically...";
-                await RunChecksAsync();
+                await RunChecksAsync(automaticRun: true);
 
             }
         }
@@ -416,7 +420,7 @@ OwnershipConsentCheckBox.IsChecked == true,
         await RunChecksAsync();
     }
 
-    private async Task RunChecksAsync()
+    private async Task RunChecksAsync(bool automaticRun = false)
     {
         if (DefaultOutputComboBox.SelectedIndex < 0 || DefaultOutputComboBox.SelectedIndex >= discoveredOutputs.Count)
         {
@@ -429,7 +433,7 @@ OwnershipConsentCheckBox.IsChecked == true,
             return;
         }
 
-        SetupInstallRequest request = BuildInstallRequest();
+        SetupInstallRequest request = BuildInstallRequest() with { AutomaticRun = automaticRun };
         SetupResume.SaveSelectedOutput(discoveredOutputs[DefaultOutputComboBox.SelectedIndex].DisplayName);
         Progress<SetupCheckResult> progress = new(result =>
         {

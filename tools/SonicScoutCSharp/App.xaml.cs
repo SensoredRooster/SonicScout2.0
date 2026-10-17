@@ -9,9 +9,49 @@ public partial class App : System.Windows.Application
     /// <summary>Set when Windows relaunched us after a driver-install reboot (RunOnce) to continue SETUP.</summary>
     public static bool ResumeSetupRequested { get; private set; }
 
+    /// <summary>Launched by the HKCU Run entry at sign-in: start minimized.</summary>
+    public static bool AutoStartLaunch { get; private set; }
+
+    private const string SingleInstanceName = @"Local\SonicScout.App.SingleInstance";
+    private const string ShowEventName = @"Local\SonicScout.App.Show";
+    private const string ResumeEventName = @"Local\SonicScout.App.ResumeSetup";
+    private static Mutex? singleInstance;
+    private static EventWaitHandle? showEvent, resumeEvent;
+
     protected override void OnStartup(StartupEventArgs e)
     {
         ResumeSetupRequested = e.Args.Any(a => string.Equals(a, SetupResume.CommandLineFlag, StringComparison.OrdinalIgnoreCase));
+        AutoStartLaunch = AutoStart.IsAutoStartLaunch(e.Args);
+        // A setup resume is still queued for this sign-in (RunOnce not yet processed): behave as the resume.
+        if (AutoStartLaunch && !ResumeSetupRequested && AutoStart.ResumePending()) ResumeSetupRequested = true;
+
+        // Single instance per user session. A second launch hands off to the running one:
+        // a plain launch shows its window, a --resume-setup launch asks it to resume SETUP,
+        // an --autostart launch just exits.
+        singleInstance = new Mutex(true, SingleInstanceName, out bool firstInstance);
+        if (!firstInstance)
+        {
+            if (!AutoStartLaunch || ResumeSetupRequested)
+            {
+                try { using EventWaitHandle signal = EventWaitHandle.OpenExisting(ResumeSetupRequested ? ResumeEventName : ShowEventName); signal.Set(); }
+                catch (Exception ex) when (ex is WaitHandleCannotBeOpenedException or UnauthorizedAccessException) { }
+            }
+            Environment.Exit(0);
+            return;
+        }
+        showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
+        resumeEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ResumeEventName);
+        Thread listener = new(() =>
+        {
+            WaitHandle[] handles = [showEvent, resumeEvent];
+            while (true)
+            {
+                int which = WaitHandle.WaitAny(handles);
+                Dispatcher.BeginInvoke(new Action(() => (MainWindow as MainWindow)?.ActivateFromSecondInstance(resume: which == 1)));
+            }
+        }) { IsBackground = true, Name = "SingleInstanceListener" };
+        listener.Start();
+        AutoStart.ApplyForCurrentUser(AutoStart.LoadEnabled());
         base.OnStartup(e);
         SupportService.Initialize();
 
