@@ -2639,6 +2639,7 @@ public partial class MainWindow : Window
             File.WriteAllText(sourcePath, string.Join(Environment.NewLine, lines) + Environment.NewLine);
             Directory.CreateDirectory(Path.GetDirectoryName(activeProfilePath)!);
             File.Copy(sourcePath, activeProfilePath, overwrite: true);
+            SyncActiveProfileMirror();
             FilterText.Text = string.Join(Environment.NewLine, lines);
             MessageText.Text = "EQ change written live to Equalizer APO.";
         }
@@ -2677,6 +2678,27 @@ public partial class MainWindow : Window
         MessageText.Text = "Adjusting EQ... release the slider to write to Equalizer APO.";
     }
 
+    /// <summary>Copy of the active profile inside the eapo folder that audiodg (LOCAL SERVICE) can read.</summary>
+    private static string ActiveProfileMirrorPath => Path.Combine(Path.GetDirectoryName(EapoInstallation.UserIncludePath)!, "active_profile.txt");
+
+    /// <summary>Must run after every write to activeProfilePath, or Equalizer APO keeps playing the old profile.</summary>
+    private void SyncActiveProfileMirror()
+    {
+        try
+        {
+            string mirror = ActiveProfileMirrorPath;
+            Directory.CreateDirectory(Path.GetDirectoryName(mirror)!);
+            string text = File.Exists(activeProfilePath) ? File.ReadAllText(activeProfilePath) : string.Empty;
+            if (File.Exists(mirror) && File.ReadAllText(mirror) == text) return;
+            File.WriteAllText(mirror + ".tmp", text);
+            File.Move(mirror + ".tmp", mirror, overwrite: true);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            MessageText.Text = $"Could not update the EQ copy Equalizer APO reads: {exception.Message}";
+        }
+    }
+
     private void EnsureApoLink()
     {
         // Runtime never writes under Program Files. Setup (admin, once) adds a single
@@ -2704,13 +2726,9 @@ public partial class MainWindow : Window
             // skipped. Grant read-only access to our own eapo folder, and mirror the active
             // profile into it rather than including it from Documents.
             EapoInstallation.GrantAudioServiceRead(Path.GetDirectoryName(userInclude)!);
-            string profileMirror = Path.Combine(Path.GetDirectoryName(userInclude)!, "active_profile.txt");
-            string profileText = File.Exists(activeProfilePath) ? File.ReadAllText(activeProfilePath) : string.Empty;
-            if (!File.Exists(profileMirror) || File.ReadAllText(profileMirror) != profileText)
-            {
-                File.WriteAllText(profileMirror + ".tmp", profileText);
-                File.Move(profileMirror + ".tmp", profileMirror, overwrite: true);
-            }
+            string profileMirror = ActiveProfileMirrorPath;
+            SyncActiveProfileMirror();
+
             string contents = EapoInstallation.BuildIncludeLine(profileMirror) + Environment.NewLine +
                 EapoInstallation.BuildIncludeLine(TargetCurveStore.DefaultLiveApoPath) + Environment.NewLine;
             if (!File.Exists(userInclude) || File.ReadAllText(userInclude) != contents)
@@ -3017,6 +3035,7 @@ public partial class MainWindow : Window
                 {
                     EnsureFileIsWritable(activeProfilePath);
                     File.WriteAllText(activeProfilePath, string.Empty);
+                    SyncActiveProfileMirror();
                 }
                 catch (IOException)
                 {
@@ -3103,6 +3122,7 @@ public partial class MainWindow : Window
             string tempPath = activeProfilePath + ".tmp";
             File.Copy(sourcePath, tempPath, overwrite: true);
             File.Move(tempPath, activeProfilePath, overwrite: true);
+            SyncActiveProfileMirror();
             return true;
         }
         catch (IOException exception)
