@@ -282,9 +282,11 @@ public partial class MainWindow : Window
         {
             if (!renderActive) { RefreshHonestEqStatus(); return; }
             // The window is layered (AllowsTransparency), so any visual change repaints the whole
-            // window in software. The slow border pulse (~17 s period) is updated ~3x per second
-            // instead of 20x; the spectrum only repaints when its levels actually change.
-            if (++breathingTick % 6 == 0 && !PerfOff("pulse"))
+            // window in software (~14% of a VM core at 3 updates/s). The slow pulse (same periods as
+            // before: ~17 s border colour, ~5.6 s frame opacity) now steps ~1.7x per second, and only while
+            // Sonic Scout is the active window; behind a game it holds still. The spectrum only repaints
+            // when its levels actually change.
+            if (++breathingTick % PulseEveryTicks == 0 && IsActive && !PerfOff("pulse"))
             {
                 double amount = (Math.Sin(breathingPhase) + 1) / 2;
                 WpfColor pulseColor = BlendColors(ParseColor(activeTheme.Primary), ParseColor(activeTheme.Highlight), amount);
@@ -295,7 +297,7 @@ public partial class MainWindow : Window
                 }
                 // Same look as the old 2.8 s AutoReverse storyboard (opacity 0.78..1), ~3 updates/s.
                 SpectrumFrame.Opacity = 0.78 + 0.22 * ((Math.Sin(breathingPhase * 3.1) + 1) / 2);
-                breathingPhase += 0.018 * 6;
+                breathingPhase += 0.018 * PulseEveryTicks;
             }
             if (!PerfOff("spectrum")) RenderSpectrum();
             RefreshHonestEqStatus();
@@ -1468,6 +1470,7 @@ public partial class MainWindow : Window
 
     private volatile bool renderActive = true;
     private int breathingTick;
+    private const int PulseEveryTicks = 12; // 50 ms timer -> pulse step every 600 ms
 
     /// <summary>Animations and the 20 Hz spectrum only run while the window can be seen.</summary>
     private void UpdateRenderActivity()
@@ -1839,7 +1842,10 @@ public partial class MainWindow : Window
             int? exitCode = null;
             try { exitCode = sonicPassProcess?.ExitCode; } catch (InvalidOperationException) { }
             bool leqWasEnabled = windowsLeqEnabled;
-            SupportService.Log("sonicpass_exited", new { exitCode, exitRequested, audioConfigurationInProgress, leqWasEnabled }, !exitRequested);
+            // Always in the main event log (timeline next to sonicpass_started/restarted); unexpected exits also go to the error log.
+            var exitInfo = new { exitCode, exitRequested, audioConfigurationInProgress, leqWasEnabled, unexpected = !exitRequested };
+            SupportService.Log("sonicpass_exited", exitInfo);
+            if (!exitRequested) SupportService.Log("sonicpass_exited", exitInfo, error: true);
             HandleSonicPassExitUi();
             if (exitRequested || audioConfigurationInProgress) return;
             TimeSpan? delay = sonicPassRestartPolicy.OnUnexpectedExit(DateTime.UtcNow);
