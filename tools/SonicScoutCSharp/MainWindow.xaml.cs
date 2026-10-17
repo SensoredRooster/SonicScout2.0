@@ -281,16 +281,22 @@ public partial class MainWindow : Window
         breathingTimer.Tick += (_, _) =>
         {
             if (!renderActive) { RefreshHonestEqStatus(); return; }
-            double amount = (Math.Sin(breathingPhase) + 1) / 2;
-            WpfColor pulseColor = BlendColors(ParseColor(activeTheme.Primary), ParseColor(activeTheme.Highlight), amount);
-            foreach ((Border border, SolidColorBrush brush) in racingBorders)
+            // The window is layered (AllowsTransparency), so any visual change repaints the whole
+            // window in software. The slow border pulse (~17 s period) is updated ~3x per second
+            // instead of 20x; the spectrum only repaints when its levels actually change.
+            if (++breathingTick % 6 == 0)
             {
-                brush.Color = pulseColor;
-                border.BorderBrush = brush;
+                double amount = (Math.Sin(breathingPhase) + 1) / 2;
+                WpfColor pulseColor = BlendColors(ParseColor(activeTheme.Primary), ParseColor(activeTheme.Highlight), amount);
+                foreach ((Border border, SolidColorBrush brush) in racingBorders)
+                {
+                    brush.Color = pulseColor;
+                    border.BorderBrush = brush;
+                }
+                breathingPhase += 0.018 * 6;
             }
             RenderSpectrum();
             RefreshHonestEqStatus();
-            breathingPhase += 0.018;
         };
         breathingTimer.Start();
     }
@@ -1412,6 +1418,7 @@ public partial class MainWindow : Window
     }
 
     private volatile bool renderActive = true;
+    private int breathingTick;
 
     /// <summary>Animations and the 20 Hz spectrum only run while the window can be seen.</summary>
     private void UpdateRenderActivity()

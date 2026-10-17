@@ -161,6 +161,9 @@ public partial class MainWindow
 
     private static string FormatHz(double hz) => hz >= 1000 ? $"{hz / 1000:0.#} kHz" : $"{hz:0} Hz";
 
+    private readonly double[] lastRenderedLevels = new double[SpectrumBandCount];
+    private bool spectrumRendered;
+
     private void RenderSpectrum()
     {
         if (audioConfigurationInProgress) return;
@@ -168,10 +171,16 @@ public partial class MainWindow
         InitializeTargetGraph();
         if ((DateTime.UtcNow - lastAudioDataAtUtc).TotalMilliseconds > 900) TryRefreshSpectrumFromAudioMeter();
         if (spectrumBars.Count != SpectrumBandCount || Math.Abs(graphWidth - SpectrumCanvas.ActualWidth) > 1 || Math.Abs(graphHeight - SpectrumCanvas.ActualHeight) > 1)
-            BuildGraphVisuals();
+            { BuildGraphVisuals(); spectrumRendered = false; }
 
         double[] levels = spectrumRenderCopy;
         lock (spectrumLock) Array.Copy(spectrumLevels, levels, spectrumLevels.Length);
+        bool changed = !spectrumRendered;
+        for (int i = 0; i < levels.Length && !changed; i++)
+            if (Math.Abs(levels[i] - lastRenderedLevels[i]) > 0.002) changed = true;
+        if (!changed) return; // silence / steady state: no repaint of the layered window
+        Array.Copy(levels, lastRenderedLevels, levels.Length);
+        spectrumRendered = true;
         SpectrumStatusText.Visibility = audioSignalSeen ? Visibility.Collapsed : Visibility.Visible;
         double usable = graphHeight - GraphTopPad - GraphBottomPad;
         for (int i = 0; i < spectrumBars.Count; i++)
