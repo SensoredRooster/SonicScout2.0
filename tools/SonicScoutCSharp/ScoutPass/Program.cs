@@ -87,7 +87,7 @@ internal static class Program
                 while (scoutPass.IsRunning && !cancelRequested)
                 {
                     Thread.Sleep(1000);
-                    Console.WriteLine($"Packets: {scoutPass.PacketsReceived}, buffer drops: {scoutPass.BufferDrops}, buffered: {scoutPass.BufferedMilliseconds} ms, target: {scoutPass.TargetMilliseconds} ms, underruns: {scoutPass.Underruns}");
+                    Console.WriteLine($"Packets: {scoutPass.PacketsReceived}, buffer drops: {scoutPass.BufferDrops}, buffered: {scoutPass.BufferedMilliseconds} ms, target: {scoutPass.TargetMilliseconds} ms, underruns: {scoutPass.Underruns}, rate: {scoutPass.DriftRatio:F4}");
                 }
                 failure = scoutPass.LastError;
                 current = null;
@@ -302,6 +302,7 @@ internal sealed class SonicPassEngine : IDisposable
     private long packetsReceived;
     private long bufferDrops;
     private JitterBuffer? jitter;
+    private DriftCompensatingSampleProvider? drift;
     private bool stopped;
 
     public SonicPassEngine(MMDevice inputDevice, MMDevice outputDevice, int bufferMilliseconds, double inputGainDb, double outputGainDb)
@@ -319,6 +320,7 @@ internal sealed class SonicPassEngine : IDisposable
     public long BufferDrops => Interlocked.Read(ref bufferDrops);
     public int BufferedMilliseconds => buffer is null ? 0 : (int)buffer.BufferedDuration.TotalMilliseconds;
     public long Underruns => jitter?.Underruns ?? 0;
+    public double DriftRatio => drift?.Ratio ?? 1.0;
     public int TargetMilliseconds => jitter?.TargetMilliseconds ?? 0;
 
     public void Start()
@@ -343,11 +345,15 @@ internal sealed class SonicPassEngine : IDisposable
             };
             WaveFormat outputFormat = outputDevice.AudioClient.MixFormat;
             jitter = new JitterBuffer(buffer, bufferMilliseconds);
-            IWaveProvider playbackProvider = jitter;
-            ISampleProvider? convertedSamples = null;
-            if (!AreCompatibleFormats(capture.WaveFormat, outputFormat))
+            // Gentle drift compensation (at most +/-0.5 %): the capture and render clocks are
+            // never exactly equal, so play slightly faster/slower to keep the queue at target
+            // instead of periodically dropping or underrunning a chunk of audio.
+            JitterBuffer jitterRef = jitter;
+            drift = new DriftCompensatingSampleProvider(jitter.ToSampleProvider(), () => jitterRef.FillError);
+            IWaveProvider playbackProvider = drift.ToWaveProvider();
+            ISampleProvider? convertedSamples = drift;
             {
-                ISampleProvider sampleProvider = jitter.ToSampleProvider();
+                ISampleProvider sampleProvider = drift;
                 if (sampleProvider.WaveFormat.Channels != outputFormat.Channels)
                 {
                     sampleProvider = new StereoOutputSampleProvider(sampleProvider, outputFormat.Channels);
@@ -366,7 +372,7 @@ internal sealed class SonicPassEngine : IDisposable
             // Convert per render callback straight into the device's native mix format.
             if (!HaveIdenticalFormatDescriptors(playbackProvider.WaveFormat, outputFormat))
             {
-                ISampleProvider samples = convertedSamples ?? jitter.ToSampleProvider();
+                ISampleProvider samples = convertedSamples;
                 playbackProvider = new NativeFormatWaveProvider(samples, outputFormat);
             }
             Console.Error.WriteLine($"SonicPass playback initialization: capture={capture.WaveFormat}; native={outputFormat}; playback={playbackProvider.WaveFormat}; buffer={bufferMilliseconds}ms; shared/event mode.");
@@ -621,6 +627,8 @@ internal sealed class JitterBuffer : IWaveProvider
     public WaveFormat WaveFormat => source.WaveFormat;
     public long Underruns => Interlocked.Read(ref underruns);
     public int TargetMilliseconds => Volatile.Read(ref targetMs);
+    /// <summary>(queued - target) / target; positive when audio is piling up.</summary>
+    public double FillError => (source.BufferedDuration.TotalMilliseconds - TargetMilliseconds) / TargetMilliseconds;
     private int TargetBytes => source.WaveFormat.ConvertLatencyToByteSize(TargetMilliseconds);
 
     public int Read(byte[] buffer, int offset, int count)
@@ -659,5 +667,75 @@ internal sealed class JitterBuffer : IWaveProvider
         if (scratch.Length < excess) scratch = new byte[excess];
         source.Read(scratch, 0, excess);
         return true;
+    }
+}
+
+/// <summary>
+/// Plays the source at a ratio within +/-0.5 % of 1.0 (linear interpolation) steered by the
+/// jitter-buffer fill level, absorbing ordinary capture/render clock drift (typically &lt;0.1 %).
+/// It deliberately cannot hide gross rate mismatches.
+/// </summary>
+internal sealed class DriftCompensatingSampleProvider : ISampleProvider
+{
+    public const double MaxCorrection = 0.005;
+    private const double Smoothing = 0.02;
+    private readonly ISampleProvider source;
+    private readonly Func<double> fillError;
+    private readonly int channels;
+    private readonly float[] previous;
+    private float[] input = Array.Empty<float>();
+    private double position;
+    private double ratio = 1.0;
+
+    public DriftCompensatingSampleProvider(ISampleProvider source, Func<double> fillError)
+    {
+        this.source = source;
+        this.fillError = fillError;
+        channels = source.WaveFormat.Channels;
+        previous = new float[channels];
+    }
+
+    public WaveFormat WaveFormat => source.WaveFormat;
+    public double Ratio => Volatile.Read(ref ratio);
+
+    public int Read(float[] buffer, int offset, int count)
+    {
+        int frames = count / channels;
+        if (frames <= 0) return 0;
+        double error = Math.Clamp(fillError(), -1.0, 1.0);
+        if (double.IsNaN(error)) error = 0;
+        double r = ratio + ((1.0 + MaxCorrection * error) - ratio) * Smoothing;
+        r = Math.Clamp(r, 1.0 - MaxCorrection, 1.0 + MaxCorrection);
+        Volatile.Write(ref ratio, r);
+
+        // Virtual stream: index 0 = last frame of the previous call, index k>=1 = input[k-1].
+        int need = (int)Math.Floor(position + (frames - 1) * r) + 1;
+        int samplesNeeded = need * channels;
+        if (input.Length < samplesNeeded) input = new float[samplesNeeded];
+        int got = 0;
+        while (got < samplesNeeded)
+        {
+            int n = source.Read(input, got, samplesNeeded - got);
+            if (n <= 0) break;
+            got += n;
+        }
+        if (got < samplesNeeded) Array.Clear(input, got, samplesNeeded - got);
+
+        for (int i = 0; i < frames; i++)
+        {
+            double p = position + i * r;
+            int i0 = (int)Math.Floor(p);
+            float f = (float)(p - i0);
+            int a = (i0 - 1) * channels, b = i0 * channels;
+            for (int c = 0; c < channels; c++)
+            {
+                float va = i0 == 0 ? previous[c] : input[a + c];
+                float vb = input[b + c];
+                buffer[offset + i * channels + c] = va + (vb - va) * f;
+            }
+        }
+        position = Math.Max(0.0, position + frames * r - need);
+        Array.Copy(input, (need - 1) * channels, previous, 0, channels);
+        return frames * channels;
     }
 }

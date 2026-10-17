@@ -127,4 +127,72 @@ public class SonicPassStreamingTests
         Assert.True(gapsAfterWarmup == 0, $"gaps after warm-up: {gapsAfterWarmup}, target {jb.TargetMilliseconds} ms, underruns {jb.Underruns}, trims {trims}");
         Assert.InRange(jb.TargetMilliseconds, 30, 200);
     }
+
+    private static (long drops, long underruns, double ratio, double finalMs) RunDrift(double producerRateFactor, bool compensate, int seconds)
+    {
+        BufferedWaveProvider raw = new(Cable) { BufferDuration = TimeSpan.FromSeconds(1), DiscardOnBufferOverflow = true };
+        JitterBuffer jb = new(raw, 20);
+        ISampleProvider samples = jb.ToSampleProvider();
+        DriftCompensatingSampleProvider? drift = compensate ? new(samples, () => jb.FillError) : null;
+        ISampleProvider render = (ISampleProvider?)drift ?? samples;
+        float[] outBuf = new float[480 * 2];
+        double phase = 0, owed = 0;
+        long drops = 0, underrunsAfterWarmup = 0;
+        for (int step = 0; step < seconds * 100; step++)
+        {
+            owed += 480 * producerRateFactor;
+            int frames = (int)owed; owed -= frames;
+            float[] packet = new float[frames * 2];
+            for (int i = 0; i < frames; i++) { float v = (float)(0.25 * Math.Sin(phase)); phase += 2 * Math.PI * 1000 / 48000; packet[2 * i] = v; packet[2 * i + 1] = v; }
+            byte[] bytes = new byte[packet.Length * 4];
+            Buffer.BlockCopy(packet, 0, bytes, 0, bytes.Length);
+            if (jb.TrimBeforeAdd(bytes.Length)) drops++;
+            raw.AddSamples(bytes, 0, bytes.Length);
+            long before = jb.Underruns;
+            render.Read(outBuf, 0, outBuf.Length);
+            if (step > 200) underrunsAfterWarmup += jb.Underruns - before;
+        }
+        return (drops, underrunsAfterWarmup, drift?.Ratio ?? 1.0, raw.BufferedDuration.TotalMilliseconds);
+    }
+
+    [Theory]
+    [InlineData(1.003)]
+    [InlineData(0.997)]
+    public void DriftCompensationAbsorbsNormalClockDrift(double factor)
+    {
+        var without = RunDrift(factor, compensate: false, seconds: 120);
+        Assert.True(without.drops + without.underruns > 0, "uncompensated drift should eventually drop or underrun");
+        var with = RunDrift(factor, compensate: true, seconds: 120);
+        Assert.Equal(0, with.drops);
+        Assert.Equal(0, with.underruns);
+        Assert.InRange(with.ratio, 1 - DriftCompensatingSampleProvider.MaxCorrection, 1 + DriftCompensatingSampleProvider.MaxCorrection);
+        Assert.InRange(with.finalMs, 5, 120);
+    }
+
+    [Fact]
+    public void DriftCompensationIsTransparentWithMatchedClocks()
+    {
+        var r = RunDrift(1.0, compensate: true, seconds: 30);
+        Assert.Equal(0, r.drops);
+        Assert.Equal(0, r.underruns);
+        Assert.InRange(r.ratio, 0.999, 1.001);
+    }
+
+    [Fact]
+    public void DriftCompensatorInterpolatesSmoothly()
+    {
+        BufferedWaveProvider raw = new(Cable) { BufferDuration = TimeSpan.FromSeconds(2), ReadFully = true };
+        float[] tone = new float[48000 * 2];
+        for (int i = 0; i < 48000; i++) tone[2 * i] = tone[2 * i + 1] = (float)(0.5 * Math.Sin(2 * Math.PI * 440 * i / 48000));
+        byte[] b = new byte[tone.Length * 4]; Buffer.BlockCopy(tone, 0, b, 0, b.Length); raw.AddSamples(b, 0, b.Length);
+        var drift = new DriftCompensatingSampleProvider(raw.ToSampleProvider(), () => 1.0); // max speed-up
+        float[] o = new float[480 * 2]; float maxStep = 0, prev = 0;
+        for (int k = 0; k < 90; k++)
+        {
+            drift.Read(o, 0, o.Length);
+            for (int i = 0; i < 480; i++) { if (k + i > 0) maxStep = Math.Max(maxStep, Math.Abs(o[2 * i] - prev)); prev = o[2 * i]; }
+        }
+        // 440 Hz at 0.5 amplitude changes at most ~0.029 per sample; a discontinuity would be far larger.
+        Assert.True(maxStep < 0.035f, $"max step {maxStep}");
+    }
 }

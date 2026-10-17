@@ -38,6 +38,36 @@ public static class EapoInstallation
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "SonicScout", "eapo", "sonicscout.txt");
 
+    /// <summary>LOCAL SERVICE (audiodg.exe, where Equalizer APO runs).</summary>
+    public static readonly System.Security.Principal.SecurityIdentifier AudioServiceSid =
+        new(System.Security.Principal.WellKnownSidType.LocalServiceSid, null);
+
+    /// <summary>
+    /// Grants LOCAL SERVICE inheritable read access to <paramref name="directory"/> (owned by the
+    /// user, so no admin rights needed). Returns false if Windows refused.
+    /// </summary>
+    public static bool GrantAudioServiceRead(string directory)
+    {
+        try
+        {
+            var info = new DirectoryInfo(directory);
+            if (!info.Exists) info.Create();
+            var acl = info.GetAccessControl();
+            var rule = new System.Security.AccessControl.FileSystemAccessRule(AudioServiceSid,
+                System.Security.AccessControl.FileSystemRights.ReadAndExecute,
+                System.Security.AccessControl.InheritanceFlags.ContainerInherit | System.Security.AccessControl.InheritanceFlags.ObjectInherit,
+                System.Security.AccessControl.PropagationFlags.None,
+                System.Security.AccessControl.AccessControlType.Allow);
+            acl.AddAccessRule(rule);
+            info.SetAccessControl(acl);
+            return true;
+        }
+        catch (Exception e) when (e is UnauthorizedAccessException or IOException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
     public static EapoInstallationFacts Probe()
     {
         bool keyPresent = false;

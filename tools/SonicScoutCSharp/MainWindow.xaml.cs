@@ -2699,7 +2699,19 @@ public partial class MainWindow : Window
             Directory.CreateDirectory(Path.GetDirectoryName(userInclude)!);
             // Headphone/game profile first, then the user's graph target on top of it.
             EnsureUserTargetFileExists();
-            string contents = EapoInstallation.BuildIncludeLine(activeProfilePath) + Environment.NewLine +
+            // Equalizer APO runs inside audiodg.exe as LOCAL SERVICE, which cannot read files in
+            // the user's profile by default: without this grant every include below was silently
+            // skipped. Grant read-only access to our own eapo folder, and mirror the active
+            // profile into it rather than including it from Documents.
+            EapoInstallation.GrantAudioServiceRead(Path.GetDirectoryName(userInclude)!);
+            string profileMirror = Path.Combine(Path.GetDirectoryName(userInclude)!, "active_profile.txt");
+            string profileText = File.Exists(activeProfilePath) ? File.ReadAllText(activeProfilePath) : string.Empty;
+            if (!File.Exists(profileMirror) || File.ReadAllText(profileMirror) != profileText)
+            {
+                File.WriteAllText(profileMirror + ".tmp", profileText);
+                File.Move(profileMirror + ".tmp", profileMirror, overwrite: true);
+            }
+            string contents = EapoInstallation.BuildIncludeLine(profileMirror) + Environment.NewLine +
                 EapoInstallation.BuildIncludeLine(TargetCurveStore.DefaultLiveApoPath) + Environment.NewLine;
             if (!File.Exists(userInclude) || File.ReadAllText(userInclude) != contents)
             {
