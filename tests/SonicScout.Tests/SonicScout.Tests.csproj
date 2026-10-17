@@ -10,6 +10,7 @@
     <Compile Include="..\..\tools\SonicScoutCSharp\EapoInstallation.cs" Link="EapoInstallation.cs" />
     <Compile Include="..\..\tools\SonicScoutCSharp\TargetCurve.cs" Link="TargetCurve.cs" />
     <Compile Include="..\..\tools\SonicScoutCSharp\AutoStart.cs" Link="AutoStart.cs" />
+    <Compile Include="..\..\tools\SonicScoutCSharp\SonicPassSupervision.cs" Link="SonicPassSupervision.cs" />
     <Compile Include="..\..\tools\SonicScoutCSharp\SpectrumAnalyzer.cs" Link="SpectrumAnalyzer.cs" />
     <Compile Include="..\..\tools\SonicScoutCSharp\ScoutPass\Program.cs" Link="SonicPassProgram.cs" />
   </ItemGroup>

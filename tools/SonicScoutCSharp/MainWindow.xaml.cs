@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Text.Json;
 using Path = System.IO.Path;
 using System.Diagnostics;
@@ -284,7 +284,7 @@ public partial class MainWindow : Window
             // The window is layered (AllowsTransparency), so any visual change repaints the whole
             // window in software. The slow border pulse (~17 s period) is updated ~3x per second
             // instead of 20x; the spectrum only repaints when its levels actually change.
-            if (++breathingTick % 6 == 0)
+            if (++breathingTick % 6 == 0 && !PerfOff("pulse"))
             {
                 double amount = (Math.Sin(breathingPhase) + 1) / 2;
                 WpfColor pulseColor = BlendColors(ParseColor(activeTheme.Primary), ParseColor(activeTheme.Highlight), amount);
@@ -297,15 +297,32 @@ public partial class MainWindow : Window
                 SpectrumFrame.Opacity = 0.78 + 0.22 * ((Math.Sin(breathingPhase * 3.1) + 1) / 2);
                 breathingPhase += 0.018 * 6;
             }
-            RenderSpectrum();
+            if (!PerfOff("spectrum")) RenderSpectrum();
             RefreshHonestEqStatus();
         };
-        breathingTimer.Start();
+        if (!PerfOff("timer")) breathingTimer.Start();
     }
+
+    // Diagnostics only: SONICSCOUT_PERF_OFF=pulse,spectrum,timer disables visual components one at a time so idle CPU can be attributed.
+    private static readonly string[] perfOff = (Environment.GetEnvironmentVariable("SONICSCOUT_PERF_OFF") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    private static bool PerfOff(string component) => perfOff.Contains(component, StringComparer.OrdinalIgnoreCase);
 
     private bool resumeVerifyOnly;
 
+    // True while this instance owns the startup/resume SETUP flow (preflight running or dialog queued/open),
+    // so a second launch (RunOnce --resume-setup next to the Run --autostart entry) cannot open a second
+    // dialog whose run would escalate to an unprompted elevated Install.
+    private bool startupSetupFlowActive;
+    private bool startupSetupDialogQueued;
+
     private async Task EnsureTurnkeyStartupSetupAsync()
+    {
+        startupSetupFlowActive = true;
+        try { await EnsureTurnkeyStartupSetupCoreAsync(); }
+        finally { if (!startupSetupDialogQueued && !OwnedWindows.OfType<SetupWindow>().Any()) startupSetupFlowActive = false; }
+    }
+
+    private async Task EnsureTurnkeyStartupSetupCoreAsync()
     {
         string? setupScriptPath = ResolveSetupAutomationScriptPath();
         if (setupScriptPath is null)
@@ -350,6 +367,7 @@ public partial class MainWindow : Window
             // this dialog: the device list, live meter and EQ status timer must start now, and the
             // resume dialog stays open (with its next steps) until the user closes it. Shown once
             // the window is idle, i.e. after Window_Loaded has finished its startup work.
+            startupSetupDialogQueued = true;
             _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => ShowStartupSetupDialog(autoResume: true)));
             return;
         }
@@ -358,6 +376,7 @@ public partial class MainWindow : Window
         {
             // Started minimized at sign-in and setup genuinely needs attention: show the window
             // first and open the dialog once startup work is done, never a modal behind an icon.
+            startupSetupDialogQueued = true;
             _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => { ShowFromTray(); ShowStartupSetupDialog(autoResume: false); }));
             return;
         }
@@ -370,7 +389,9 @@ public partial class MainWindow : Window
         // Single startup SETUP window (one window only, so only one elevation prompt).
         SetupWindow dialog = new(DiscoverOutputEndpointsAsync, RunSetupChecks, OpenPostInstallVerificationAsync) { Owner = this, AutoResume = autoResume };
         CopyThemeResourcesTo(dialog);
-        dialog.ShowDialog();
+        startupSetupFlowActive = true;
+        try { dialog.ShowDialog(); }
+        finally { startupSetupDialogQueued = false; startupSetupFlowActive = false; }
 
         if (string.IsNullOrWhiteSpace(routingConfiguration.SonicScoutEndpointId) || string.IsNullOrWhiteSpace(routingConfiguration.SelectedPhysicalOutputId))
         {
@@ -1436,6 +1457,11 @@ public partial class MainWindow : Window
     public void ActivateFromSecondInstance(bool resume)
     {
         ShowFromTray();
+        if (resume && (startupSetupFlowActive || App.ResumeSetupRequested))
+        {
+            SupportService.Log("second_instance_resume_ignored", new { startupSetupFlowActive, ownResume = App.ResumeSetupRequested });
+            return;
+        }
         if (resume && !OwnedWindows.OfType<SetupWindow>().Any())
             _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => ShowStartupSetupDialog(autoResume: true)));
     }
@@ -1583,7 +1609,8 @@ public partial class MainWindow : Window
             return null;
         }
 
-        string mode = resumeVerifyOnly ? "Preflight" : "Install";
+        string mode = SetupRunModePolicy.Choose(resumeVerifyOnly, request.AutomaticRun);
+        SupportService.Log("setup_run", new { mode, automatic = request.AutomaticRun });
         resumeVerifyOnly = false;
         UiAudioProfileSnapshot snapshot = BuildUiProfileSnapshot();
         Dictionary<string, string> metadata = new(StringComparer.OrdinalIgnoreCase);
@@ -1797,11 +1824,78 @@ public partial class MainWindow : Window
             finally { orphan.Dispose(); }
         }
     }
+    private readonly SonicPassRestartPolicy sonicPassRestartPolicy = new();
+
+    /// <summary>
+    /// SonicPass is supervised: StopSonicPass detaches this handler, so it only runs when the engine
+    /// exited without Sonic Scout asking it to. That is always logged and the route is restarted
+    /// (with back-off); after repeated crashes the user is told loudly instead of losing audio silently.
+    /// </summary>
     private void SonicPassProcess_Exited(object? sender, EventArgs e)
     {
         Dispatcher.Invoke(() =>
         {
             if (!ReferenceEquals(sender, sonicPassProcess)) return;
+            int? exitCode = null;
+            try { exitCode = sonicPassProcess?.ExitCode; } catch (InvalidOperationException) { }
+            bool leqWasEnabled = windowsLeqEnabled;
+            SupportService.Log("sonicpass_exited", new { exitCode, exitRequested, audioConfigurationInProgress, leqWasEnabled }, !exitRequested);
+            HandleSonicPassExitUi();
+            if (exitRequested || audioConfigurationInProgress) return;
+            TimeSpan? delay = sonicPassRestartPolicy.OnUnexpectedExit(DateTime.UtcNow);
+            if (delay is null)
+            {
+                SupportService.Log("sonicpass_restart_giving_up", new { recentExits = sonicPassRestartPolicy.RecentExitCount }, true);
+                SonicPassStatusText.Text = "ERROR - SonicPass keeps stopping; audio is NOT being routed";
+                MessageText.Text = "SonicPass stopped repeatedly and was not restarted again. Press START SONICPASS or open Diagnostics.";
+                try { trayIcon.ShowBalloonTip(5000, "Sonic Scout", "SonicPass stopped repeatedly - audio is not being routed. Open Sonic Scout.", Forms.ToolTipIcon.Warning); } catch (InvalidOperationException) { }
+                return;
+            }
+            SonicPassStatusText.Text = $"RESTARTING - SonicPass stopped unexpectedly; restarting in {delay.Value.TotalSeconds:0} s";
+            DispatcherTimer restartTimer = new() { Interval = delay.Value };
+            restartTimer.Tick += (_, _) =>
+            {
+                restartTimer.Stop();
+                if (exitRequested || audioConfigurationInProgress || (sonicPassProcess is not null && !sonicPassProcess.HasExited)) return;
+                if (RestoreSonicPass("unexpected_exit") && leqWasEnabled)
+                {
+                    WindowsLeqToggle.IsChecked = true;
+                    WindowsLeqToggle_Click(WindowsLeqToggle, new RoutedEventArgs());
+                }
+            };
+            restartTimer.Start();
+        });
+    }
+
+    /// <summary>Restart the configured route (after a crash or a setup run that ended without it). Logged either way.</summary>
+    private bool RestoreSonicPass(string reason)
+    {
+        string? input = routingConfiguration.SonicScoutEndpointId;
+        string? output = routingConfiguration.SelectedPhysicalOutputId;
+        if (exitRequested || string.IsNullOrWhiteSpace(input) || string.IsNullOrWhiteSpace(output))
+        {
+            SupportService.Log("sonicpass_restore_skipped", new { reason, exitRequested }, true);
+            return false;
+        }
+        bool ok = TryStartSonicPass(input, output);
+        SupportService.Log(ok ? "sonicpass_restarted" : "sonicpass_restart_failed", new { reason }, !ok);
+        if (ok)
+        {
+            SonicPassButton.Content = "STOP SONICPASS";
+            SonicPassStartButton.Content = "STOP SONICPASS";
+            SonicPassStatusText.Text = "RUNNING - SonicPass was restarted automatically";
+        }
+        else
+        {
+            SonicPassStatusText.Text = "ERROR - SonicPass stopped and could not be restarted; audio is NOT being routed";
+        }
+        UpdateTunedVirtualCableStatusIndicator();
+        return ok;
+    }
+
+    private void HandleSonicPassExitUi()
+    {
+        {
             bool unexpectedExit = !exitRequested && sonicPassProcess is not null && sonicPassProcess.ExitCode != 0;
             sonicPassStartedByLeqToggle = false;
             SonicPassButton.Content = "SONICPASS";
@@ -1820,12 +1914,18 @@ public partial class MainWindow : Window
                 MessageText.Text = sonicPassLastStartupError ?? "SonicPass stopped unexpectedly. Check diagnostics for the audio-engine error.";
             }
             UpdateTunedVirtualCableStatusIndicator();
-        });
+        }
     }
 
-    private void StopSonicPass()
+    private void StopSonicPass([System.Runtime.CompilerServices.CallerMemberName] string reason = "")
     {
         Process? processToStop = sonicPassProcess;
+        if (processToStop is not null)
+        {
+            bool wasRunning = false;
+            try { wasRunning = !processToStop.HasExited; } catch (InvalidOperationException) { }
+            if (wasRunning) SupportService.Log("sonicpass_stopped", new { reason });
+        }
         sonicPassProcess = null;
         if (processToStop is null)
         {
@@ -2199,6 +2299,7 @@ public partial class MainWindow : Window
             return result;
         }
 
+        bool sonicPassWasRunning = false;
         try
         {
             if (!request.ConfirmOwnership || !request.ConfirmRoutingApply || !request.ConfirmDependencyFallback)
@@ -2208,6 +2309,7 @@ public partial class MainWindow : Window
 
             Report("Audio components", "RUNNING", "Installing and verifying audio components. Accept the Windows permission prompt if requested.");
             audioConfigurationInProgress = true;
+            sonicPassWasRunning = sonicPassProcess is not null && !sonicPassProcess.HasExited;
             StopSonicPass();
             StopAudioMonitor();
             DateTime setupStarted = DateTime.UtcNow;
@@ -2425,6 +2527,10 @@ public partial class MainWindow : Window
         finally
         {
             audioConfigurationInProgress = false;
+            // A setup run that was cancelled or failed (e.g. the UAC prompt was declined) must not leave the
+            // tester without audio: put the route back exactly as it was.
+            if (sonicPassWasRunning && (sonicPassProcess is null || sonicPassProcess.HasExited))
+                RestoreSonicPass("setup_run_ended_without_route");
         }
         return results;
     }
