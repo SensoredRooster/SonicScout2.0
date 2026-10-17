@@ -416,3 +416,19 @@ public partial class MainWindow
         e.Handled = true;
     }
 }
+
+/// <summary>Canvas with a UI Automation peer so the graph is focusable/locatable by screen readers and tests.</summary>
+public sealed class TargetGraphCanvas : System.Windows.Controls.Canvas
+{
+    protected override System.Windows.Automation.Peers.AutomationPeer OnCreateAutomationPeer() =>
+        new TargetGraphAutomationPeer(this);
+
+    private sealed class TargetGraphAutomationPeer : System.Windows.Automation.Peers.FrameworkElementAutomationPeer
+    {
+        public TargetGraphAutomationPeer(TargetGraphCanvas owner) : base(owner) { }
+        protected override System.Windows.Automation.Peers.AutomationControlType GetAutomationControlTypeCore() =>
+            System.Windows.Automation.Peers.AutomationControlType.Custom;
+        protected override string GetClassNameCore() => nameof(TargetGraphCanvas);
+        protected override bool IsKeyboardFocusableCore() => true;
+    }
+}
