@@ -389,15 +389,7 @@
                             <GradientStop Color="#9D4EDD" Offset="1" />
                         </LinearGradientBrush>
                     </Border.BorderBrush>
-                    <Border.Triggers>
-                        <EventTrigger RoutedEvent="FrameworkElement.Loaded">
-                            <BeginStoryboard>
-                                <Storyboard RepeatBehavior="Forever" AutoReverse="True">
-                                    <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0.78" To="1" Duration="0:0:2.8" />
-                                </Storyboard>
-                            </BeginStoryboard>
-                        </EventTrigger>
-                    </Border.Triggers>
+                    <!-- The 0.78..1 opacity pulse is driven by breathingTimer (~3 Hz). A Forever storyboard here re-rendered the whole layered window at 60 fps. -->
                     <Grid>
                         <local:TargetGraphCanvas x:Name="SpectrumCanvas" Margin="12,12,12,12" MinHeight="160" ClipToBounds="True" Focusable="True" KeyDown="SpectrumCanvas_KeyDown" AutomationProperties.AutomationId="TargetGraph" AutomationProperties.Name="Live spectrum and target curve" />
                         <TextBlock x:Name="SpectrumStatusText" Text="LISTENING FOR SYSTEM AUDIO" Foreground="{DynamicResource BackgroundTextBrush}" Opacity="0.9" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" />

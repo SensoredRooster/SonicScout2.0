@@ -293,6 +293,8 @@ public partial class MainWindow : Window
                     brush.Color = pulseColor;
                     border.BorderBrush = brush;
                 }
+                // Same look as the old 2.8 s AutoReverse storyboard (opacity 0.78..1), ~3 updates/s.
+                SpectrumFrame.Opacity = 0.78 + 0.22 * ((Math.Sin(breathingPhase * 3.1) + 1) / 2);
                 breathingPhase += 0.018 * 6;
             }
             RenderSpectrum();
