@@ -98,4 +98,33 @@ public class SonicPassStreamingTests
         ours.Read(new byte[480 * 6], 0, 480 * 6);
         Assert.Equal(480 * 8, src2.LargestRequest); // exactly 10 ms
     }
+
+    /// <summary>VB-CABLE style bursty delivery: 30 ms bursts with up to 40 ms of jitter, 10 ms render pulls.
+    /// The adaptive buffer must converge so that after the first second there are no zero-filled reads.</summary>
+    [Fact]
+    public void JitterBufferAbsorbsBurstyCaptureWithoutGaps()
+    {
+        BufferedWaveProvider raw = new(Cable) { BufferDuration = TimeSpan.FromSeconds(1), DiscardOnBufferOverflow = true };
+        JitterBuffer jb = new(raw, 20);
+        var rng = new Random(7);
+        byte[] burst = new byte[1440 * 8]; // 30 ms
+        for (int i = 0; i < burst.Length; i += 4) BitConverter.TryWriteBytes(burst.AsSpan(i, 4), 0.25f);
+        byte[] outBuf = new byte[480 * 8];
+        int burstIndex = 0; double nextBurstMs = 0; int gapsAfterWarmup = 0; long trims = 0;
+        for (int t = 0; t < 60000; t += 10) // 60 s, render tick every 10 ms
+        {
+            while (nextBurstMs <= t)
+            {
+                if (jb.TrimBeforeAdd(burst.Length)) trims++;
+                raw.AddSamples(burst, 0, burst.Length);
+                burstIndex++; nextBurstMs = (burstIndex * 30) + rng.Next(0, 41); // nominal 30 ms grid, 0-40 ms late (no accumulation)
+            }
+            long before = jb.Underruns;
+            Assert.Equal(outBuf.Length, jb.Read(outBuf, 0, outBuf.Length));
+            bool zeros = BitConverter.ToSingle(outBuf, 0) == 0f || BitConverter.ToSingle(outBuf, outBuf.Length - 4) == 0f;
+            if (t > 5000 && (zeros || jb.Underruns != before)) gapsAfterWarmup++;
+        }
+        Assert.True(gapsAfterWarmup == 0, $"gaps after warm-up: {gapsAfterWarmup}, target {jb.TargetMilliseconds} ms, underruns {jb.Underruns}, trims {trims}");
+        Assert.InRange(jb.TargetMilliseconds, 30, 200);
+    }
 }
