@@ -37,6 +37,59 @@ VIAddVersionKey "LegalCopyright" "Sonic Scout contributors"
 Function LaunchSonicScoutAsUser
  Exec '"$WINDIR\explorer.exe" "$INSTDIR\SonicScout.exe"'
 FunctionEnd
+; Sonic Scout now starts with Windows, so it is normally running during an upgrade. Locked
+; files would otherwise be skipped silently, leaving a mixed old/new install. Close the app
+; and its SonicPass relay first; $R9 = 1 when the app was running (relaunched afterwards).
+!macro CloseSonicScout
+ StrCpy $R9 0
+ nsExec::ExecToStack '"$SYSDIR\tasklist.exe" /FI "IMAGENAME eq SonicScout.exe" /NH'
+ Pop $0
+ Pop $1
+ StrCpy $2 $1 1024
+ Push $2
+ Push "SonicScout.exe"
+ Call StrContains
+ Pop $3
+ ${If} $3 != ""
+  StrCpy $R9 1
+ ${EndIf}
+ nsExec::Exec '"$SYSDIR\taskkill.exe" /F /T /IM SonicScout.exe'
+ nsExec::Exec '"$SYSDIR\taskkill.exe" /F /IM SonicScout.SonicPass.exe'
+ Sleep 1500
+!macroend
+; Push haystack, push needle, Call StrContains, Pop result ("" when not found).
+Function StrContains
+ Exch $R1
+ Exch
+ Exch $R2
+ Push $R3
+ Push $R4
+ Push $R5
+ StrLen $R3 $R1
+ StrCpy $R4 0
+ loop:
+  StrCpy $R5 $R2 $R3 $R4
+  StrCmp $R5 $R1 found
+  StrCmp $R5 "" notfound
+  IntOp $R4 $R4 + 1
+  Goto loop
+ found:
+  StrCpy $R1 $R1
+  Goto done
+ notfound:
+  StrCpy $R1 ""
+ done:
+ Pop $R5
+ Pop $R4
+ Pop $R3
+ Pop $R2
+ Exch $R1
+FunctionEnd
+Function un.CloseSonicScout
+ nsExec::Exec '"$SYSDIR\taskkill.exe" /F /T /IM SonicScout.exe'
+ nsExec::Exec '"$SYSDIR\taskkill.exe" /F /IM SonicScout.SonicPass.exe'
+ Sleep 1500
+FunctionEnd
 Function .onInit
  ${IfNot} ${IsNativeAMD64}
   MessageBox MB_ICONSTOP "Sonic Scout requires Windows x64."
@@ -51,6 +104,7 @@ FunctionEnd
 Section "Sonic Scout"
  SetShellVarContext all
  SetOutPath "$INSTDIR"
+ !insertmacro CloseSonicScout
  File /r "${PAYLOAD}\*"
  WriteUninstaller "$INSTDIR\Uninstall.exe"
  CreateDirectory "$SMPROGRAMS\Sonic Scout"
@@ -64,10 +118,16 @@ Section "Sonic Scout"
  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SonicScout" "InstallLocation" "$INSTDIR"
  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SonicScout" "NoModify" 1
  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SonicScout" "NoRepair" 1
+ ; Silent upgrade of a running copy: bring it back (non-elevated) so audio routing resumes.
+ ${If} ${Silent}
+ ${AndIf} $R9 == 1
+  Call LaunchSonicScoutAsUser
+ ${EndIf}
 SectionEnd
 Section "Uninstall"
  SetRegView 64
  SetShellVarContext all
+ Call un.CloseSonicScout
  !include "${UNINSTALL_MANIFEST}"
  Delete "$INSTDIR\Uninstall.exe"
  Delete "$DESKTOP\Sonic Scout.lnk"
