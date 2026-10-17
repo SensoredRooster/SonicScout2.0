@@ -1658,6 +1658,11 @@ public partial class MainWindow : Window
                 RedirectStandardError = true,
                 WorkingDirectory = Path.GetDirectoryName(sonicPassPath)!
             };
+            // Never run two engines: a second SonicPass on the same cable doubles the audio
+            // (comb filtering) and fights for the endpoint. Stop ours and any orphan left by a
+            // previous SonicScout instance in this session (seen in the beta.2 VM run).
+            if (sonicPassProcess is not null) StopSonicPass();
+            KillOrphanSonicPassProcesses();
             startInfo.ArgumentList.Add("--input-id");
             startInfo.ArgumentList.Add(inputId);
             startInfo.ArgumentList.Add("--output-id");
@@ -1717,6 +1722,22 @@ public partial class MainWindow : Window
         }
     }
 
+    private static void KillOrphanSonicPassProcesses()
+    {
+        int session = Process.GetCurrentProcess().SessionId;
+        foreach (Process orphan in Process.GetProcessesByName("SonicScout.SonicPass"))
+        {
+            try
+            {
+                if (orphan.SessionId != session) continue;
+                SupportService.Log("sonicpass_orphan_stopped", new { pid = orphan.Id });
+                orphan.Kill();
+                orphan.WaitForExit(3000);
+            }
+            catch (Exception exception) when (exception is InvalidOperationException or Win32Exception or NotSupportedException) { }
+            finally { orphan.Dispose(); }
+        }
+    }
     private void SonicPassProcess_Exited(object? sender, EventArgs e)
     {
         Dispatcher.Invoke(() =>
