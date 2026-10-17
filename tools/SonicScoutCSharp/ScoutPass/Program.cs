@@ -298,10 +298,10 @@ internal sealed class SonicPassEngine : IDisposable
     private readonly object stateLock = new();
     private IWaveIn? capture;
     private WasapiOut? output;
-    private MediaFoundationResampler? outputFormatConverter;
     private BufferedWaveProvider? buffer;
     private long packetsReceived;
     private long bufferDrops;
+    private byte[] trimScratch = Array.Empty<byte>();
     private bool stopped;
 
     public SonicPassEngine(MMDevice inputDevice, MMDevice outputDevice, int bufferMilliseconds, double inputGainDb, double outputGainDb)
@@ -341,6 +341,7 @@ internal sealed class SonicPassEngine : IDisposable
             };
             WaveFormat outputFormat = outputDevice.AudioClient.MixFormat;
             IWaveProvider playbackProvider = buffer;
+            ISampleProvider? convertedSamples = null;
             if (!AreCompatibleFormats(capture.WaveFormat, outputFormat))
             {
                 ISampleProvider sampleProvider = buffer.ToSampleProvider();
@@ -352,14 +353,18 @@ internal sealed class SonicPassEngine : IDisposable
                 {
                     sampleProvider = new WdlResamplingSampleProvider(sampleProvider, outputFormat.SampleRate);
                 }
+                convertedSamples = sampleProvider;
                 playbackProvider = sampleProvider.ToWaveProvider();
             }
-            // Sample conversion above emits float samples. Preserve the physical
-            // device's full native descriptor, including PCM depth/subformat/mask.
+            // Never use MediaFoundationResampler here: NAudio's MF transform pulls a full
+            // second (AverageBytesPerSecond) from the source per read. With a ReadFully
+            // BufferedWaveProvider that is ~buffer-ms of real audio followed by ~1 s of zero
+            // padding, which played as "a blip of sound, then silence" once per second.
+            // Convert per render callback straight into the device's native mix format.
             if (!HaveIdenticalFormatDescriptors(playbackProvider.WaveFormat, outputFormat))
             {
-                outputFormatConverter = new MediaFoundationResampler(playbackProvider, outputFormat);
-                playbackProvider = outputFormatConverter;
+                ISampleProvider samples = convertedSamples ?? buffer.ToSampleProvider();
+                playbackProvider = new NativeFormatWaveProvider(samples, outputFormat);
             }
             Console.Error.WriteLine($"SonicPass playback initialization: capture={capture.WaveFormat}; native={outputFormat}; playback={playbackProvider.WaveFormat}; buffer={bufferMilliseconds}ms; shared/event mode.");
             output = new WasapiOut(outputDevice, AudioClientShareMode.Shared, true, bufferMilliseconds);
@@ -416,7 +421,6 @@ internal sealed class SonicPassEngine : IDisposable
         Stop();
         capture?.Dispose();
         output?.Dispose();
-        outputFormatConverter?.Dispose();
         inputDevice.Dispose();
         outputDevice.Dispose();
     }
@@ -430,10 +434,21 @@ internal sealed class SonicPassEngine : IDisposable
 
         ApplyGain(eventArgs.Buffer, eventArgs.BytesRecorded);
         // Drop stale queued audio instead of preserving an ever-growing game delay.
-        if (buffer.BufferedDuration.TotalMilliseconds > Math.Max(bufferMilliseconds * 2, 40))
+        // Trim only the excess (oldest audio) back to one buffer period. ClearBuffer() here
+        // threw away everything queued and produced an audible gap on every clock-drift trim.
+        int ceilingBytes = buffer.WaveFormat.ConvertLatencyToByteSize(Math.Max(bufferMilliseconds * 3, 60));
+        if (buffer.BufferedBytes + eventArgs.BytesRecorded > ceilingBytes)
         {
-            buffer.ClearBuffer();
-            Interlocked.Increment(ref bufferDrops);
+            int keepBytes = buffer.WaveFormat.ConvertLatencyToByteSize(Math.Max(bufferMilliseconds, 20));
+            int excess = buffer.BufferedBytes + eventArgs.BytesRecorded - keepBytes;
+            excess -= excess % buffer.WaveFormat.BlockAlign;
+            excess = Math.Min(excess, buffer.BufferedBytes);
+            if (excess > 0)
+            {
+                if (trimScratch.Length < excess) trimScratch = new byte[excess];
+                buffer.Read(trimScratch, 0, excess);
+                Interlocked.Increment(ref bufferDrops);
+            }
         }
         int before = buffer.BufferedBytes;
         buffer.AddSamples(eventArgs.Buffer, 0, eventArgs.BytesRecorded);
@@ -535,5 +550,58 @@ internal sealed class StereoOutputSampleProvider : ISampleProvider
             buffer[offset + frame * WaveFormat.Channels + 1] = sourceBuffer[frame * 2 + 1];
         }
         return framesRead * WaveFormat.Channels;
+    }
+}
+
+/// <summary>
+/// Float samples -> the render endpoint's exact native mix format (IEEE float or 16/24/32-bit PCM,
+/// Extensible descriptors preserved). Reads only what each WASAPI callback asks for.
+/// </summary>
+internal sealed class NativeFormatWaveProvider : IWaveProvider
+{
+    private static readonly Guid FloatSubFormat = new("00000003-0000-0010-8000-00aa00389b71");
+    private readonly ISampleProvider source;
+    private readonly bool isFloat;
+    private readonly int bytesPerSample;
+    private float[] scratch = [];
+
+    public NativeFormatWaveProvider(ISampleProvider source, WaveFormat nativeFormat)
+    {
+        if (source.WaveFormat.SampleRate != nativeFormat.SampleRate || source.WaveFormat.Channels != nativeFormat.Channels)
+            throw new ArgumentException($"Converter expects {nativeFormat.SampleRate} Hz / {nativeFormat.Channels} ch samples, got {source.WaveFormat.SampleRate} Hz / {source.WaveFormat.Channels} ch.");
+        this.source = source;
+        WaveFormat = nativeFormat;
+        isFloat = nativeFormat.Encoding == WaveFormatEncoding.IeeeFloat ||
+                  (nativeFormat is WaveFormatExtensible ext && ext.SubFormat == FloatSubFormat);
+        bytesPerSample = nativeFormat.BitsPerSample / 8;
+        if (isFloat ? bytesPerSample != 4 : bytesPerSample is not (2 or 3 or 4))
+            throw new NotSupportedException($"Unsupported output format: {nativeFormat}");
+        if (nativeFormat.BlockAlign != bytesPerSample * nativeFormat.Channels)
+            throw new NotSupportedException($"Unsupported container size in output format: {nativeFormat}");
+    }
+
+    public WaveFormat WaveFormat { get; }
+
+    public int Read(byte[] buffer, int offset, int count)
+    {
+        int samplesWanted = count / bytesPerSample;
+        samplesWanted -= samplesWanted % WaveFormat.Channels;
+        if (scratch.Length < samplesWanted) scratch = new float[samplesWanted];
+        int read = source.Read(scratch, 0, samplesWanted);
+        int o = offset;
+        for (int i = 0; i < read; i++)
+        {
+            float v = Math.Clamp(scratch[i], -1f, 1f);
+            if (isFloat) { BitConverter.TryWriteBytes(buffer.AsSpan(o, 4), v); }
+            else if (bytesPerSample == 2) { BitConverter.TryWriteBytes(buffer.AsSpan(o, 2), (short)Math.Round(v * 32767f)); }
+            else if (bytesPerSample == 3)
+            {
+                int x = (int)Math.Round(v * 8388607f);
+                buffer[o] = (byte)x; buffer[o + 1] = (byte)(x >> 8); buffer[o + 2] = (byte)(x >> 16);
+            }
+            else { BitConverter.TryWriteBytes(buffer.AsSpan(o, 4), (int)Math.Round(v * 2147483647.0)); }
+            o += bytesPerSample;
+        }
+        return read * bytesPerSample;
     }
 }

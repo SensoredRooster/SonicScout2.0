@@ -264,7 +264,7 @@
 
         <Border x:Name="SpectrumPanel" Grid.Row="1" Grid.Column="2" Margin="0" Background="{DynamicResource TransparentBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" Padding="18">
             <StackPanel>
-                <TextBlock Text="LIVE SPECTRUM" Foreground="{DynamicResource CyanBrush}" FontSize="13" FontWeight="Bold" TextAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,8" />
+                <TextBlock Text="LIVE SPECTRUM + TARGET CURVE" Foreground="{DynamicResource CyanBrush}" FontSize="13" FontWeight="Bold" TextAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,8" />
                 <TextBlock Text="MONITOR ONLY: these controls choose what the meter watches. They do not route game audio. Use SONICPASS AUDIO ROUTE below for routing."
                            Foreground="{DynamicResource SurfaceTextBrush}"
                            FontSize="10"
@@ -398,10 +398,25 @@
                         </EventTrigger>
                     </Border.Triggers>
                     <Grid>
-                        <Canvas x:Name="SpectrumCanvas" Margin="20,20,20,40" MinHeight="160" ClipToBounds="True" />
+                        <Canvas x:Name="SpectrumCanvas" Margin="12,12,12,12" MinHeight="160" ClipToBounds="True" Focusable="True" KeyDown="SpectrumCanvas_KeyDown" AutomationProperties.AutomationId="TargetGraph" AutomationProperties.Name="Live spectrum and target curve" />
                         <TextBlock x:Name="SpectrumStatusText" Text="LISTENING FOR SYSTEM AUDIO" Foreground="{DynamicResource BackgroundTextBrush}" Opacity="0.9" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Grid>
                 </Border>
+                <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <ComboBox x:Name="TargetComboBox" Grid.Column="0" Height="28" Margin="0,0,6,0" SelectionChanged="TargetComboBox_SelectionChanged" AutomationProperties.AutomationId="TargetComboBox" ToolTip="Your saved targets. Selecting one applies it live." />
+                    <Button x:Name="TargetSaveButton" Grid.Column="1" Content="SAVE" Height="28" Margin="0,0,6,0" Click="TargetSaveButton_Click" AutomationProperties.AutomationId="TargetSaveButton" ToolTip="Save the current curve under a name" />
+                    <Button x:Name="TargetExportButton" Grid.Column="2" Content="EXPORT" Height="28" Margin="0,0,6,0" Click="TargetExportButton_Click" AutomationProperties.AutomationId="TargetExportButton" ToolTip="Export to .sstarget.json or an Equalizer APO GraphicEQ .txt" />
+                    <Button x:Name="TargetImportButton" Grid.Column="3" Content="IMPORT" Height="28" Margin="0,0,6,0" Click="TargetImportButton_Click" AutomationProperties.AutomationId="TargetImportButton" ToolTip="Import a .sstarget.json, GraphicEQ .txt or frequency/gain CSV" />
+                    <Button x:Name="TargetResetButton" Grid.Column="4" Content="RESET" Height="28" Click="TargetResetButton_Click" AutomationProperties.AutomationId="TargetResetButton" ToolTip="Reset the curve to flat" />
+                </Grid>
+                <TextBlock x:Name="TargetStatusText" Text="TARGET: Flat" Foreground="{DynamicResource SurfaceTextBrush}" FontSize="10" TextAlignment="Center" HorizontalAlignment="Center" Margin="0,4,0,0" AutomationProperties.AutomationId="TargetStatusText" />
                 <Border x:Name="EqPanel" Visibility="Collapsed" Background="{DynamicResource TransparentBrush}" BorderBrush="{DynamicResource MutedBrush}" BorderThickness="1" Padding="10" Margin="0,10,0,0" MinHeight="176">
                     <StackPanel>
                         <TextBlock Text="EQ / LIVE APO CONTROL" Foreground="{DynamicResource CyanBrush}" FontSize="12" FontWeight="Bold" Margin="0,0,0,8" TextAlignment="Center" HorizontalAlignment="Center" />

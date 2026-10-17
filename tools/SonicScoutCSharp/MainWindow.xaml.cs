@@ -70,16 +70,19 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer eqWriteTimer = new() { Interval = TimeSpan.FromMilliseconds(180) };
     private WasapiLoopbackCapture? loopbackCapture;
     private readonly object spectrumLock = new();
-    private const int SpectrumSampleWindow = 512;
-    private readonly float[] sampleRing = new float[1024];
+    private const int SpectrumSampleWindow = 4096;
+    private const int SpectrumBandCount = 48;
+    private const int SpectrumHopFrames = 1024;
+    private readonly float[] sampleRing = new float[8192];
+    private int framesSinceSpectrum;
     private int sampleRingWrite;
     private int sampleRingCount;
     private readonly float[] spectrumSampleScratch = new float[SpectrumSampleWindow];
     private readonly Complex[] fftScratch = new Complex[SpectrumSampleWindow];
-    private readonly double[] spectrumBandScratch = new double[32];
-    private readonly double[] spectrumRenderCopy = new double[32];
-    private double[] spectrumLevels = new double[32];
-    private readonly double[] smoothedSpectrum = new double[32];
+    private readonly double[] spectrumBandScratch = new double[SpectrumBandCount];
+    private readonly double[] spectrumRenderCopy = new double[SpectrumBandCount];
+    private double[] spectrumLevels = new double[SpectrumBandCount];
+    private readonly double[] smoothedSpectrum = new double[SpectrumBandCount];
     private bool audioSignalSeen;
     private DateTime lastAudioDataAtUtc = DateTime.MinValue;
     private double fallbackMeterLevel;
@@ -89,10 +92,6 @@ public partial class MainWindow : Window
     private readonly MeterBackoff meterBackoff = new();
     private EapoInstallationFacts? apoFacts;
     private DateTime lastEqStatusRefreshUtc = DateTime.MinValue;
-    private readonly Random spectrumRandom = new();
-    private readonly List<Ellipse> spectrumDots = new();
-    private double spectrumDotsWidth;
-    private double spectrumDotsHeight;
     private string? activeProfileId;
     private readonly Dictionary<string, double> eqValues = new(StringComparer.OrdinalIgnoreCase);
     private static readonly int[] EqFrequencies = { 60, 150, 400, 1000, 2500, 6000, 12000 };
@@ -496,9 +495,15 @@ public partial class MainWindow : Window
         bool observedSample = false;
         lock (spectrumLock)
         {
+            int channels = Math.Max(1, format.Channels);
             for (int offset = 0; offset + frameSize <= e.BytesRecorded; offset += frameSize)
             {
-                float sample = ReadNormalizedSample(format, e.Buffer, offset, bytesPerSample);
+                // Mono mix of all channels (the old meter only watched channel 1).
+                float sample = 0;
+                for (int ch = 0; ch < channels; ch++)
+                    sample += ReadNormalizedSample(format, e.Buffer, offset + (ch * bytesPerSample), bytesPerSample);
+                sample /= channels;
+                framesSinceSpectrum++;
                 sampleRing[sampleRingWrite] = sample;
                 sampleRingWrite = (sampleRingWrite + 1) % sampleRing.Length;
                 if (sampleRingCount < sampleRing.Length)
@@ -508,17 +513,18 @@ public partial class MainWindow : Window
                 observedSample = true;
             }
 
-            if (sampleRingCount >= SpectrumSampleWindow)
+            if (sampleRingCount >= SpectrumSampleWindow && framesSinceSpectrum >= SpectrumHopFrames)
             {
+                framesSinceSpectrum = 0;
                 CopyLatestSamples(spectrumSampleScratch);
-                CalculateSpectrum(spectrumSampleScratch, spectrumBandScratch, fftScratch);
+                SpectrumAnalyzer.Compute(spectrumSampleScratch, format.SampleRate, spectrumBandScratch, fftScratch);
                 bool signalSeen = false;
                 for (int index = 0; index < spectrumBandScratch.Length; index++)
                 {
                     double response = spectrumBandScratch[index] > smoothedSpectrum[index] ? 0.42 : 0.12;
                     smoothedSpectrum[index] += (spectrumBandScratch[index] - smoothedSpectrum[index]) * response;
                     spectrumLevels[index] = smoothedSpectrum[index];
-                    if (smoothedSpectrum[index] > 0.025)
+                    if (smoothedSpectrum[index] > 0.22) // above -70 dBFS
                     {
                         signalSeen = true;
                     }
@@ -592,142 +598,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private static void CalculateSpectrum(float[] samples, double[] bands, Complex[] values)
-    {
-        int length = samples.Length;
-        if (values.Length < length || bands.Length < 32)
-        {
-            throw new ArgumentException("Reusable spectrum buffers are too small.");
-        }
-
-        for (int i = 0; i < length; i++)
-        {
-            double window = 0.5 * (1 - Math.Cos((2 * Math.PI * i) / (length - 1)));
-            values[i] = new Complex(samples[i] * window, 0);
-        }
-
-        for (int i = 1, j = 0; i < length; i++)
-        {
-            int bit = length >> 1;
-            for (; (j & bit) != 0; bit >>= 1)
-            {
-                j ^= bit;
-            }
-            j ^= bit;
-            if (i < j)
-            {
-                (values[i], values[j]) = (values[j], values[i]);
-            }
-        }
-
-        for (int width = 2; width <= length; width <<= 1)
-        {
-            double angle = -2 * Math.PI / width;
-            Complex step = Complex.FromPolarCoordinates(1, angle);
-            for (int start = 0; start < length; start += width)
-            {
-                Complex factor = Complex.One;
-                for (int index = 0; index < width / 2; index++)
-                {
-                    Complex even = values[start + index];
-                    Complex odd = factor * values[start + index + width / 2];
-                    values[start + index] = even + odd;
-                    values[start + index + width / 2] = even - odd;
-                    factor *= step;
-                }
-            }
-        }
-
-        int maxBin = length / 2;
-        for (int band = 0; band < 32; band++)
-        {
-            int startBin = Math.Max(1, (int)(Math.Pow(maxBin, band / 32.0)));
-            int endBin = Math.Max(startBin + 1, (int)(Math.Pow(maxBin, (band + 1) / 32.0)));
-            double total = 0;
-            int count = 0;
-            for (int bin = startBin; bin < Math.Min(endBin, maxBin); bin++)
-            {
-                total += values[bin].Magnitude;
-                count++;
-            }
-            double magnitude = total / Math.Max(1, count);
-            double normalized = Math.Clamp((Math.Log10(1 + (magnitude * 40)) / 2.2), 0, 1);
-            bands[band] = normalized;
-        }
-    }
-
-    private void RenderSpectrum()
-    {
-        if (audioConfigurationInProgress) return;
-        if (SpectrumCanvas.ActualWidth <= 0 || SpectrumCanvas.ActualHeight <= 0)
-        {
-            return;
-        }
-
-        if ((DateTime.UtcNow - lastAudioDataAtUtc).TotalMilliseconds > 900)
-        {
-            TryRefreshSpectrumFromAudioMeter();
-        }
-
-        double[] levels = spectrumRenderCopy;
-        lock (spectrumLock)
-        {
-            Array.Copy(spectrumLevels, levels, spectrumLevels.Length);
-        }
-
-        for (int index = 0; index < levels.Length; index++)
-        {
-            if (!double.IsFinite(levels[index]))
-            {
-                levels[index] = 0;
-            }
-        }
-
-        SpectrumStatusText.Visibility = audioSignalSeen ? Visibility.Collapsed : Visibility.Visible;
-        const int pointCount = 32;
-        if (spectrumDots.Count != pointCount || Math.Abs(spectrumDotsWidth - SpectrumCanvas.ActualWidth) > 1 || Math.Abs(spectrumDotsHeight - SpectrumCanvas.ActualHeight) > 1)
-        {
-            SpectrumCanvas.Children.Clear();
-            spectrumDots.Clear();
-            spectrumDotsWidth = SpectrumCanvas.ActualWidth;
-            spectrumDotsHeight = SpectrumCanvas.ActualHeight;
-            double spacing = SpectrumCanvas.ActualWidth / (pointCount - 1);
-            for (int index = 0; index < pointCount; index++)
-            {
-                Ellipse dot = new()
-                {
-                    Width = 9,
-                    Height = 9,
-                    Fill = new SolidColorBrush(ParseColor(index % 2 == 0 ? activeTheme.Secondary : activeTheme.Highlight)),
-                    Opacity = 0.95
-                };
-                Canvas.SetLeft(dot, index * spacing - 3.5);
-                SpectrumCanvas.Children.Add(dot);
-                spectrumDots.Add(dot);
-            }
-        }
-
-        double dotSpacing = SpectrumCanvas.ActualWidth / (pointCount - 1);
-        for (int pointIndex = 0; pointIndex < pointCount; pointIndex++)
-        {
-            double sourcePosition = pointIndex * (levels.Length - 1) / (double)(pointCount - 1);
-            int lower = Math.Min(levels.Length - 1, (int)sourcePosition);
-            int upper = Math.Min(levels.Length - 1, lower + 1);
-            double interpolated = levels[lower] + ((levels[upper] - levels[lower]) * (sourcePosition - lower));
-            if (!double.IsFinite(interpolated))
-            {
-                interpolated = 0.035;
-            }
-            interpolated = Math.Max(0.035, interpolated);
-            double x = pointIndex * dotSpacing - 3.5;
-            double baseline = SpectrumCanvas.ActualHeight * 0.82;
-            double travelHeight = SpectrumCanvas.ActualHeight * 0.64;
-            double y = baseline - Math.Clamp(interpolated, 0.035, 1) * travelHeight;
-            Canvas.SetLeft(spectrumDots[pointIndex], x);
-            Canvas.SetTop(spectrumDots[pointIndex], Math.Max(4, y));
-            spectrumDots[pointIndex].Opacity = 0.55 + (Math.Clamp(interpolated, 0, 1) * 0.45);
-        }
-    }
+    // RenderSpectrum and the target-curve editor live in MainWindow.TargetGraph.cs.
 
     private void TryRefreshSpectrumFromAudioMeter()
     {
@@ -779,16 +650,11 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Loopback is not delivering samples but the endpoint peak meter shows audio: report
+        // signal presence only. Never synthesize spectrum bars (beta.1 drew random "wobble").
         lock (spectrumLock)
         {
-            for (int index = 0; index < smoothedSpectrum.Length; index++)
-            {
-                double shape = 1.0 - ((index / (double)smoothedSpectrum.Length) * 0.55);
-                double wobble = (spectrumRandom.NextDouble() - 0.5) * 0.16;
-                double target = Math.Clamp((fallbackMeterLevel * 1.9 * shape) + wobble, 0.01, 1);
-                smoothedSpectrum[index] += (target - smoothedSpectrum[index]) * 0.35;
-            }
-
+            for (int index = 0; index < smoothedSpectrum.Length; index++) smoothedSpectrum[index] *= 0.85;
             Array.Copy(smoothedSpectrum, spectrumLevels, spectrumLevels.Length);
         }
 
@@ -892,16 +758,7 @@ public partial class MainWindow : Window
         catch (UnauthorizedAccessException) { }
     }
 
-    private void RefreshSpectrumColors()
-    {
-        for (int index = 0; index < spectrumDots.Count; index++)
-        {
-            if (spectrumDots[index].Fill is SolidColorBrush brush)
-            {
-                brush.Color = ParseColor(index % 2 == 0 ? activeTheme.Secondary : activeTheme.Highlight);
-            }
-        }
-    }
+    private void RefreshSpectrumColors() => ResetTargetGraphVisuals();
 
     private void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
@@ -2819,7 +2676,10 @@ public partial class MainWindow : Window
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(userInclude)!);
-            string contents = EapoInstallation.BuildIncludeLine(activeProfilePath) + Environment.NewLine;
+            // Headphone/game profile first, then the user's graph target on top of it.
+            EnsureUserTargetFileExists();
+            string contents = EapoInstallation.BuildIncludeLine(activeProfilePath) + Environment.NewLine +
+                EapoInstallation.BuildIncludeLine(TargetCurveStore.DefaultLiveApoPath) + Environment.NewLine;
             if (!File.Exists(userInclude) || File.ReadAllText(userInclude) != contents)
             {
                 string temp = userInclude + ".tmp";
