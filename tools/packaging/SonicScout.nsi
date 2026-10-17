@@ -76,4 +76,6 @@ Section "Uninstall"
  RMDir "$SMPROGRAMS\Sonic Scout"
  RMDir "$INSTDIR"
  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SonicScout"
+ ; Per-user "start with Windows" entry written by the app (tray menu: Start with Windows).
+ DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "SonicScout"
 SectionEnd

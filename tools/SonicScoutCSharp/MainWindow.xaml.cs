@@ -139,6 +139,9 @@ public partial class MainWindow : Window
         SupportService.Initialize();
 
         trayIcon = CreateTrayIcon();
+        if (App.AutoStartLaunch && !App.ResumeSetupRequested) WindowState = WindowState.Minimized;
+        StateChanged += (_, _) => UpdateRenderActivity();
+        IsVisibleChanged += (_, _) => UpdateRenderActivity();
         profiles = new Dictionary<string, (string, string, WpfButton)>();
         routingConfiguration = SonicRoutingConfigurationStore.Load(routingConfigurationPath);
         RestoreComboValue(SonicPassBufferComboBox, routingConfiguration.SonicPassBufferMs);
@@ -277,6 +280,7 @@ public partial class MainWindow : Window
 
         breathingTimer.Tick += (_, _) =>
         {
+            if (!renderActive) { RefreshHonestEqStatus(); return; }
             double amount = (Math.Sin(breathingPhase) + 1) / 2;
             WpfColor pulseColor = BlendColors(ParseColor(activeTheme.Primary), ParseColor(activeTheme.Highlight), amount);
             foreach ((Border border, SolidColorBrush brush) in racingBorders)
@@ -513,7 +517,7 @@ public partial class MainWindow : Window
                 observedSample = true;
             }
 
-            if (sampleRingCount >= SpectrumSampleWindow && framesSinceSpectrum >= SpectrumHopFrames)
+            if (sampleRingCount >= SpectrumSampleWindow && framesSinceSpectrum >= (renderActive ? SpectrumHopFrames : SpectrumHopFrames * 8))
             {
                 framesSinceSpectrum = 0;
                 CopyLatestSamples(spectrumSampleScratch);
@@ -1365,6 +1369,14 @@ public partial class MainWindow : Window
     {
         Forms.ContextMenuStrip menu = new();
         menu.Items.Add("Show Sonic Scout", null, (_, _) => ShowFromTray());
+        Forms.ToolStripMenuItem startWithWindows = new("Start with Windows") { CheckOnClick = true, Checked = AutoStart.LoadEnabled(), ToolTipText = "Start Sonic Scout minimized when you sign in, so SonicPass audio routing comes back after a restart." };
+        startWithWindows.CheckedChanged += (_, _) =>
+        {
+            try { AutoStart.SaveEnabled(startWithWindows.Checked); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            AutoStart.ApplyForCurrentUser(startWithWindows.Checked);
+            MessageText.Text = startWithWindows.Checked ? "Sonic Scout will start minimized when you sign in." : "Sonic Scout will no longer start with Windows.";
+        };
+        menu.Items.Add(startWithWindows);
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Exit Sonic Scout", null, (_, _) => ExitFromTray());
 
@@ -1389,6 +1401,23 @@ public partial class MainWindow : Window
         }
 
         return Drawing.SystemIcons.Application;
+    }
+
+    /// <summary>Another launch of SonicScout.exe was started; bring this instance forward (and resume SETUP if asked).</summary>
+    public void ActivateFromSecondInstance(bool resume)
+    {
+        ShowFromTray();
+        if (resume && !OwnedWindows.OfType<SetupWindow>().Any())
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => ShowStartupSetupDialog(autoResume: true)));
+    }
+
+    private volatile bool renderActive = true;
+
+    /// <summary>Animations and the 20 Hz spectrum only run while the window can be seen.</summary>
+    private void UpdateRenderActivity()
+    {
+        renderActive = IsVisible && WindowState != WindowState.Minimized;
+        breathingTimer.Interval = TimeSpan.FromMilliseconds(renderActive ? 50 : 1000);
     }
 
     private void ShowFromTray()
